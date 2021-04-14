@@ -1,11 +1,11 @@
 {
-  "name": "testnet-load-generator-api",
-  "private": true,
+  "name": "loadgen-fungible-faucet-contract",
   "version": "0.1.0",
-  "description": "Agoric Dapp web server handler",
+  "private": true,
+  "description": "Contract for the Agoric Dapp",
   "scripts": {
     "build": "exit 0",
-    "test": "exit 0",
+    "test": "ava --verbose",
     "lint": "eslint '**/*.{js,jsx}'",
     "lint-fix": "eslint --fix '**/*.{js,jsx}'",
     "lint-check": "eslint '**/*.{js,jsx}'",
@@ -19,12 +19,40 @@
     "eslint-config-prettier": "^6.12.0",
     "eslint-plugin-import": "^2.22.1",
     "eslint-plugin-prettier": "^3.1.0",
-    "prettier": "^2.1.2"
+    "prettier": "^2.1.2",
+    "ava": "^3.13.0"
   },
   "dependencies": {
+    "@agoric/assert": "*",
+    "@agoric/babel-parser": "^7.6.4",
+    "@agoric/ertp": "*",
     "@agoric/eventual-send": "*",
+    "@agoric/install-ses": "*",
+    "@agoric/notifier": "*",
+    "@agoric/store": "*",
+    "@agoric/zoe": "*",
     "esm": "^3.2.5"
   },
+  "ava": {
+    "files": [
+      "test/**/test-*.js"
+    ],
+    "require": [
+      "esm"
+    ],
+    "timeout": "10m"
+  },
+  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Agoric/agoric"
+  },
+  "author": "Agoric",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/Agoric/agoric/issues"
+  },
+  "homepage": "https://github.com/Agoric/agoric#readme",
   "eslintConfig": {
     "extends": [
       "airbnb-base",
@@ -32,9 +60,6 @@
     ],
     "env": {
       "es6": true
-    },
-    "globals": {
-      "harden": "readonly"
     },
     "rules": {
       "implicit-arrow-linebreak": "off",
@@ -60,17 +85,16 @@
       "no-inner-declarations": "off",
       "import/prefer-default-export": "off",
       "import/no-extraneous-dependencies": "off"
+    },
+    "globals": {
+      "harden": "readonly"
     }
   },
-  "keywords": [],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Agoric/agoric"
+  "prettier": {
+    "trailingComma": "all",
+    "singleQuote": true
   },
-  "author": "Agoric",
-  "license": "Apache-2.0",
-  "bugs": {
-    "url": "https://github.com/Agoric/agoric/issues"
-  },
-  "homepage": "https://github.com/Agoric/agoric#readme"
+  "eslintIgnore": [
+    "dappConstants.js"
+  ]
 }

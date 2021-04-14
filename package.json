@@ -5,10 +5,8 @@
   "useWorkspaces": true,
   "main": "index.js",
   "workspaces": [
-    "api",
-    "contract",
-    "_agstate/agoric-servers",
-    "ui"
+    "loadgen",
+    "_agstate/agoric-servers"
   ],
   "devDependencies": {
     "eslint": "^7.11.0",
@@ -28,7 +26,8 @@
     "lint": "yarn workspaces run lint-fix",
     "lint-check": "yarn workspaces run lint-check",
     "test": "yarn workspaces run test",
-    "build": "yarn workspaces run build"
+    "build": "yarn workspaces run build",
+    "loadgen": "agoric deploy loadgen/loop.js"
   },
   "dependencies": {
     "agoric": "*",
