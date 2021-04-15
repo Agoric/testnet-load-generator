@@ -28,7 +28,7 @@ function checkConfig(config) {
       console.log(`state[${name}]: no such task, have ${known}`);
       ok = false;
     }
-    if (interval < 1) {
+    if (interval === 0 || (interval && interval < 1)) {
       console.log(`[${name}].interval (${interval}) too short, please >=1.0 s`);
       ok = false;
     }
@@ -67,15 +67,20 @@ function startServer() {
         req.setEncoding('utf8');
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
-          const newConfig = JSON.parse(body);
-          if (checkConfig(newConfig)) {
-            console.log(`updating config:`);
-            console.log(`from: ${JSON.stringify(oldConfig)}`);
-            console.log(`  to: ${JSON.stringify(newConfig)}`);
-            updateConfig(newConfig);
-            oldConfig = newConfig;
+          try {
+            const newConfig = JSON.parse(body);
+            if (checkConfig(newConfig)) {
+              console.log(`updating config:`);
+              console.log(`from: ${JSON.stringify(oldConfig)}`);
+              console.log(`  to: ${JSON.stringify(newConfig)}`);
+              updateConfig(newConfig);
+              oldConfig = newConfig;
+            }
+            res.end('config updated\n');
+          } catch (err) {
+            console.log(`config update error`, err);
+            res.end(`config error ${err}\n`);
           }
-          res.end('config updated\n');
         });
       } else {
         res.end(JSON.stringify(oldConfig)+'\n');
