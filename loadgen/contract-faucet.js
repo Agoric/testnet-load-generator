@@ -1,6 +1,8 @@
 // @ts-check
 import '@agoric/zoe/exported';
 
+import { amountMath } from '@agoric/ertp';
+
 /**
  * This is a very simple contract that creates a new issuer and mints payments
  * from it, in order to give an example of how that can be done.  This contract
@@ -22,12 +24,12 @@ const start = async (zcf) => {
   const zcfMint = await zcf.makeZCFMint('Tokens');
   // AWAIT
 
-  // Now that ZCF has saved the issuer, brand, and local amountMath, they
+  // Now that ZCF has saved the issuer and brand, they
   // can be accessed synchronously.
-  const { amountMath, issuer } = zcfMint.getIssuerRecord();
+  const { issuer, brand } = zcfMint.getIssuerRecord();
 
   const mintPayment = (seat) => {
-    const amount = amountMath.make(1000);
+    const amount = amountMath.make(brand, 1000n);
     // Synchronously mint and allocate amount to seat.
     zcfMint.mintGains({ Token: amount }, seat);
     // Exit the seat so that the user gets a payout.
