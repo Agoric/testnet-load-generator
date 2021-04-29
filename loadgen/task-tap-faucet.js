@@ -7,16 +7,20 @@ export async function prepareFaucet(homePromise, deployPowers) {
   const { zoe, scratch } = home;
   let tools = await E(scratch).get(KEY);
   if (!tools) {
-    const { bundleSource, pathResolve } = deployPowers;
-    const bundle = await bundleSource(pathResolve(`./contract-faucet.js`));
+    const { bundleSource } = deployPowers;
+    const bundle = await bundleSource(
+      require.resolve(`@agoric/zoe/src/contracts/mintPayments`),
+    );
     const installation = await E(zoe).install(bundle);
-    const { creatorFacet, instance, publicFacet } = await E(zoe).startInstance(installation);
+    const { creatorFacet, publicFacet } = await E(zoe).startInstance(
+      installation,
+    );
     const tokenIssuer = await E(publicFacet).getTokenIssuer();
     // Bob makes a purse for tokens
     const bobPurse = await E(tokenIssuer).makeEmptyPurse();
     // stash everything needed for each cycle under the key on the solo node
-    tools = {zoe, creatorFacet, bobPurse};
-    const id = await E(scratch).set(KEY, tools);
+    tools = { zoe, creatorFacet, bobPurse };
+    await E(scratch).set(KEY, tools);
     console.log(`faucet ready for cycles`);
   }
 
@@ -47,8 +51,7 @@ export async function prepareFaucet(homePromise, deployPowers) {
   return faucetCycle;
 }
 
-
-  /*
+/*
   // TODO: exercise a more complex form, using an Offer and the wallet 
   async function cycleMore() {
   const wallet = home.wallet;

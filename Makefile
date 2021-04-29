@@ -34,7 +34,7 @@ none:
 #   tail -F chain.slog
 # shell 3:
 #   make run-client
-#   (wait ~120s until "Deployed Wallet!" and the "gas estimate" lines stop appearing
+#   (wait ~120s until "Deployed Wallet!" and the ~4 "gas estimate" lines stop appearing)
 # shell 4:
 #   make run-loadgen
 #   (wait ~30s until "faucet ready for cycles" appears)
