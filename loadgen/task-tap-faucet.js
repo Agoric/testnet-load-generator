@@ -12,7 +12,7 @@ export async function prepareFaucet(homePromise, deployPowers) {
       require.resolve(`@agoric/zoe/src/contracts/mintPayments`),
     );
     const installation = await E(zoe).install(bundle);
-    const { creatorFacet, instance, publicFacet } = await E(zoe).startInstance(
+    const { creatorFacet, publicFacet } = await E(zoe).startInstance(
       installation,
     );
     const tokenIssuer = await E(publicFacet).getTokenIssuer();
@@ -20,7 +20,7 @@ export async function prepareFaucet(homePromise, deployPowers) {
     const bobPurse = await E(tokenIssuer).makeEmptyPurse();
     // stash everything needed for each cycle under the key on the solo node
     tools = { zoe, creatorFacet, bobPurse };
-    const id = await E(scratch).set(KEY, tools);
+    await E(scratch).set(KEY, tools);
     console.log(`faucet ready for cycles`);
   }
 

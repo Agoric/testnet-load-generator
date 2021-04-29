@@ -1,6 +1,4 @@
-import fs from 'fs';
 import http from 'http';
-import { E } from '@agoric/eventual-send';
 import { prepareFaucet } from './task-tap-faucet';
 
 const tasks = {
@@ -14,16 +12,28 @@ function startOneCycle(name) {
   const s = status[name];
   s.active += 1;
   console.log(`starting ${name}, active=${s.active}`);
-  runners[name].cycle()
-    .then(() => { console.log(` finished ${name}`); s.succeeded += 1; },
-          err => { console.log(`[${name}] failed:`, err); s.failed += 1; })
-    .then(() => { s.active -= 1; console.log(` ${name}.active now ${s.active}`); });
+  runners[name]
+    .cycle()
+    .then(
+      () => {
+        console.log(` finished ${name}`);
+        s.succeeded += 1;
+      },
+      (err) => {
+        console.log(`[${name}] failed:`, err);
+        s.failed += 1;
+      },
+    )
+    .then(() => {
+      s.active -= 1;
+      console.log(` ${name}.active now ${s.active}`);
+    });
 }
 
 function checkConfig(config) {
   const known = Object.keys(runners).join(',');
   let ok = true;
-  for (let [name, interval] of Object.entries(config)) {
+  for (const [name, interval] of Object.entries(config)) {
     if (!runners[name]) {
       console.log(`state[${name}]: no such task, have ${known}`);
       ok = false;
@@ -41,15 +51,18 @@ function checkConfig(config) {
 // curl -X PUT --data '{"faucet":null}' http://127.0.0.1:3352/config
 
 function updateConfig(config) {
-  for (let r of Object.values(runners)) {
+  for (const r of Object.values(runners)) {
     if (r.timer) {
       clearInterval(r.timer);
       r.timer = undefined;
     }
   }
-  for (let [name, interval] of Object.entries(config)) {
+  for (const [name, interval] of Object.entries(config)) {
     if (interval) {
-      runners[name].timer = setInterval(() => startOneCycle(name), interval*1000);
+      runners[name].timer = setInterval(
+        () => startOneCycle(name),
+        interval * 1000,
+      );
     }
   }
 }
@@ -65,7 +78,9 @@ function startServer() {
       if (req.method === 'PUT') {
         let body = '';
         req.setEncoding('utf8');
-        req.on('data', chunk => { body += chunk; });
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
         req.on('end', () => {
           try {
             const newConfig = JSON.parse(body);
@@ -83,15 +98,14 @@ function startServer() {
           }
         });
       } else {
-        res.end(JSON.stringify(oldConfig)+'\n');
+        res.end(`${JSON.stringify(oldConfig)}\n`);
       }
     } else {
-      res.end(JSON.stringify(status)+'\n');
+      res.end(`${JSON.stringify(status)}\n`);
     }
   });
   server.listen(3352, '127.0.0.1');
 }
-
 
 export default async function runCycles(homePromise, deployPowers) {
   // const home = await homePromise;
@@ -101,9 +115,10 @@ export default async function runCycles(homePromise, deployPowers) {
   // console.log(`got chain time:`, time);
   // return;
 
-  for (let [name, [prepare]] of Object.entries(tasks)) {
+  for (const [name, [prepare]] of Object.entries(tasks)) {
+    // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
-    runners[name] = {cycle, timer: undefined};
+    runners[name] = { cycle, timer: undefined };
     status[name] = { active: 0, succeeded: 0, failed: 0 };
   }
   startServer();
