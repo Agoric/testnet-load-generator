@@ -8,8 +8,12 @@ const tasks = {
 const runners = {}; // name -> { cycle, timer }
 const status = {}; // name -> { active, succeeded, failed } // JSON-serializable
 
-function startOneCycle(name) {
+function maybeStartOneCycle(name, limit) {
   const s = status[name];
+  if (s.active >= limit) {
+    console.log(`not starting ${name}, active limit reached`);
+    return;
+  }
   s.active += 1;
   console.log(`starting ${name}, active=${s.active}`);
   runners[name]
@@ -57,10 +61,11 @@ function updateConfig(config) {
       r.timer = undefined;
     }
   }
+  const limit = 10;
   for (const [name, interval] of Object.entries(config)) {
     if (interval) {
       runners[name].timer = setInterval(
-        () => startOneCycle(name),
+        () => maybeStartOneCycle(name, limit),
         interval * 1000,
       );
     }
