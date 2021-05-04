@@ -3,8 +3,8 @@ import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
-const initialConfig = {
-  faucet: null,
+let currentConfig = {
+  faucet: null, // or { interval=60, limit=1, wait=0 }
   amm: null,
   vault: null,
 };
@@ -49,12 +49,16 @@ function maybeStartOneCycle(name, limit) {
 function checkConfig(config) {
   const known = Object.keys(runners).join(',');
   let ok = true;
-  for (const [name, interval] of Object.entries(config)) {
+  for (const [name, data] of Object.entries(config)) {
     if (!runners[name]) {
       console.log(`state[${name}]: no such task, have ${known}`);
       ok = false;
     }
-    if (interval === 0 || (interval && interval < 1)) {
+    if (!data) {
+      continue;
+    }
+    const { interval = 60, limit = 1, wait = 0 } = data;
+    if (interval < 1) {
       console.log(`[${name}].interval (${interval}) too short, please >=1.0 s`);
       ok = false;
     }
@@ -68,19 +72,25 @@ function checkConfig(config) {
 
 function updateConfig(config) {
   for (const r of Object.values(runners)) {
-    if (r.timer) {
-      clearInterval(r.timer);
-      r.timer = undefined;
+    if (r.stop) {
+      r.stop();
+      r.stop = undefined;
     }
   }
-  const limit = 10;
-  for (const [name, interval] of Object.entries(config)) {
-    if (interval) {
-      runners[name].timer = setInterval(
+  for (const [name, data] of Object.entries(config)) {
+    if (!data) {
+      continue;
+    }
+    const { interval = 60, limit = 1, wait = 0 } = data;
+    function start() {
+      const timer = setInterval(
         () => maybeStartOneCycle(name, limit),
         interval * 1000,
       );
+      runners[name].stop = () => clearInterval(timer);
     }
+    const timer = setTimeout(start, wait * 1000);
+    runners[name].stop = () => clearTimeout(timer);
   }
 }
 
@@ -103,10 +113,10 @@ function startServer() {
             const newConfig = JSON.parse(body);
             if (checkConfig(newConfig)) {
               console.log(`updating config:`);
-              console.log(`from: ${JSON.stringify(oldConfig)}`);
+              console.log(`from: ${JSON.stringify(currentConfig)}`);
               console.log(`  to: ${JSON.stringify(newConfig)}`);
-              updateConfig(newConfig);
-              oldConfig = newConfig;
+              currentConfig = newConfig;
+              updateConfig(currentConfig);
             }
             res.end('config updated\n');
           } catch (err) {
@@ -115,7 +125,7 @@ function startServer() {
           }
         });
       } else {
-        res.end(`${JSON.stringify(oldConfig)}\n`);
+        res.end(`${JSON.stringify(currentConfig)}\n`);
       }
     } else {
       res.end(`${JSON.stringify(status)}\n`);
@@ -135,19 +145,16 @@ export default async function runCycles(homePromise, deployPowers) {
   for (const [name, [prepare]] of Object.entries(tasks)) {
     // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
-    runners[name] = { cycle, timer: undefined };
+    runners[name] = { cycle };
     status[name] = { active: 0, succeeded: 0, failed: 0 };
   }
   console.log('all tasks ready');
   startServer();
 
-  const config = { ...initialConfig };
-
-  if (!checkConfig(config)) {
+  if (!checkConfig(currentConfig)) {
     throw Error('bad config');
   }
-  updateConfig(config);
-  oldConfig = config;
-  console.log(`updated config: ${JSON.stringify(config)}`);
+  updateConfig(currentConfig);
+  console.log(`updated config: ${JSON.stringify(currentConfig)}`);
   await new Promise(() => 0); // runs forever
 }
