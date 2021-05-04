@@ -1,14 +1,6 @@
 import { E } from '@agoric/eventual-send';
-import { amountMath } from '@agoric/ERTP';
-
-const pursePetnames = {
-  RUN: 'Agoric RUN currency',
-  BLD: 'Agoric staking token',
-};
-const issuerPetnames = {
-  RUN: 'RUN',
-  BLD: 'BLD',
-};
+import { amountMath } from '@agoric/ertp';
+import { pursePetnames, issuerPetnames } from './petnames';
 
 // Prepare to create and close a vault on each cycle. We measure our
 // available BLD at startup. On each cycle, we deposit 1% of that value as
@@ -30,16 +22,25 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
   if (!tools) {
     console.log(`create-vault: building tools`);
     //const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-    const runBrand = await E(agoricNames).lookup('brand', issuerPetnames.RUN);
-    const bldBrand = await E(agoricNames).lookup('brand', issuerPetnames.BLD);
-    const runPurse = await E(wallet).getPurse(pursePetnames.RUN);
-    const bldPurse = await E(wallet).getPurse(pursePetnames.BLD);
+    const [
+      runBrand,
+      bldBrand,
+      runPurse,
+      bldPurse,
+      treasuryInstance,
+    ] = await Promise.all([
+      E(agoricNames).lookup('brand', issuerPetnames.RUN),
+      //E(agoricNames).lookup('brand', issuerPetnames.BLD),
+      E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
+      E(wallet).getPurse(pursePetnames.RUN),
+      E(wallet).getPurse(pursePetnames.BLD),
+      E(home.agoricNames).lookup('instance', 'Treasury'),
+    ]);
 
-    const treasuryInstance = await E(home.agoricNames).lookup('instance', 'Treasury');
     const treasuryPublicFacet = E(zoe).getPublicFacet(treasuryInstance);
 
     const bldBalance = await E(bldPurse).getCurrentAmount();
-    const bldToLock = amountMath.make(bldBrand, bldBalance / BigInt(100));
+    const bldToLock = amountMath.make(bldBrand, bldBalance.value / BigInt(100));
 
     // stash everything needed for each cycle under the key on the solo node
     tools = { runBrand, bldBrand, runPurse, bldPurse, treasuryPublicFacet, bldToLock };
@@ -59,8 +60,8 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
         RUN: amountMath.make(runBrand, BigInt(0)),
       },
     };
-    const payment = harden({ Collateral: bldPurse.withdraw(bldToLock) });
-    const seatP = zoe.offer(openInvitationP, proposal, payment);
+    const payment = harden({ Collateral: E(bldPurse).withdraw(bldToLock) });
+    const seatP = E(zoe).offer(openInvitationP, proposal, payment);
     const vaultP = E(seatP).getOfferResult();
     const [ bldPayout, runPayout ] = await Promise.all([E(seatP).getPayout('Collateral'),
                                                         E(seatP).getPayout('RUN')]);
@@ -80,7 +81,7 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
       },
     };
     const payment = harden({ RUN: runPurse.withdraw(runNeeded) });
-    const seatP = zoe.offer(closeInvitationP, proposal, payment);
+    const seatP = E(zoe).offer(closeInvitationP, proposal, payment);
     const [ runPayout, bldPayout ] = await Promise.all([E(seatP).getPayout('RUN'),
                                                         E(seatP).getPayout('Collateral')]);
     await Promise.all([E(runPurse).deposit(runPayout), E(bldPurse).deposit(bldPayout)]);
@@ -91,8 +92,8 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
     await closeVault(vault);
     const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
                                                                 E(bldPurse).getCurrentAmount()]);
-    console.log(`create-vault done: RUN=${newRunBalance} BLD=${newBldBalance}`);
+    console.log(`create-vault done: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`);
   }
 
-  return vaultCycle();
+  return vaultCycle;
 }

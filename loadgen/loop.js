@@ -1,8 +1,18 @@
 import http from 'http';
 import { prepareFaucet } from './task-tap-faucet';
+import { prepareAMMTrade } from './task-trade-amm';
+import { prepareVaultCycle } from './task-create-vault';
+
+const initialConfig = {
+  //faucet: null,
+  //amm: null,
+  vault: null,
+};
 
 const tasks = {
-  faucet: [prepareFaucet],
+  //faucet: [prepareFaucet],
+  //amm: [prepareAMMTrade],
+  vault: [prepareVaultCycle],
 };
 
 const runners = {}; // name -> { cycle, timer }
@@ -126,11 +136,10 @@ export default async function runCycles(homePromise, deployPowers) {
     runners[name] = { cycle, timer: undefined };
     status[name] = { active: 0, succeeded: 0, failed: 0 };
   }
+  console.log('all tasks ready');
   startServer();
 
-  const config = {
-    faucet: 60,
-  };
+  const config = { ...initialConfig };
 
   if (!checkConfig(config)) {
     throw Error('bad config');

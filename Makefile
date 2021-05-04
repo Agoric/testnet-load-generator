@@ -21,7 +21,11 @@ moderate:
 heavy:
 	curl -s -X PUT --data '{"faucet":0.1}' http://127.0.0.1:3352/config
 none:
-	curl -s -X PUT --data '{"faucet":null}' http://127.0.0.1:3352/config
+	curl -s -X PUT --data '{}' http://127.0.0.1:3352/config
+amm-moderate:
+	curl -s -X PUT --data '{"amm":5}' http://127.0.0.1:3352/config
+vault-moderate:
+	curl -s -X PUT --data '{"vault":5}' http://127.0.0.1:3352/config
 
 # recommended sequence:
 # shell 1:

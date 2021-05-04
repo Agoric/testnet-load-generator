@@ -1,14 +1,6 @@
 import { E } from '@agoric/eventual-send';
-import { amountMath } from '@agoric/ERTP';
-
-const pursePetnames = {
-  RUN: 'Agoric RUN currency',
-  BLD: 'Agoric staking token',
-};
-const issuerPetnames = {
-  RUN: 'RUN',
-  BLD: 'BLD',
-};
+import { amountMath } from '@agoric/ertp';
+import { pursePetnames, issuerPetnames } from './petnames';
 
 // prepare to make a trade on the AMM each cycle
 export async function prepareAMMTrade(homePromise, deployPowers) {
@@ -26,11 +18,13 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
       runPurse,
       bldPurse ] = await Promise.all([
         E(agoricNames).lookup('brand', issuerPetnames.RUN),
-        E(agoricNames).lookup('brand', issuerPetnames.BLD),
+        //E(agoricNames).lookup('brand', issuerPetnames.BLD),
+        E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
         E(agoricNames).lookup('instance', 'autoswap'),
         E(wallet).getPurse(pursePetnames.RUN),
         E(wallet).getPurse(pursePetnames.BLD),
       ]);
+    //const bldBrand = await E(bldPurse).getAllegedBrand();
     const publicFacet = await E(zoe).getPublicFacet(autoswap);
 
     // stash everything needed for each cycle under the key on the solo node
@@ -46,8 +40,8 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
       want: { Out: amountMath.make(runBrand, BigInt(0)) },
       give: { In: bldOffered },
     });
-    const payment = harden({ In: bldPurse.withdraw(bldOffered) });
-    const seatP = zoe.offer(
+    const payment = harden({ In: E(bldPurse).withdraw(bldOffered) });
+    const seatP = E(zoe).offer(
       E(publicFacet).makeSwapInInvitation(),
       proposal,
       payment,
@@ -63,8 +57,8 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
       want: { Out: amountMath.make(bldBrand, BigInt(0)) },
       give: { In: runOffered },
     });
-    const payment = harden({ In: runPurse.withdraw(runOffered) });
-    const seatP = zoe.offer(
+    const payment = harden({ In: E(runPurse).withdraw(runOffered) });
+    const seatP = E(zoe).offer(
       E(publicFacet).makeSwapInInvitation(),
       proposal,
       payment,
@@ -84,13 +78,13 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
     await buyRunWithBld(halfAmount);
     const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
                                                                 E(bldPurse).getCurrentAmount()]);
-    const runOfferedPerCycle = amountMath.make(runBrand, newRunBalance / BigInt(100));
-    const bldOfferedPerCycle = amountMath.make(bldBrand, newBldBalance / BigInt(100));
+    const runOfferedPerCycle = amountMath.make(runBrand, newRunBalance.value / BigInt(100));
+    const bldOfferedPerCycle = amountMath.make(bldBrand, newBldBalance.value / BigInt(100));
     tools = { runBrand, bldBrand, runPurse, bldPurse, publicFacet, didInitial: true,
               runOfferedPerCycle, bldOfferedPerCycle };
     await E(scratch).set(KEY, tools);
-    console.log(`setup: RUN=${newRunBalance} BLD=${newBldBalance}`);
-    console.log(`will trade ${runOfferedPerCycle} RUN and ${bldOfferedPerCycle} BLD per cycle`);
+    console.log(`setup: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`);
+    console.log(`will trade ${runOfferedPerCycle.value} RUN and ${bldOfferedPerCycle.value} BLD per cycle`);
     console.log(`trade-amm: initial trade complete`);
   }
   const { runOfferedPerCycle, bldOfferedPerCycle } = tools;
@@ -101,8 +95,13 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
     await buyBldWithRun(runOfferedPerCycle);
     const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
                                                                 E(bldPurse).getCurrentAmount()]);
-    console.log(`trade-amm done: RUN=${newRunBalance} BLD=${newBldBalance}`);
+    console.log(`trade-amm done: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`);
   }
 
-  return tradeAMMCycle();
+  return tradeAMMCycle;
 }
+
+// this currently takes 7 blocks to complete (at which point we get
+// 'trade-amm done' and the new balances), and there are 2 blocks of leftover
+// traffic/acks/resolutions happening
+
