@@ -72,9 +72,11 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
   
   // have we performed the setup transfer yet?
   if (!tools.didInitial) {
+    let runBalance = await E(runPurse).getCurrentAmount();
+    let bldBalance = await E(bldPurse).getCurrentAmount();
+    console.log(`trade-amm setup: initial RUN=${disp(runBalance)} BLD=${disp(bldBalance)}`, runBalance.value, bldBalance.value);
     console.log(`trade-amm: buying initial RUN with 50% of our BLD`);
     // setup: buy RUN with 50% of our BLD
-    let bldBalance = await E(bldPurse).getCurrentAmount();
     let halfAmount = amountMath.make(bldBrand, bldBalance.value / BigInt(2));
     await buyRunWithBld(halfAmount);
     const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
