@@ -6,7 +6,7 @@ reset-chain:
 	agoric install
 
 run-chain:
-	SLOGFILE=$(PWD)/chain.slog agoric start local-chain
+	SLOGFILE=$(PWD)/chain.slog agoric start local-chain --verbose
 run-client:
 	agoric start local-solo 8000
 run-loadgen:
@@ -15,13 +15,19 @@ run-loadgen:
 check:
 	curl -s http://127.0.0.1:3352/config
 light:
-	curl -s -X PUT --data '{"faucet":60}' http://127.0.0.1:3352/config
+	curl -s -X PUT --data '{"faucet": { "interval": 60 }}' http://127.0.0.1:3352/config
 moderate:
-	curl -s -X PUT --data '{"faucet":5}' http://127.0.0.1:3352/config
+	curl -s -X PUT --data '{"faucet": { "interval": 5, "limit": 8}}' http://127.0.0.1:3352/config
 heavy:
-	curl -s -X PUT --data '{"faucet":0.1}' http://127.0.0.1:3352/config
+	curl -s -X PUT --data '{"faucet": { "interval": 0.1, "limit": 10}}' http://127.0.0.1:3352/config
 none:
-	curl -s -X PUT --data '{"faucet":null}' http://127.0.0.1:3352/config
+	curl -s -X PUT --data '{}' http://127.0.0.1:3352/config
+amm-moderate:
+	curl -s -X PUT --data '{"amm": { "interval": 30}}' http://127.0.0.1:3352/config
+vault-moderate:
+	curl -s -X PUT --data '{"vault": { "interval": 30}}' http://127.0.0.1:3352/config
+alternating:
+	curl -s -X PUT --data '{"vault": { "interval": 120}, "amm": { "wait": 60, "interval": 120 }}' http://127.0.0.1:3352/config
 
 # recommended sequence:
 # shell 1:
