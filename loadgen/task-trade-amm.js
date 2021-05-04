@@ -1,6 +1,7 @@
 import { E } from '@agoric/eventual-send';
 import { amountMath } from '@agoric/ertp';
 import { pursePetnames, issuerPetnames } from './petnames';
+import { disp } from './display';
 
 // prepare to make a trade on the AMM each cycle
 export async function prepareAMMTrade(homePromise, deployPowers) {
@@ -83,8 +84,8 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
     tools = { runBrand, bldBrand, runPurse, bldPurse, publicFacet, didInitial: true,
               runOfferedPerCycle, bldOfferedPerCycle };
     await E(scratch).set(KEY, tools);
-    console.log(`setup: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`);
-    console.log(`will trade ${runOfferedPerCycle.value} RUN and ${bldOfferedPerCycle.value} BLD per cycle`);
+    console.log(`setup: RUN=${disp(newRunBalance)} BLD=${disp(newBldBalance)}`);
+    console.log(`will trade ${disp(runOfferedPerCycle)} RUN and ${disp(bldOfferedPerCycle)} BLD per cycle`);
     console.log(`trade-amm: initial trade complete`);
   }
   const { runOfferedPerCycle, bldOfferedPerCycle } = tools;
