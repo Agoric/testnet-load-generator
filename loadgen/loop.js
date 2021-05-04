@@ -4,14 +4,16 @@ import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
 const initialConfig = {
-  //faucet: null,
-  //amm: null,
+  faucet: null,
+  amm: null,
   vault: null,
 };
 
 const tasks = {
-  //faucet: [prepareFaucet],
-  //amm: [prepareAMMTrade],
+  faucet: [prepareFaucet],
+  // we must start the AMM task before Vault, because it sells BLD, and both
+  // measure the balance
+  amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
 };
 
