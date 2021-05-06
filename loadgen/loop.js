@@ -3,6 +3,8 @@ import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
+// we want mostly AMM tasks, and only occasional vault tasks
+
 let currentConfig = {
   faucet: null, // or { interval=60, limit=1, wait=0 }
   amm: null,

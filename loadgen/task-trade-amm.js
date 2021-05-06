@@ -2,6 +2,7 @@ import { E } from '@agoric/eventual-send';
 import { amountMath } from '@agoric/ertp';
 import { pursePetnames, issuerPetnames } from './petnames';
 import { disp } from './display';
+import { allValues } from './allValues';
 
 // prepare to make a trade on the AMM each cycle
 export async function prepareAMMTrade(homePromise, deployPowers) {
@@ -12,29 +13,53 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
   if (!tools) {
     console.log(`trade-amm: building tools`);
     //const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-    const [
+    const {
       runBrand,
       bldBrand,
       autoswap,
       runPurse,
-      bldPurse ] = await Promise.all([
-        E(agoricNames).lookup('brand', issuerPetnames.RUN),
-        //E(agoricNames).lookup('brand', issuerPetnames.BLD),
-        E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
-        E(agoricNames).lookup('instance', 'autoswap'),
-        E(wallet).getPurse(pursePetnames.RUN),
-        E(wallet).getPurse(pursePetnames.BLD),
-      ]);
+      bldPurse } = await allValues({
+        runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
+        //bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
+        bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
+        autoswap: E(agoricNames).lookup('instance', 'autoswap'),
+        runPurse: E(wallet).getPurse(pursePetnames.RUN),
+        bldPurse: E(wallet).getPurse(pursePetnames.BLD),
+      });
     //const bldBrand = await E(bldPurse).getAllegedBrand();
     const publicFacet = await E(zoe).getPublicFacet(autoswap);
 
     // stash everything needed for each cycle under the key on the solo node
-    const didInitial = false;
-    tools = { runBrand, bldBrand, runPurse, bldPurse, publicFacet, didInitial };
+    tools = { runBrand, bldBrand, runPurse, bldPurse, publicFacet, didInitial: false };
     await E(scratch).set(KEY, tools);
     console.log(`trade-amm: tools installed`);
   }
   const { runBrand, bldBrand, runPurse, bldPurse, publicFacet } = tools;
+
+  async function getBalance(which) {
+    let bal;
+    if (which === 'RUN') {
+      bal = await E(runPurse).getCurrentAmount();
+      if (bal.value === BigInt(0)) {
+        // some chain setups currently fail to make the purses visible with
+        // the right denominations
+        throw Error(`no RUN, trade-amm cannot proceed`);
+      }
+      return bal;
+    }
+    if (which === 'BLD') {
+      bal = await E(bldPurse).getCurrentAmount();
+      if (bal.value === BigInt(0)) {
+        throw Error(`no BLD, trade-amm cannot proceed`);
+      }
+      return bal;
+    }
+    throw Error(`unknown type ${which}`);
+  }
+
+  async function getBalances() {
+    return allValues({ run: getBalance('RUN'), bld: getBalance('BLD') });
+  }
 
   async function buyRunWithBld(bldOffered) {
     const proposal = harden({
@@ -72,30 +97,35 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
   
   // have we performed the setup transfer yet?
   if (!tools.didInitial) {
-    let runBalance = await E(runPurse).getCurrentAmount();
-    let bldBalance = await E(bldPurse).getCurrentAmount();
-    console.log(`trade-amm setup: initial RUN=${disp(runBalance)} BLD=${disp(bldBalance)}`, runBalance.value, bldBalance.value);
-    console.log(`trade-amm: buying initial RUN with 50% of our BLD`);
-    // setup: buy RUN with 50% of our BLD
-    let halfAmount = amountMath.make(bldBrand, bldBalance.value / BigInt(2));
-    await buyRunWithBld(halfAmount);
-    const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
-                                                                E(bldPurse).getCurrentAmount()]);
-    const runOfferedPerCycle = amountMath.make(runBrand, newRunBalance.value / BigInt(100));
-    const bldOfferedPerCycle = amountMath.make(bldBrand, newBldBalance.value / BigInt(100));
-    tools = { runBrand, bldBrand, runPurse, bldPurse, publicFacet, didInitial: true,
-              runOfferedPerCycle, bldOfferedPerCycle };
+    let { run, bld } = await getBalances();
+    console.log(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
+    if (1) {
+      // setup: buy RUN with 50% of our BLD
+      console.log(`trade-amm: buying initial RUN with 50% of our BLD`);
+      let halfAmount = amountMath.make(bldBrand, bld.value / BigInt(2));
+      await buyRunWithBld(halfAmount);
+      ({ run, bld } = await getBalances());
+    }
+    const runPerCycle = amountMath.make(runBrand, run.value / BigInt(100));
+    const bldPerCycle = amountMath.make(bldBrand, bld.value / BigInt(100));
+    tools = { ...tools, didInitial: true };
     await E(scratch).set(KEY, tools);
-    console.log(`setup: RUN=${disp(newRunBalance)} BLD=${disp(newBldBalance)}`);
-    console.log(`will trade ${disp(runOfferedPerCycle)} RUN and ${disp(bldOfferedPerCycle)} BLD per cycle`);
+    console.log(`setup: RUN=${disp(run)} BLD=${disp(bld)}`);
+    console.log(`will trade about ${disp(runPerCycle)} RUN and ${disp(bldPerCycle)} BLD per cycle`);
     console.log(`trade-amm: initial trade complete`);
   }
   const { runOfferedPerCycle, bldOfferedPerCycle } = tools;
   console.log('trade-amm: ready for cycles');
 
   async function tradeAMMCycle() {
-    await buyRunWithBld(bldOfferedPerCycle);
-    await buyBldWithRun(runOfferedPerCycle);
+    const bld = await getBalance('BLD');
+    const bldOffered = amountMath.make(bldBrand, bld.value / BigInt(100));
+    await buyRunWithBld(bldOffered);
+
+    const run = await getBalance('RUN');
+    const runOffered = amountMath.make(runBrand, run.value / BigInt(100));
+    await buyBldWithRun(runOffered);
+
     const [ newRunBalance, newBldBalance ] = await Promise.all([E(runPurse).getCurrentAmount(),
                                                                 E(bldPurse).getCurrentAmount()]);
     console.log(`trade-amm done: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`);
@@ -103,8 +133,3 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
 
   return tradeAMMCycle;
 }
-
-// this currently takes 7 blocks to complete (at which point we get
-// 'trade-amm done' and the new balances), and there are 2 blocks of leftover
-// traffic/acks/resolutions happening
-

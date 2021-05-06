@@ -1,8 +1,10 @@
 import { E } from '@agoric/eventual-send';
 import { amountMath } from '@agoric/ertp';
+//import { allComparable } from '@agoric/same-structure';
 import { pursePetnames, issuerPetnames } from './petnames';
 import { multiplyBy, makeRatio } from '@agoric/zoe/src/contractSupport';
 import { disp } from './display';
+import { allValues } from './allValues';
 
 // Prepare to create and close a vault on each cycle. We measure our
 // available BLD at startup. On each cycle, we deposit 1% of that value as
@@ -23,25 +25,22 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
   let tools = await E(scratch).get(KEY);
   if (!tools) {
     console.log(`create-vault: building tools`);
-    //const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-    const [
-      runBrand,
-      bldBrand,
-      runPurse,
-      bldPurse,
-      treasuryInstance,
-    ] = await Promise.all([
-      E(agoricNames).lookup('brand', issuerPetnames.RUN),
-      //E(agoricNames).lookup('brand', issuerPetnames.BLD),
-      E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
-      E(wallet).getPurse(pursePetnames.RUN),
-      E(wallet).getPurse(pursePetnames.BLD),
-      E(home.agoricNames).lookup('instance', 'Treasury'),
-    ]);
+    const { runBrand, bldBrand, runPurse, bldPurse, treasuryInstance } = await allValues({
+      runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
+      // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
+      bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
+      runPurse: E(wallet).getPurse(pursePetnames.RUN),
+      bldPurse: E(wallet).getPurse(pursePetnames.BLD),
+      treasuryInstance: E(home.agoricNames).lookup('instance', 'Treasury'),
+    });
 
     const treasuryPublicFacet = E(zoe).getPublicFacet(treasuryInstance);
 
     const bldBalance = await E(bldPurse).getCurrentAmount();
+    if (bldBalance.value === BigInt(0)) {
+      throw Error(`create-vault: getCurrentAmount(BLD) broken (says 0)`);
+    }
+    console.log(`create-vault: initial balance: ${disp(bldBalance)} BLD`);
     const bldToLock = amountMath.make(bldBrand, bldBalance.value / BigInt(100));
 
     const collaterals = await E(treasuryPublicFacet).getCollaterals();
