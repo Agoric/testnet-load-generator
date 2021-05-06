@@ -5,10 +5,28 @@ reset-chain:
 	git checkout -- _agstate/agoric-servers
 	agoric install
 
-run-chain:
+# the 'agoric start local-chain' setup code does not currently provide the
+# BLD/RUN necessary to run our loadgen tasks, so we can't use these yet:
+
+run-chain-not-working-yet:
 	SLOGFILE=$(PWD)/chain.slog agoric start local-chain --verbose
-run-client:
+run-client-not-working-yet:
 	agoric start local-solo 8000
+
+# instead, we must use the Makefile in packages/cosmic-swingset, and the
+# "scenario2" rules, which *do* provide the necessary tokens during
+# provisioning
+
+CSDIR=/missing/replace/me/packages/cosmic-swingset
+
+run-chain-setup:
+	$(MAKE) -C $(CSDIR) scenario2-setup
+run-chain:
+	SLOGFILE=$(PWD)/chain.slog $(MAKE) -C $(CSDIR) scenario2-run-chain
+run-client:
+	$(MAKE) -C $(CSDIR) scenario2-run-client
+
+
 run-loadgen:
 	yarn loadgen
 
