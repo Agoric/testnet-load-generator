@@ -1,0 +1,735 @@
+/* global process setInterval clearInterval */
+/* eslint-disable no-continue */
+
+// import { Command } from 'commander';
+
+import { resolve as resolvePath, join as joinPath, basename } from 'path';
+import { performance } from 'perf_hooks';
+import zlib from 'zlib';
+import { promisify } from 'util';
+import {
+  pipeline as pipelineCallback,
+  finished as finishedCallback,
+} from 'stream';
+
+import chalk from 'chalk';
+import { makePromiseKit } from '@agoric/promise-kit';
+
+import {
+  sleep,
+  PromiseAllOrErrors,
+  warnOnRejection,
+  aggregateTryFinally,
+} from './helpers/async.js';
+import { childProcessDone } from './helpers/child-process.js';
+import { makeFsHelper } from './helpers/fs.js';
+import { makeProcfsHelper } from './helpers/procsfs.js';
+import { makeOutputter } from './helpers/outputter.js';
+
+import { makeTestOperations } from './test-local-chain.js';
+
+const pipeline = promisify(pipelineCallback);
+const finished = promisify(finishedCallback);
+
+const monitorInterval = 5 * 60 * 1000;
+
+const stageDuration = 6 * 60 * 60 * 1000;
+
+const vatIdentifierRE = /^(v\d+):(.*)$/;
+const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
+
+/**
+ * @typedef { |
+ *    'create-vat' |
+ *    'vat-startup-finish' |
+ *    'replay-transcript-start' |
+ *    'cosmic-swingset-end-block-start' |
+ *    'cosmic-swingset-end-block-finish' |
+ *    'cosmic-swingset-begin-block'
+ * } SupportedSlogEventTypes
+ */
+
+/**
+ * @typedef {{
+ *   time: number,
+ *   type: SupportedSlogEventTypes
+ * }} SlogEventBase
+ */
+
+/**
+ * @typedef {SlogEventBase & Record<string, unknown>} SlogEvent
+ */
+
+/**
+ * @typedef {{
+ *   time: number,
+ *   type: 'create-vat',
+ *   vatID: string,
+ *   name?: string,
+ *   dynamic: boolean,
+ * } & Record<string, unknown>} SlogCreateVatEvent
+ */
+
+/**
+ * @typedef {{
+ *   time: number,
+ *   type: 'vat-startup-finish' | 'replay-transcript-start',
+ *   vatID: string
+ * } & Record<string, unknown>} SlogVatEvent
+ */
+
+/**
+ * @typedef {{
+ *   time: number,
+ *   type: 'cosmic-swingset-end-block-start' |
+ *         'cosmic-swingset-end-block-finish' |
+ *         'cosmic-swingset-begin-block',
+ *   vatID: string
+ * } & Record<string, unknown>} SlogCosmicSwingsetEvent
+ */
+
+/** @type {SupportedSlogEventTypes[]} */
+const supportedSlogEventTypes = [
+  'create-vat',
+  'vat-startup-finish',
+  'replay-transcript-start',
+  'cosmic-swingset-end-block-start',
+  'cosmic-swingset-end-block-finish',
+  'cosmic-swingset-begin-block',
+];
+
+/**
+ *
+ * @param {string} progName
+ * @param {string[]} rawArgs
+ * @param {Object} powers
+ * @param {import("stream").Writable} powers.stdout
+ * @param {import("stream").Writable} powers.stderr
+ * @param {import("fs/promises")} powers.fs Node.js promisified fs object
+ * @param {import("./helpers/fs.js").fsStream} powers.fsStream Node.js fs stream operations
+ * @param {import("child_process").spawn} powers.spawn Node.js spawn
+ * @param {string} powers.tmpDir Directory location to place temporary files in
+ */
+const main = async (progName, rawArgs, powers) => {
+  const { stdout, stderr, fs, fsStream, spawn, tmpDir } = powers;
+
+  const outputDir = rawArgs[0] || `run-results-${Date.now()}`;
+
+  const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
+  const { findByPrefix, dirDiskUsage, makeFIFO } = makeFsHelper({
+    fs,
+    fsStream,
+    spawn,
+    tmpDir,
+  });
+
+  const { resetChain, runChain, runClient, runLoadGen } = makeTestOperations({
+    spawn,
+    findDirByPrefix: findByPrefix,
+    makeFIFO,
+    getProcessInfo,
+  });
+
+  /**
+   * @param {string} [prefix]
+   * @param {import("stream").Writable} [out]
+   * @param {import("stream").Writable} [err]
+   */
+  const makeConsole = (prefix, out = stdout, err = stderr) =>
+    makeOutputter({
+      out,
+      err,
+      outPrefix: prefix && `${chalk.green(prefix)}: `,
+      errPrefix: prefix && `${chalk.bold.red(prefix)}: `,
+    });
+
+  let { console } = makeConsole();
+
+  console.log(`Outputting to ${resolvePath(outputDir)}`);
+  await fs.mkdir(outputDir, { recursive: true });
+
+  const outputStream = fsStream.createWriteStream(
+    joinPath(outputDir, 'perf.log'),
+  );
+
+  let currentStage = 0;
+  let currentStageElapsedOffset = 0;
+  /** @type {string} */
+  let chainStorageLocation;
+
+  const slogEventRE = new RegExp(
+    `^{"time":\\d+(?:\\.\\d+),"type":"(?:${supportedSlogEventTypes.join(
+      '|',
+    )})"`,
+  );
+
+  /**
+   *
+   * @param {string} eventType
+   * @param {Record<string, unknown>} [data]
+   */
+  const logPerfEvent = (eventType, data = {}) => {
+    const timestamp = Math.round(performance.now() * 1000) / 1e6;
+    outputStream.write(
+      JSON.stringify(
+        {
+          timestamp,
+          stage: currentStage,
+          elapsed: timestamp - currentStageElapsedOffset,
+          time: undefined, // Placeholder to put data.time before type if it exists
+          type: `perf-${eventType}`,
+          ...data,
+        },
+        (_, arg) => (typeof arg === 'bigint' ? Number(arg) : arg),
+      ),
+    );
+    outputStream.write('\n');
+  };
+
+  /**
+   * @param {import("./test-operations.js").RunChainInfo} chainInfo
+   * @param {Object} param1
+   * @param {() => void} param1.resolveFirstBlock
+   * @param {import("stream").Writable} param1.out
+   * @param {import("stream").Writable} param1.err
+   */
+  const monitorChain = async (
+    { slogLines, storageLocation, processInfo: kernelProcessInfo },
+    { resolveFirstBlock, out, err },
+  ) => {
+    const { console: monitorConsole } = makeConsole('monitor-chain', out, err);
+
+    /**
+     * @typedef {{
+     *    processInfo: import("./helpers/procsfs.js").ProcessInfo | null | undefined,
+     *    vatName: string | undefined,
+     *    started: boolean,
+     *  }} VatInfo
+     */
+    /** @type {Map<string, VatInfo>} */
+    const vatInfos = new Map();
+    let vatUpdated = Promise.resolve();
+
+    const updateVatInfos = async () => {
+      monitorConsole.log('Updating vat infos');
+      const childrenInfos = new Set(
+        await kernelProcessInfo.getChildren().catch(() => []),
+      );
+      for (const info of childrenInfos) {
+        const argv = await info.getArgv(); // eslint-disable-line no-await-in-loop
+        if (!argv || basename(argv[0]) !== 'xsnap') continue;
+        const vatIdentifierMatches = vatIdentifierRE.exec(argv[1]);
+        if (!vatIdentifierMatches) continue;
+        const vatID = vatIdentifierMatches[1];
+        const vatInfo = vatInfos.get(vatID);
+
+        if (!vatInfo) {
+          /** @type {string | undefined} */
+          let vatName = vatIdentifierMatches[2];
+          if (!vatName || vatName === 'undefined') vatName = undefined;
+          // TODO: warn found vat process without create event
+          monitorConsole.warn(
+            `found vat ${vatID}${
+              vatName ? ` ${vatName}` : ''
+            } process before create event`,
+            'pid=',
+            info.pid,
+          );
+          // vatInfo = { vatName, processInfo: info };
+          // vatInfos.set(vatID, vatInfo);
+          continue;
+        }
+
+        if (vatInfo.processInfo !== info) {
+          // TODO: warn if replacing with new processInfo ?
+        }
+
+        vatInfo.processInfo = info;
+
+        // if (!vatInfo.started) {
+        //   monitorConsole.warn(
+        //     `found vat ${vatID}${
+        //       vatInfo.vatName ? ` ${vatInfo.vatName}` : ''
+        //     } process before vat start event`,
+        //     'pid=',
+        //     info.pid,
+        //   );
+        // }
+      }
+      for (const [vatID, vatInfo] of vatInfos) {
+        if (vatInfo.processInfo && !childrenInfos.has(vatInfo.processInfo)) {
+          vatInfo.processInfo = null;
+        }
+
+        if (
+          vatInfo.started &&
+          !vatInfo.processInfo &&
+          vatInfo.vatName &&
+          !knownVatsNamesWithoutProcess.includes(vatInfo.vatName)
+        ) {
+          // Either the vat started but the process doesn't exist yet (undefined)
+          // or the vat process exited but the vat didn't stop yet (null)
+          monitorConsole.warn(
+            `Vat ${vatID} started but process ${
+              vatInfo.processInfo === null
+                ? 'exited early'
+                : "doesn't exist yet"
+            }`,
+          );
+        }
+      }
+    };
+
+    const ensureVatInfoUpdated = async () => {
+      const vatUpdatedBefore = vatUpdated;
+      await vatUpdated;
+      if (vatUpdated === vatUpdatedBefore) {
+        vatUpdated = updateVatInfos();
+        warnOnRejection(
+          vatUpdated,
+          monitorConsole,
+          'Failed to update vat process infos',
+        );
+      }
+    };
+
+    const logProcessUsage = async () =>
+      PromiseAllOrErrors(
+        [
+          {
+            eventData: {
+              processType: 'kernel',
+            },
+            processInfo: kernelProcessInfo,
+          },
+          ...[...vatInfos].map(([vatID, { processInfo, vatName }]) => ({
+            eventData: {
+              processType: 'vat',
+              vatID,
+              name: vatName,
+            },
+            processInfo,
+          })),
+        ].map(async ({ eventData, processInfo }) => {
+          if (!processInfo) return;
+          const { times, memory } = await processInfo.getUsageSnapshot();
+          logPerfEvent('chain-process-usage', {
+            ...eventData,
+            real:
+              Math.round(
+                performance.now() * 1000 - processInfo.startTimestamp * 1e6,
+              ) / 1e6,
+            ...times,
+            ...memory,
+          });
+        }),
+      ).then(() => {});
+
+    const logStorageUsage = async () => {
+      logPerfEvent('chain-storage-usage', {
+        chain: await dirDiskUsage(storageLocation),
+      });
+    };
+
+    const monitorIntervalId = setInterval(
+      () =>
+        warnOnRejection(
+          PromiseAllOrErrors([logStorageUsage(), logProcessUsage()]),
+          monitorConsole,
+          'Failure during usage monitoring',
+        ),
+      monitorInterval,
+    );
+
+    const slogOutput = zlib.createGzip({
+      level: zlib.constants.Z_BEST_COMPRESSION,
+    });
+    const slogOutputWriteStream = fsStream.createWriteStream(
+      joinPath(outputDir, `chain-stage-${currentStage}.slog.gz`),
+    );
+    // const slogOutput = slogOutputWriteStream;
+    // const slogOutputPipeResult = finished(slogOutput);
+    const slogOutputPipeResult = pipeline(slogOutput, slogOutputWriteStream);
+
+    /** @type {number | null}  */
+    let slogStart = null;
+
+    let slogBlocksSeen = 0;
+
+    for await (const line of slogLines) {
+      slogOutput.write(line);
+      slogOutput.write('\n');
+
+      if (slogStart == null) {
+        // TODO: figure out a better way
+        // There is a risk we could be late to the party here, with the chain
+        // having started some time before us but in reality we usually find
+        // the process before it starts the kernel
+        slogStart = performance.now() / 1000;
+        warnOnRejection(
+          logStorageUsage(),
+          monitorConsole,
+          'Failed to get first storage usage',
+        );
+      }
+
+      // Avoid JSON parsing lines we don't care about
+      if (!slogEventRE.test(line)) continue;
+
+      const localEventTime = performance.timeOrigin + performance.now();
+
+      /** @type {SlogEvent} */
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch (error) {
+        monitorConsole.warn('Failed to parse slog line', line, error);
+        continue;
+      }
+
+      monitorConsole.log(
+        'slog event',
+        event.type,
+        'delay',
+        Math.round(localEventTime - event.time * 1000),
+        'ms',
+      );
+
+      switch (event.type) {
+        case 'create-vat': {
+          const {
+            vatID,
+            name: vatName,
+          } = /** @type {SlogCreateVatEvent} */ (event);
+          if (!vatInfos.has(vatID)) {
+            vatInfos.set(vatID, {
+              vatName,
+              processInfo: undefined,
+              started: false,
+            });
+          } else {
+            // TODO: warn already created vat before
+          }
+          break;
+        }
+        case 'vat-startup-finish': {
+          const { vatID } = /** @type {SlogVatEvent} */ (event);
+          const vatInfo = vatInfos.get(vatID);
+          if (!vatInfo) {
+            // TODO: warn unknown vat
+          } else {
+            vatInfo.started = true;
+            ensureVatInfoUpdated();
+          }
+          break;
+        }
+        case 'replay-transcript-start': {
+          const { vatID } = /** @type {SlogVatEvent} */ (event);
+          const vatInfo = vatInfos.get(vatID);
+          if (!vatInfo) {
+            // TODO: warn unknown vat
+          } else if (!vatInfo.processInfo) {
+            ensureVatInfoUpdated();
+          }
+          break;
+        }
+        case 'cosmic-swingset-end-block-start': {
+          if (event.blockHeight === 0) {
+            logPerfEvent('chain-first-init-start');
+          }
+          break;
+        }
+        case 'cosmic-swingset-end-block-finish': {
+          if (event.blockHeight === 0) {
+            // TODO: measure duration from start to finish
+            logPerfEvent('chain-first-init-finish');
+          }
+          break;
+        }
+        case 'cosmic-swingset-begin-block': {
+          if (!slogBlocksSeen) {
+            logPerfEvent('stage-first-block');
+            warnOnRejection(
+              logProcessUsage(),
+              monitorConsole,
+              'Failed to get initial process usage',
+            );
+          }
+          slogBlocksSeen += 1;
+          if (slogBlocksSeen === 1) {
+            resolveFirstBlock();
+          }
+          monitorConsole.log('begin-block', event.blockHeight);
+          break;
+        }
+        default:
+      }
+    }
+
+    clearInterval(monitorIntervalId);
+
+    slogOutput.end();
+    await slogOutputPipeResult;
+  };
+
+  /**
+   * @param {Object} param0
+   * @param {boolean} [param0.chainOnly]
+   */
+  const runStage = async ({ chainOnly } = {}) => {
+    /** @type {import("stream").Writable} */
+    let out;
+    /** @type {import("stream").Writable} */
+    let err;
+
+    currentStage += 1;
+    currentStageElapsedOffset = Math.round(performance.now() * 1000) / 1e6;
+    ({ console, out, err } = makeConsole(`stage-${currentStage}`));
+
+    const { console: stageConsole } = makeConsole('runner', out, err);
+
+    logPerfEvent('stage-start');
+    const stageStart = performance.now();
+
+    stageConsole.log('Running chain');
+    logPerfEvent('run-chain-start');
+    const runChainResult = await runChain({ stdout: out, stderr: err });
+    logPerfEvent('run-chain-finish');
+
+    currentStageElapsedOffset = runChainResult.processInfo.startTimestamp;
+    chainStorageLocation = runChainResult.storageLocation;
+    /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
+    const {
+      promise: chainFirstBlock,
+      resolve: resolveFirstBlock,
+    } = makePromiseKit();
+    const monitorChainDone = monitorChain(runChainResult, {
+      resolveFirstBlock,
+      out,
+      err,
+    });
+
+    await aggregateTryFinally(
+      async () => {
+        await runChainResult.ready;
+        logPerfEvent('chain-ready');
+        stageConsole.log('Chain ready');
+
+        await chainFirstBlock;
+
+        if (!chainOnly) {
+          stageConsole.log('Running client');
+          logPerfEvent('run-client-start');
+          const runClientStart = performance.now();
+          const runClientResult = await runClient({ stdout: out, stderr: err });
+          logPerfEvent('run-client-finish');
+
+          await aggregateTryFinally(
+            async () => {
+              await runClientResult.ready;
+              logPerfEvent('client-ready', {
+                duration:
+                  Math.round((performance.now() - runClientStart) * 1000) / 1e6,
+              });
+
+              stageConsole.log('Running load gen');
+              logPerfEvent('run-loadgen-start');
+              const runLoadGenResult = await runLoadGen({
+                stdout: out,
+                stderr: err,
+              });
+              logPerfEvent('run-loadgen-finish');
+
+              await aggregateTryFinally(
+                async () => {
+                  await runLoadGenResult.ready;
+                  logPerfEvent('loadgen-ready');
+
+                  const sleepTime =
+                    stageDuration - (performance.now() - stageStart);
+                  stageConsole.log(
+                    'Stage ready, going to sleep for',
+                    Math.round(sleepTime / (1000 * 60)),
+                    'minutes',
+                  );
+                  logPerfEvent('stage-ready');
+
+                  const signal = makePromiseKit();
+                  const onInterrupt = () =>
+                    signal.reject(new Error('Interrupted'));
+                  process.on('SIGINT', onInterrupt);
+
+                  await aggregateTryFinally(
+                    async () => {
+                      await Promise.race([sleep(sleepTime), signal.promise]);
+                      logPerfEvent('stage-shutdown');
+                    },
+                    async () => {
+                      process.off('SIGINT', onInterrupt);
+                    },
+                  );
+                },
+                async () => {
+                  stageConsole.log('Stopping load-gen');
+
+                  runLoadGenResult.stop();
+                  await runLoadGenResult.done;
+                  logPerfEvent('loadgen-stopped');
+                },
+              );
+            },
+            async () => {
+              stageConsole.log('Stopping client');
+
+              runClientResult.stop();
+              await runClientResult.done;
+              logPerfEvent('client-stopped');
+            },
+          );
+        }
+      },
+      async () => {
+        stageConsole.log('Stopping chain');
+
+        runChainResult.stop();
+        await runChainResult.done;
+        logPerfEvent('chain-stopped');
+
+        await monitorChainDone;
+      },
+    );
+
+    logPerfEvent('stage-finish');
+    currentStageElapsedOffset = 0;
+  };
+
+  await aggregateTryFinally(
+    async () => {
+      let out;
+      let err;
+      ({ console, out, err } = makeConsole('init'));
+      logPerfEvent('start', {
+        cpuTimeOffset: await getCPUTimeOffset(),
+        timeOrigin: performance.timeOrigin / 1000,
+        // TODO: add other interesting info here
+      });
+
+      logPerfEvent('reset-chain-start');
+      await resetChain({ stdout: out, stderr: err });
+      logPerfEvent('reset-chain-finish');
+
+      while (currentStage < 4) {
+        await runStage(); // eslint-disable-line no-await-in-loop
+      }
+
+      await runStage({ chainOnly: true });
+    },
+    async () => {
+      outputStream.end();
+
+      if (chainStorageLocation) {
+        await childProcessDone(
+          spawn('tar', [
+            '-cSJf',
+            joinPath(outputDir, 'chain-storage.tar.xz'),
+            chainStorageLocation,
+          ]),
+        );
+      }
+
+      await PromiseAllOrErrors([
+        // finished(fifo),
+        finished(outputStream),
+      ]);
+    },
+  );
+
+  // console.log(await dirDiskUsage(chainDir));
+
+  // const myInfo = await getProcessInfo(process.pid);
+  // const parentInfo = await myInfo.getParent();
+  // const systemArgs = myInfo.argv || [];
+
+  // stdout(`Hello world: ${progName}: ${rawArgs.join(', ')}\n`);
+  // stdout(`System args: ${systemArgs.join(' ')}\n`);
+  // stdout(`Start ticks: ${0 - parentInfo.startTimestamp}\n`);
+
+  // /**
+  //  *
+  //  * @param {import("./helpers/process-info.js").ProcessInfo} info
+  //  * @param {string} indent
+  //  */
+  // const printProcess = async (info, indent = '') => {
+  //   stdout(
+  //     `${indent}(${info.pid})[${info.startTimestamp}]: ${
+  //       (info.argv || ['(null)'])[0]
+  //     }\n`,
+  //   );
+  //   stdout(
+  //     `${indent}          ${JSON.stringify(await info.getUsageSnapshot())}\n`,
+  //   );
+  //   if (indent.length < 2) {
+  //     for (const child of await info.getChildren()) {
+  //       // eslint-disable-next-line no-await-in-loop
+  //       await printProcess(child, `${indent}  `);
+  //     }
+  //   }
+  // };
+
+  // await printProcess(await getProcessInfo(1));
+  // // await printProcess(await getProcessInfo(108));
+
+  // const fifo = fsStream.createReadStream('./chain.second.slog', {
+  //   emitClose: true,
+  // });
+
+  // fifo
+  //   .once('ready', () => {
+  //     console.log('fifo ready');
+  //   })
+  //   .once('open', () => {
+  //     fifo.once('close', () => {
+  //       // TODO: log errors
+  //       console.log('removing fifo');
+  //     });
+  //     console.log('fifo open');
+  //   });
+
+  // const fifo = await makeFIFO('chain.slog');
+  // console.log('Created FIFO:', fifo.path);
+
+  // const rl = readline.createInterface({
+  //   input: process.stdin,
+  //   output: process.stdout,
+  // });
+
+  // console.log(
+  //   'Answer',
+  //   await new Promise((resolve) =>
+  //     rl.question('Press enter when ready.', resolve),
+  //   ),
+  // );
+
+  // const fifoLines = readline.createInterface({
+  //   input: fifo,
+  // });
+
+  // for await (const fifoLine of fifoLines) {
+  //   console.log('fifo: ', fifoLine);
+  // }
+
+  // fifo.close();
+  // rl.close();
+  // await pipeResult;
+
+  // const lines = readline.createInterface({ input: testFile });
+
+  // for await (const line of lines) {
+  //   console.log('read', line);
+  // }
+  // testFile.close();
+
+  // fifo.destroy();
+};
+
+export default main;

@@ -1,0 +1,57 @@
+{
+  "name": "loadgen-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runner for the load generator",
+  "parsers": {
+    "js": "mjs"
+  },
+  "bin": "bin/loadgen-runner",
+  "scripts": {
+    "build": "exit 0",
+    "test": "exit 0",
+    "lint": "yarn lint:js && yarn lint:prettier",
+    "lint:js": "eslint '**/*.{js,ts}'",
+    "lint:prettier": "prettier --check '**/*.{js,ts}'",
+    "lint:types": "tsc -p jsconfig.json",
+    "lint-fix": "yarn lint-fix:js && yarn lint-fix:prettier",
+    "lint-fix:js": "eslint --fix '**/*.{js,ts}'",
+    "lint-fix:prettier": "prettier --write '**/*.{js,ts}'"
+  },
+  "devDependencies": {
+    "eslint": "^7.11.0",
+    "@agoric/eslint-config": "^0.3.6",
+    "prettier": "^2.1.2",
+    "ava": "^3.13.0"
+  },
+  "dependencies": {
+    "@agoric/assert": "*",
+    "@agoric/install-ses": "*",
+    "@agoric/promise-kit": "*",
+    "@iarna/toml": "^2.2.3",
+    "agoric": "*",
+    "anylogger": "^0.21.0",
+    "chalk": "^2.4.2",
+    "commander": "^5.0.0",
+    "deterministic-json": "^1.0.5",
+    "esm": "^3.2.25",
+    "inquirer": "^6.3.1",
+    "readline-transform": "^1.0.0"
+  },
+  "keywords": [],
+  "author": "Agoric",
+  "license": "Apache-2.0",
+  "eslintConfig": {
+    "extends": [
+      "@agoric"
+    ],
+    "rules": {
+      "prettier/prettier": "off"
+    }
+  },
+  "prettier": {
+    "trailingComma": "all",
+    "singleQuote": true
+  },
+  "eslintIgnore": []
+}
