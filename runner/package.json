@@ -10,7 +10,7 @@
   "scripts": {
     "build": "exit 0",
     "test": "exit 0",
-    "lint": "yarn lint:js && yarn lint:prettier",
+    "lint": "yarn lint:js && yarn lint:prettier && yarn lint:types",
     "lint:js": "eslint '**/*.{js,ts}'",
     "lint:prettier": "prettier --check '**/*.{js,ts}'",
     "lint:types": "tsc -p jsconfig.json",
@@ -19,10 +19,11 @@
     "lint-fix:prettier": "prettier --write '**/*.{js,ts}'"
   },
   "devDependencies": {
-    "eslint": "^7.11.0",
     "@agoric/eslint-config": "^0.3.6",
-    "prettier": "^2.1.2",
-    "ava": "^3.13.0"
+    "@types/readline-transform": "^1.0.0",
+    "ava": "^3.13.0",
+    "eslint": "^7.11.0",
+    "prettier": "^2.1.2"
   },
   "dependencies": {
     "@agoric/assert": "*",

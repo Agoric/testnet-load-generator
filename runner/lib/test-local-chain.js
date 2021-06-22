@@ -102,6 +102,14 @@ const getChildMatchingArgv = async (launcherInfo, argvMatcher) => {
     return result.info;
   }
 
+  console.error(
+    `getChildMatchingArgv: ${
+      childrenWithArgv.length
+    } child process, none of ["${childrenWithArgv
+      .map(({ argv }) => (argv || ['no argv']).join(' '))
+      .join('", "')}"] match expected arguments`,
+  );
+
   throw new Error("Couldn't find child process");
 };
 
@@ -118,7 +126,7 @@ const loadGenReadyRE = /server running/;
 const chainNodeArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
   getArgvMatcher([/node$/, /chain-entrypoint/]),
 );
-const chainGoArgvMatcher = getArgvMatcher([/sh$/, /ag-chain-cosmos$/]);
+const chainGoArgvMatcher = getArgvMatcher([/(?:sh|node)$/, /ag-chain-cosmos$/]);
 /** @param {string[]} argv */
 const chainArgvMatcher = (argv) =>
   chainNodeArgvMatcher(argv) || chainGoArgvMatcher(argv);
