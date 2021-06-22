@@ -1,30 +1,55 @@
-#! /bin/sh
+#!/bin/sh
 set -e -x
 
-AGORIC_SDK_GITHUB_REPO=https://github.com/Agoric/agoric-sdk
-GIT_HEAD="$(git ls-remote $AGORIC_SDK_GITHUB_REPO.git HEAD | awk '{ print substr($1,1,10) }')"
 
-LOADGEN_DIR=$(pwd)
-WORK_DIR=/tmp/agoric-sdk-${GIT_HEAD}
+LOADGEN_DIR="$(pwd)"
 
-mkdir -p $WORK_DIR/bin $WORK_DIR/src $WORK_DIR/out $WORK_DIR/go/bin
-export GOPATH=$WORK_DIR/go
-export PATH=$WORK_DIR/bin:$GOPATH/bin:$PATH
+SDK_REPO="${SDK_REPO:-https://github.com/Agoric/agoric-sdk.git}"
 
-if [ ! -d $WORK_DIR/src/.git ]
+# Create temporary directory for SDK source if none provided
+if [ -z "${SDK_SRC}" ]
 then
-    git clone $AGORIC_SDK_GITHUB_REPO.git $WORK_DIR/src
+    SDK_REVISION=${SDK_REVISION:-$(git ls-remote ${SDK_REPO} HEAD | awk '{ print substr($1,1,12) }')}
+    SDK_SRC=/tmp/agoric-sdk-src-${SDK_REVISION}
+fi
+mkdir -p "${SDK_SRC}"
+
+# Clone the repo if needed
+if [ ! -d "${SDK_SRC}/.git" ]
+then
+    git clone "${SDK_REPO}" "${SDK_SRC}"
+    if [ ! -z "${SDK_REVISION}" ]
+    then
+        git -C "${SDK_SRC}" reset --hard ${SDK_REVISION}
+    fi
 fi
 
-cd $WORK_DIR/src
-git fetch
-git reset --hard $GIT_HEAD
+SDK_FULL_REVISION=$(git -C "${SDK_SRC}" rev-parse HEAD)
+
+if [ ! -z "${SDK_REVISION}" -a "${SDK_FULL_REVISION#${SDK_REVISION}}" = "${SDK_FULL_REVISION}" ]
+then
+    echo "Error: SDK is currently checked out at revision ${SDK_FULL_REVISION} but revision ${SDK_REVISION} was specified"
+    exit 2
+fi
+
+SDK_REVISION=$(git -C "${SDK_SRC}" rev-parse --short HEAD)
+
+AGORIC_BIN_DIR=/tmp/agoric-sdk-bin-${SDK_REVISION}
+mkdir -p ${AGORIC_BIN_DIR}
+
+OUTPUT_DIR="${OUTPUT_DIR:-/tmp/agoric-sdk-out-${SDK_REVISION}}"
+mkdir -p "${OUTPUT_DIR}"
+
+export PATH=$AGORIC_BIN_DIR:$PATH
+
+cd "$SDK_SRC"
 yarn install
 yarn build
 make -C packages/cosmic-swingset
-rm -f $WORK_DIR/bin/agoric
-yarn link-cli $WORK_DIR/bin/agoric
 
-cd $LOADGEN_DIR
+rm -f "${AGORIC_BIN_DIR}/agoric"
+yarn link-cli "${AGORIC_BIN_DIR}/agoric"
+
+cd "$LOADGEN_DIR"
 agoric install
-./runner/bin/loadgen-runner $WORK_DIR/out 2>&1 | tee $WORK_DIR/out/runner.log
+exec ./runner/bin/loadgen-runner "${OUTPUT_DIR}" "$@" 2>&1 

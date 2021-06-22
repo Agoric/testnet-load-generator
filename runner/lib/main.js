@@ -149,7 +149,7 @@ const main = async (progName, rawArgs, powers) => {
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputStream = fsStream.createWriteStream(
-    joinPath(outputDir, 'perf.log'),
+    joinPath(outputDir, 'perf.jsonl'),
   );
 
   let currentStage = 0;
@@ -557,7 +557,8 @@ const main = async (progName, rawArgs, powers) => {
                   const signal = makePromiseKit();
                   const onInterrupt = () =>
                     signal.reject(new Error('Interrupted'));
-                  process.on('SIGINT', onInterrupt);
+                  process.once('SIGINT', onInterrupt);
+                  process.once('SIGTERM', onInterrupt);
 
                   await aggregateTryFinally(
                     async () => {
@@ -566,6 +567,7 @@ const main = async (progName, rawArgs, powers) => {
                     },
                     async () => {
                       process.off('SIGINT', onInterrupt);
+                      process.off('SIGTERM', onInterrupt);
                     },
                   );
                 },
@@ -643,93 +645,6 @@ const main = async (progName, rawArgs, powers) => {
       ]);
     },
   );
-
-  // console.log(await dirDiskUsage(chainDir));
-
-  // const myInfo = await getProcessInfo(process.pid);
-  // const parentInfo = await myInfo.getParent();
-  // const systemArgs = myInfo.argv || [];
-
-  // stdout(`Hello world: ${progName}: ${rawArgs.join(', ')}\n`);
-  // stdout(`System args: ${systemArgs.join(' ')}\n`);
-  // stdout(`Start ticks: ${0 - parentInfo.startTimestamp}\n`);
-
-  // /**
-  //  *
-  //  * @param {import("./helpers/process-info.js").ProcessInfo} info
-  //  * @param {string} indent
-  //  */
-  // const printProcess = async (info, indent = '') => {
-  //   stdout(
-  //     `${indent}(${info.pid})[${info.startTimestamp}]: ${
-  //       (info.argv || ['(null)'])[0]
-  //     }\n`,
-  //   );
-  //   stdout(
-  //     `${indent}          ${JSON.stringify(await info.getUsageSnapshot())}\n`,
-  //   );
-  //   if (indent.length < 2) {
-  //     for (const child of await info.getChildren()) {
-  //       // eslint-disable-next-line no-await-in-loop
-  //       await printProcess(child, `${indent}  `);
-  //     }
-  //   }
-  // };
-
-  // await printProcess(await getProcessInfo(1));
-  // // await printProcess(await getProcessInfo(108));
-
-  // const fifo = fsStream.createReadStream('./chain.second.slog', {
-  //   emitClose: true,
-  // });
-
-  // fifo
-  //   .once('ready', () => {
-  //     console.log('fifo ready');
-  //   })
-  //   .once('open', () => {
-  //     fifo.once('close', () => {
-  //       // TODO: log errors
-  //       console.log('removing fifo');
-  //     });
-  //     console.log('fifo open');
-  //   });
-
-  // const fifo = await makeFIFO('chain.slog');
-  // console.log('Created FIFO:', fifo.path);
-
-  // const rl = readline.createInterface({
-  //   input: process.stdin,
-  //   output: process.stdout,
-  // });
-
-  // console.log(
-  //   'Answer',
-  //   await new Promise((resolve) =>
-  //     rl.question('Press enter when ready.', resolve),
-  //   ),
-  // );
-
-  // const fifoLines = readline.createInterface({
-  //   input: fifo,
-  // });
-
-  // for await (const fifoLine of fifoLines) {
-  //   console.log('fifo: ', fifoLine);
-  // }
-
-  // fifo.close();
-  // rl.close();
-  // await pipeResult;
-
-  // const lines = readline.createInterface({ input: testFile });
-
-  // for await (const line of lines) {
-  //   console.log('read', line);
-  // }
-  // testFile.close();
-
-  // fifo.destroy();
 };
 
 export default main;

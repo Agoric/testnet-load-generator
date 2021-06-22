@@ -9,7 +9,7 @@
 
 import { performance } from 'perf_hooks';
 
-import { assert } from '@agoric/assert';
+import assert from 'assert';
 
 import { childProcessDone } from './child-process.js';
 
