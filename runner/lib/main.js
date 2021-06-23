@@ -545,8 +545,10 @@ const main = async (progName, rawArgs, powers) => {
                   await runLoadGenResult.ready;
                   logPerfEvent('loadgen-ready');
 
-                  const sleepTime =
-                    stageDuration - (performance.now() - stageStart);
+                  const sleepTime = Math.max(
+                    0,
+                    stageDuration - (performance.now() - stageStart),
+                  );
                   stageConsole.log(
                     'Stage ready, going to sleep for',
                     Math.round(sleepTime / (1000 * 60)),

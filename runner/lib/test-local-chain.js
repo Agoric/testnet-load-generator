@@ -240,7 +240,19 @@ export const makeTestOperations = ({
         { stdio, env: chainEnv, detached: true },
       );
 
-      const chainDone = childProcessDone(launcherCp);
+      let stopped = false;
+
+      // Chain exit with code 98 when killed
+      const chainDone = childProcessDone(launcherCp, {
+        ignoreExitCode: true,
+      }).then((code) => {
+        if (code !== 0 && (!stopped || code !== 98)) {
+          return Promise.reject(
+            new Error(`Chain exited with non-zero code: ${code}`),
+          );
+        }
+        return 0;
+      });
 
       chainDone.then(
         () => console.log('Chain exited successfully'),
@@ -280,7 +292,10 @@ export const makeTestOperations = ({
             ),
           ]);
 
-          const stop = () => process.kill(processInfo.pid);
+          const stop = () => {
+            stopped = true;
+            process.kill(processInfo.pid);
+          };
 
           return harden({
             stop,
