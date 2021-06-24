@@ -241,7 +241,10 @@ export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
    * and performance.now()'s origin for the current process.
    *
    * The absolute value of this offset should be below 0.01s
-   * on a system with somewhat accurate time measurement
+   * on a system with somewhat accurate time measurement if
+   * node was the first image executed. If there was a delay
+   * from process creation to node execution, the value returned
+   * will capture an approximation of that delay within 10ms.
    *
    * @returns {Promise<number>} The offset in seconds
    */

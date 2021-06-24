@@ -98,6 +98,10 @@ const supportedSlogEventTypes = [
   'cosmic-swingset-begin-block',
 ];
 
+const slogEventRE = new RegExp(
+  `^{"time":\\d+(?:\\.\\d+),"type":"(?:${supportedSlogEventTypes.join('|')})"`,
+);
+
 /**
  *
  * @param {string} progName
@@ -153,15 +157,8 @@ const main = async (progName, rawArgs, powers) => {
   );
 
   let currentStage = 0;
-  let currentStageElapsedOffset = 0;
-  /** @type {string} */
-  let chainStorageLocation;
-
-  const slogEventRE = new RegExp(
-    `^{"time":\\d+(?:\\.\\d+),"type":"(?:${supportedSlogEventTypes.join(
-      '|',
-    )})"`,
-  );
+  let currentStageElapsedOffsetNs = 0;
+  const cpuTimeOffset = await getCPUTimeOffset();
 
   /**
    *
@@ -169,13 +166,13 @@ const main = async (progName, rawArgs, powers) => {
    * @param {Record<string, unknown>} [data]
    */
   const logPerfEvent = (eventType, data = {}) => {
-    const timestamp = Math.round(performance.now() * 1000) / 1e6;
+    const perfNowNs = performance.now() * 1000;
     outputStream.write(
       JSON.stringify(
         {
-          timestamp,
+          timestamp: Math.round(perfNowNs) / 1e6,
           stage: currentStage,
-          elapsed: timestamp - currentStageElapsedOffset,
+          elapsed: Math.round(perfNowNs - currentStageElapsedOffsetNs) / 1e6,
           time: undefined, // Placeholder to put data.time before type if it exists
           type: `perf-${eventType}`,
           ...data,
@@ -317,7 +314,8 @@ const main = async (progName, rawArgs, powers) => {
             ...eventData,
             real:
               Math.round(
-                performance.now() * 1000 - processInfo.startTimestamp * 1e6,
+                performance.now() * 1000 -
+                  (processInfo.startTimestamp - cpuTimeOffset) * 1e6,
               ) / 1e6,
             ...times,
             ...memory,
@@ -483,7 +481,7 @@ const main = async (progName, rawArgs, powers) => {
     let err;
 
     currentStage += 1;
-    currentStageElapsedOffset = Math.round(performance.now() * 1000) / 1e6;
+    currentStageElapsedOffsetNs = performance.now() * 1000;
     ({ console, out, err } = makeConsole(`stage-${currentStage}`));
 
     const { console: stageConsole } = makeConsole('runner', out, err);
@@ -496,8 +494,9 @@ const main = async (progName, rawArgs, powers) => {
     const runChainResult = await runChain({ stdout: out, stderr: err });
     logPerfEvent('run-chain-finish');
 
-    currentStageElapsedOffset = runChainResult.processInfo.startTimestamp;
-    chainStorageLocation = runChainResult.storageLocation;
+    currentStageElapsedOffsetNs =
+      (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
+    const chainStorageLocation = runChainResult.storageLocation;
     /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
     const {
       promise: chainFirstBlock,
@@ -599,12 +598,21 @@ const main = async (progName, rawArgs, powers) => {
         await runChainResult.done;
         logPerfEvent('chain-stopped');
 
-        await monitorChainDone;
+        await PromiseAllOrErrors([
+          childProcessDone(
+            spawn('tar', [
+              '-cSJf',
+              joinPath(outputDir, `chain-storage-stage-${currentStage}.tar.xz`),
+              chainStorageLocation,
+            ]),
+          ),
+          monitorChainDone,
+        ]);
       },
     );
 
     logPerfEvent('stage-finish');
-    currentStageElapsedOffset = 0;
+    currentStageElapsedOffsetNs = 0;
   };
 
   await aggregateTryFinally(
@@ -631,20 +639,7 @@ const main = async (progName, rawArgs, powers) => {
     async () => {
       outputStream.end();
 
-      if (chainStorageLocation) {
-        await childProcessDone(
-          spawn('tar', [
-            '-cSJf',
-            joinPath(outputDir, 'chain-storage.tar.xz'),
-            chainStorageLocation,
-          ]),
-        );
-      }
-
-      await PromiseAllOrErrors([
-        // finished(fifo),
-        finished(outputStream),
-      ]);
+      await finished(outputStream);
     },
   );
 };
