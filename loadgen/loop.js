@@ -1,3 +1,4 @@
+/* global setInterval clearInterval setTimeout clearTimeout */
 import http from 'http';
 import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
@@ -37,7 +38,7 @@ function maybeStartOneCycle(name, limit) {
         console.log(` finished ${name}`);
         s.succeeded += 1;
       },
-      (err) => {
+      err => {
         console.log(`[${name}] failed:`, err);
         s.failed += 1;
       },
@@ -57,8 +58,10 @@ function checkConfig(config) {
       ok = false;
     }
     if (!data) {
+      // eslint-disable-next-line no-continue
       continue;
     }
+    // eslint-disable-next-line no-unused-vars
     const { interval = 60, limit = 1, wait = 0 } = data;
     if (interval < 1) {
       console.log(`[${name}].interval (${interval}) too short, please >=1.0 s`);
@@ -81,6 +84,7 @@ function updateConfig(config) {
   }
   for (const [name, data] of Object.entries(config)) {
     if (!data) {
+      // eslint-disable-next-line no-continue
       continue;
     }
     const { interval = 60, limit = 1, wait = 0 } = data;
@@ -96,8 +100,6 @@ function updateConfig(config) {
   }
 }
 
-let oldConfig;
-
 function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -107,7 +109,7 @@ function startServer() {
       if (req.method === 'PUT') {
         let body = '';
         req.setEncoding('utf8');
-        req.on('data', (chunk) => {
+        req.on('data', chunk => {
           body += chunk;
         });
         req.on('end', () => {
