@@ -26,7 +26,7 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
     const agentBundle = await bundleSource(agentFn);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    agent = await E(installerP).spawn(key, home);
+    agent = await E(installerP).spawn([key, home]);
   }
 
   async function vaultCycle() {

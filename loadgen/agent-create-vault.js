@@ -10,7 +10,7 @@ import { allValues } from './allValues';
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
 
-export default async function startAgent(key, home) {
+export default async function startAgent([key, home]) {
   const { zoe, scratch, agoricNames, wallet } = home;
 
   console.log(`create-vault: building tools`);

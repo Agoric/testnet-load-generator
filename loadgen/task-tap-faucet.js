@@ -17,9 +17,12 @@ export async function prepareFaucet(homePromise, deployPowers) {
     const faucetBundle = await faucetBundleP;
     const agentBundle = await agentBundleP;
 
+    console.log(`--- prepareFaucet has bundles ${JSON.stringify(faucetBundle).length} ${JSON.stringify(agentBundle).length}`);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    agent = await E(installerP).spawn(key, home, faucetBundle);
+    await installerP;
+    console.log(`--- agentBundle installed`);
+    agent = await E(installerP).spawn([key, home, faucetBundle]);
   }
 
   async function faucetCycle() {
