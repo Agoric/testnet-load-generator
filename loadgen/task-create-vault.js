@@ -30,12 +30,14 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
   }
 
   async function vaultCycle() {
-    const [newRunBalance, newBldBalance] = E(agent).doFaucetCycle();
+    const [newRunBalance, newBldBalance] = await E(agent).doVaultCycle();
     console.log(
       `create-vault done: RUN=${disp(newRunBalance)} BLD=${disp(
         newBldBalance,
       )}`,
     );
   }
+
+  console.log(`--- vault ready for cycles`);
   return vaultCycle;
 }

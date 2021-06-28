@@ -13,7 +13,7 @@ import { allValues } from './allValues';
 export default async function startAgent([key, home]) {
   const { zoe, scratch, agoricNames, wallet } = home;
 
-  console.log(`create-vault: building tools`);
+  console.error(`create-vault: building tools`);
   const {
     runBrand,
     bldBrand,
@@ -35,7 +35,7 @@ export default async function startAgent([key, home]) {
   if (bldBalance.value === BigInt(0)) {
     throw Error(`create-vault: getCurrentAmount(BLD) broken (says 0)`);
   }
-  console.log(`create-vault: initial balance: ${disp(bldBalance)} BLD`);
+  console.error(`create-vault: initial balance: ${disp(bldBalance)} BLD`);
   const bldToLock = amountMath.make(bldBrand, bldBalance.value / BigInt(100));
 
   const collaterals = await E(treasuryPublicFacet).getCollaterals();
@@ -44,13 +44,14 @@ export default async function startAgent([key, home]) {
   const half = makeRatio(BigInt(50), runBrand);
   const wantedRun = multiplyBy(multiplyBy(bldToLock, priceRate), half);
 
-  console.log(`create-vault: tools installed`);
+  console.error(`create-vault: tools installed`);
 
-  console.log(
+  console.error(
     `create-vault: bldToLock=${disp(bldToLock)}, wantedRun=${disp(wantedRun)}`,
   );
 
   async function openVault() {
+    console.error('create-vault: openVault');
     const openInvitationP = E(treasuryPublicFacet).makeLoanInvitation();
     const proposal = harden({
       give: {
@@ -72,11 +73,12 @@ export default async function startAgent([key, home]) {
       E(runPurse).deposit(runPayout),
     ]);
     const offerResult = await E(seatP).getOfferResult();
-    console.log(`create-vault: vault opened`);
+    console.error(`create-vault: vault opened`);
     return offerResult.vault;
   }
 
   async function closeVault(vault) {
+    console.error('create-vault: closeVault');
     const runNeeded = await E(vault).getDebtAmount();
     const closeInvitationP = E(vault).makeCloseInvitation();
     const proposal = {
@@ -97,22 +99,23 @@ export default async function startAgent([key, home]) {
       E(runPurse).deposit(runPayout),
       E(bldPurse).deposit(bldPayout),
     ]);
-    console.log(`create-vault: vault closed`);
+    console.error(`create-vault: vault closed`);
   }
 
   const agent = Far('vault agent', {
-    async vaultCycle() {
+    async doVaultCycle() {
       const vault = await openVault(bldToLock);
       await closeVault(vault);
       const [newRunBalance, newBldBalance] = await Promise.all([
         E(runPurse).getCurrentAmount(),
         E(bldPurse).getCurrentAmount(),
       ]);
+      console.error('create-vault: cycle done');
       return [newRunBalance, newBldBalance];
     },
   });
 
   await E(scratch).set(key, agent);
-  console.log('create-vault: ready for cycles');
+  console.error('create-vault: ready for cycles');
   return agent;
 }

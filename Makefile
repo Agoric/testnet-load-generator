@@ -12,6 +12,10 @@ run-chain-not-working-yet:
 	SLOGFILE=$(PWD)/chain.slog agoric start local-chain --verbose
 run-client-not-working-yet:
 	CLIENTSLOGFILE=$(PWD)/client.slog agoric start local-solo 8000
+# Use "agoric start -v local-solo 8000" to get solo delivery messages and
+# solo vat console.log messages. Or instead use console.eror from within
+# vats.
+
 
 # instead, we must use the Makefile in packages/cosmic-swingset, and the
 # "scenario2" rules, which *do* provide the necessary tokens during

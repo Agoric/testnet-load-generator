@@ -11,7 +11,7 @@ import { allValues } from './allValues';
 export default async function startAgent([key, home]) {
   const { zoe, scratch, agoricNames, wallet } = home;
 
-  console.log(`trade-amm: building tools`);
+  console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
   const { runBrand, bldBrand, autoswap, runPurse, bldPurse } = await allValues({
     runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
@@ -24,7 +24,7 @@ export default async function startAgent([key, home]) {
   // const bldBrand = await E(bldPurse).getAllegedBrand();
   const publicFacet = await E(zoe).getPublicFacet(autoswap);
 
-  console.log(`trade-amm: tools installed`);
+  console.error(`trade-amm: tools installed`);
 
   async function getBalance(which) {
     let bal;
@@ -96,33 +96,35 @@ export default async function startAgent([key, home]) {
   // perform the setup transfer
   async function doSetupTransfer() {
     let { run, bld } = await getBalances();
-    console.log(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
+    console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
     // eslint-disable-next-line no-constant-condition
     if (1) {
       // setup: buy RUN with 50% of our BLD
-      console.log(`trade-amm: buying initial RUN with 50% of our BLD`);
+      console.error(`trade-amm: buying initial RUN with 50% of our BLD`);
       const halfAmount = amountMath.make(bldBrand, bld.value / BigInt(2));
       await buyRunWithBld(halfAmount);
       ({ run, bld } = await getBalances());
     }
     const runPerCycle = amountMath.make(runBrand, run.value / BigInt(100));
     const bldPerCycle = amountMath.make(bldBrand, bld.value / BigInt(100));
-    console.log(`setup: RUN=${disp(run)} BLD=${disp(bld)}`);
-    console.log(
+    console.error(`setup: RUN=${disp(run)} BLD=${disp(bld)}`);
+    console.error(
       `will trade about ${disp(runPerCycle)} RUN and ${disp(
         bldPerCycle,
       )} BLD per cycle`,
     );
-    console.log(`trade-amm: initial trade complete`);
+    console.error(`trade-amm: initial trade complete`);
   }
   await doSetupTransfer();
 
   const agent = Far('AMM agent', {
-    async tradeAMMCycle() {
+    async doAMMCycle() {
+      console.error('trade-amm cycle: BLD->RUN');
       const bld = await getBalance('BLD');
       const bldOffered = amountMath.make(bldBrand, bld.value / BigInt(100));
       await buyRunWithBld(bldOffered);
 
+      console.error('trade-amm cycle: RUN->BLD');
       const run = await getBalance('RUN');
       const runOffered = amountMath.make(runBrand, run.value / BigInt(100));
       await buyBldWithRun(runOffered);
@@ -131,11 +133,12 @@ export default async function startAgent([key, home]) {
         E(runPurse).getCurrentAmount(),
         E(bldPurse).getCurrentAmount(),
       ]);
+      console.error('trade-amm cycle: done');
       return [newRunBalance, newBldBalance];
     },
   });
 
   await E(scratch).set(key, agent);
-  console.log('trade-amm: ready for cycles');
+  console.error('trade-amm: ready for cycles');
   return agent;
 }

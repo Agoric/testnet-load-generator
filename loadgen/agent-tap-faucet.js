@@ -6,18 +6,18 @@ import { Far } from '@agoric/marshal';
 
 export default async function startAgent([key, home, faucetBundle]) {
   const { zoe, scratch } = home;
-  console.debug(` +++ agent installing bundle`);
+  console.error(` +++ agent installing bundle`);
   const installation = await E(zoe).install(faucetBundle);
-  console.debug(` +++ agent doing startInstance`);
+  console.error(` +++ agent doing startInstance`);
   const { creatorFacet, publicFacet } = await E(zoe).startInstance(
     installation,
   );
-  console.debug(` +++ agent did startInstance, doing getTokenIssuer`);
+  console.error(` +++ agent did startInstance, doing getTokenIssuer`);
   const tokenIssuer = await E(publicFacet).getTokenIssuer();
-  console.debug(` +++ agent doing makeEmptyPurse`);
+  console.error(` +++ agent doing makeEmptyPurse`);
   // Bob makes a purse for tokens
   const bobPurse = await E(tokenIssuer).makeEmptyPurse();
-  console.debug(` +++ agent defining agent`);
+  console.error(` +++ agent defining agent`);
 
   const agent = Far('faucet agent', {
     async doFaucetCycle() {
@@ -32,9 +32,9 @@ export default async function startAgent([key, home, faucetBundle]) {
     },
   });
 
-  console.debug(` +++ agent storing itself to scratch`);
+  console.error(` +++ agent storing itself to scratch`);
   // stash everything needed for each cycle under the key on the solo node
   await E(scratch).set(key, agent);
-  console.debug(`faucet ready for cycles`);
+  console.error(`faucet ready for cycles`);
   return agent;
 }

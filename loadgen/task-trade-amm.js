@@ -18,10 +18,11 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
   }
 
   async function tradeAMMCycle() {
-    const [newRunBalance, newBldBalance] = E(agent).doFaucetCycle();
+    const [newRunBalance, newBldBalance] = await E(agent).doAMMCycle();
     console.log(
       `trade-amm done: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`,
     );
   }
+  console.log(`--- trade-amm ready for cycles`);
   return tradeAMMCycle;
 }

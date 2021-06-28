@@ -10,6 +10,8 @@ let currentConfig = {
   faucet: null, // or { interval=60, limit=1, wait=0 }
   amm: null,
   vault: null,
+  // amm: { interval: 120},
+  // vault: { interval: 120, wait: 60 },
 };
 
 const tasks = {

@@ -26,9 +26,10 @@ export async function prepareFaucet(homePromise, deployPowers) {
   }
 
   async function faucetCycle() {
-    const amount = E(agent).doFaucetCycle();
+    const amount = await E(agent).doFaucetCycle();
     console.log(`new purse balance`, amount.value, new Date());
   }
 
+  console.log(`--- prepareFaucet ready for cycles`);
   return faucetCycle;
 }
