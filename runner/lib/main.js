@@ -156,7 +156,7 @@ const main = async (progName, rawArgs, powers) => {
     joinPath(outputDir, 'perf.jsonl'),
   );
 
-  let currentStage = 0;
+  let currentStage = -1;
   let currentStageElapsedOffsetNs = 0;
   const cpuTimeOffset = await getCPUTimeOffset();
 
@@ -186,13 +186,13 @@ const main = async (progName, rawArgs, powers) => {
   /**
    * @param {import("./test-operations.js").RunChainInfo} chainInfo
    * @param {Object} param1
-   * @param {() => void} param1.resolveFirstBlock
+   * @param {() => void} param1.resolveFirstEmptyBlock
    * @param {import("stream").Writable} param1.out
    * @param {import("stream").Writable} param1.err
    */
   const monitorChain = async (
     { slogLines, storageLocation, processInfo: kernelProcessInfo },
-    { resolveFirstBlock, out, err },
+    { resolveFirstEmptyBlock, out, err },
   ) => {
     const { console: monitorConsole } = makeConsole('monitor-chain', out, err);
 
@@ -353,6 +353,8 @@ const main = async (progName, rawArgs, powers) => {
     let slogStart = null;
 
     let slogBlocksSeen = 0;
+    let slogEmptyBlocksSeen = 0;
+    let slogLinesInBlock = 0;
 
     for await (const line of slogLines) {
       slogOutput.write(line);
@@ -370,6 +372,8 @@ const main = async (progName, rawArgs, powers) => {
           'Failed to get first storage usage',
         );
       }
+
+      slogLinesInBlock += 1;
 
       // Avoid JSON parsing lines we don't care about
       if (!slogEventRE.test(line)) continue;
@@ -435,6 +439,7 @@ const main = async (progName, rawArgs, powers) => {
           if (event.blockHeight === 0) {
             logPerfEvent('chain-first-init-start');
           }
+          slogLinesInBlock = 0;
           break;
         }
         case 'cosmic-swingset-end-block-finish': {
@@ -442,11 +447,28 @@ const main = async (progName, rawArgs, powers) => {
             // TODO: measure duration from start to finish
             logPerfEvent('chain-first-init-finish');
           }
+          // Finish line doesn't count
+          slogLinesInBlock -= 1;
+          if (slogLinesInBlock === 0) {
+            if (!slogEmptyBlocksSeen) {
+              logPerfEvent('stage-first-empty-block', {
+                block: event.blockHeight,
+              });
+              resolveFirstEmptyBlock();
+            }
+            slogEmptyBlocksSeen += 1;
+          }
+          monitorConsole.log(
+            'end-block',
+            event.blockHeight,
+            'linesInBlock=',
+            slogLinesInBlock,
+          );
           break;
         }
         case 'cosmic-swingset-begin-block': {
           if (!slogBlocksSeen) {
-            logPerfEvent('stage-first-block');
+            logPerfEvent('stage-first-block', { block: event.blockHeight });
             warnOnRejection(
               logProcessUsage(),
               monitorConsole,
@@ -454,9 +476,6 @@ const main = async (progName, rawArgs, powers) => {
             );
           }
           slogBlocksSeen += 1;
-          if (slogBlocksSeen === 1) {
-            resolveFirstBlock();
-          }
           monitorConsole.log('begin-block', event.blockHeight);
           break;
         }
@@ -499,11 +518,11 @@ const main = async (progName, rawArgs, powers) => {
     const chainStorageLocation = runChainResult.storageLocation;
     /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
     const {
-      promise: chainFirstBlock,
-      resolve: resolveFirstBlock,
+      promise: chainFirstEmptyBlock,
+      resolve: resolveFirstEmptyBlock,
     } = makePromiseKit();
     const monitorChainDone = monitorChain(runChainResult, {
-      resolveFirstBlock,
+      resolveFirstEmptyBlock,
       out,
       err,
     });
@@ -514,7 +533,7 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('chain-ready');
         stageConsole.log('Chain ready');
 
-        await chainFirstBlock;
+        await chainFirstEmptyBlock;
 
         if (!chainOnly) {
           stageConsole.log('Running client');
@@ -615,6 +634,8 @@ const main = async (progName, rawArgs, powers) => {
     currentStageElapsedOffsetNs = 0;
   };
 
+  // Main
+
   await aggregateTryFinally(
     async () => {
       let out;
@@ -630,10 +651,15 @@ const main = async (progName, rawArgs, powers) => {
       await resetChain({ stdout: out, stderr: err });
       logPerfEvent('reset-chain-finish');
 
+      // Initialize the chain and restart
+      await runStage({ chainOnly: true });
+
+      // Run 4 load gen stages
       while (currentStage < 4) {
         await runStage(); // eslint-disable-line no-await-in-loop
       }
 
+      // One final restart to capture the replay time
       await runStage({ chainOnly: true });
     },
     async () => {
