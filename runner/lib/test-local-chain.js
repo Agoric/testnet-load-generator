@@ -1,8 +1,8 @@
-/* global process Buffer */
+/* global process */
 
 import { dirname } from 'path';
 import { promisify } from 'util';
-import { PassThrough, pipeline as pipelineCallback } from 'stream';
+import { pipeline as pipelineCallback } from 'stream';
 
 import {
   childProcessDone,
@@ -15,9 +15,9 @@ import {
   getArgvMatcher,
   getChildMatchingArgv,
   wrapArgvMatcherIgnoreEnvShebang,
-  httpRequest,
   getConsoleAndStdio,
 } from './test-helpers.js';
+import { makeLoadgenOperation } from './test-shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
@@ -27,8 +27,6 @@ const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientStartRE = /\bsolo\b\S+entrypoint\.[cm]?js start/;
 const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
-const loadgenStartRE = /deploy.*loadgen\/loop\.js/;
-const loadgenReadyRE = /server running/;
 
 const chainNodeArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
   getArgvMatcher([/node$/, /chain-entrypoint/]),
@@ -57,7 +55,7 @@ export const makeTestOperations = ({
   makeFIFO,
   getProcessInfo,
 }) => {
-  const spawnPrintAndPipeOutput = makeSpawnWithPrintAndPipeOutput({
+  const pipedSpawn = makeSpawnWithPrintAndPipeOutput({
     spawn,
     end: false,
   });
@@ -77,18 +75,14 @@ export const makeTestOperations = ({
       if (reset) {
         console.log('Resetting state');
         const stateDir = dirname(chainDirPrefix);
+        await childProcessDone(pipedSpawn('rm', ['-rf', stateDir], { stdio }));
         await childProcessDone(
-          spawnPrintAndPipeOutput('rm', ['-rf', stateDir], { stdio }),
-        );
-        await childProcessDone(
-          spawnPrintAndPipeOutput('git', ['checkout', '--', stateDir], {
+          pipedSpawn('git', ['checkout', '--', stateDir], {
             stdio,
           }),
         );
       }
-      await childProcessDone(
-        spawnPrintAndPipeOutput('agoric', ['install'], { stdio }),
-      );
+      await childProcessDone(pipedSpawn('agoric', ['install'], { stdio }));
 
       console.log('Done');
     },
@@ -104,7 +98,7 @@ export const makeTestOperations = ({
       const chainEnv = Object.create(process.env);
       chainEnv.SLOGFILE = slogFifo.path;
 
-      const launcherCp = spawnPrintAndPipeOutput(
+      const launcherCp = pipedSpawn(
         'agoric',
         ['start', 'local-chain', '--verbose'],
         { stdio, env: chainEnv, detached: true },
@@ -191,11 +185,10 @@ export const makeTestOperations = ({
 
       console.log('Starting client');
 
-      const launcherCp = spawnPrintAndPipeOutput(
-        'agoric',
-        ['start', 'local-solo'],
-        { stdio, detached: true },
-      );
+      const launcherCp = pipedSpawn('agoric', ['start', 'local-solo'], {
+        stdio,
+        detached: true,
+      });
 
       const clientDone = childProcessDone(launcherCp);
 
@@ -248,103 +241,6 @@ export const makeTestOperations = ({
         },
       );
     },
-    runLoadgen: async ({ stdout, stderr, timeout = 10, config = {} }) => {
-      const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
-
-      console.log('Starting load gen');
-
-      const loadgenEnv = Object.create(process.env);
-      // loadgenEnv.DEBUG = 'agoric';
-
-      const launcherCp = spawnPrintAndPipeOutput(
-        'agoric',
-        ['deploy', 'loadgen/loop.js'],
-        { stdio, env: loadgenEnv, detached: true },
-      );
-
-      let stopped = false;
-      const stop = () => {
-        stopped = true;
-        launcherCp.kill();
-      };
-
-      // Load gen exit with non-zero code when killed
-      const loadgenDone = childProcessDone(launcherCp).catch((err) =>
-        stopped ? 0 : Promise.reject(err),
-      );
-
-      loadgenDone.then(
-        () => console.log('Load gen app stopped successfully'),
-        (error) => console.error('Load gen app stopped with error', error),
-      );
-
-      // The agoric deploy output is currently sent to stderr
-      // Combine both stderr and stdout in to detect both steps
-      // accommodating future changes
-      const combinedOutput = new PassThrough();
-      const outLines = new LineStreamTransform({ lineEndings: true });
-      const errLines = new LineStreamTransform({ lineEndings: true });
-      launcherCp.stdout.pipe(outLines).pipe(combinedOutput);
-      launcherCp.stderr.pipe(errLines).pipe(combinedOutput);
-
-      const [deploying, tasksReady, outputParsed] = whenStreamSteps(
-        combinedOutput,
-        [{ matcher: loadgenStartRE }, { matcher: loadgenReadyRE }],
-        {
-          waitEnd: false,
-        },
-      );
-
-      const cleanCombined = () => {
-        launcherCp.stdout.unpipe(outLines);
-        launcherCp.stderr.unpipe(errLines);
-      };
-      outputParsed.then(cleanCombined, cleanCombined);
-
-      const done = PromiseAllOrErrors([
-        outputParsed,
-        loadgenDone,
-      ]).then(() => {});
-
-      return tryTimeout(
-        timeout * 1000,
-        async () => {
-          await deploying;
-
-          console.log('Load gen app running');
-
-          const ready = tasksReady.then(async () => {
-            console.log('Making request to start faucet');
-            const body = Buffer.from(JSON.stringify(config), 'utf8');
-
-            const res = await httpRequest('http://127.0.0.1:3352/config', {
-              body,
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': body.byteLength,
-              },
-            });
-            // Consume and discard the response
-            for await (const _ of res);
-
-            if (!res.statusCode || res.statusCode >= 400) {
-              throw new Error('Could not start faucet');
-            }
-          });
-
-          return harden({
-            stop,
-            done,
-            ready,
-          });
-        },
-        async () => {
-          // Avoid unhandled rejections for promises that can no longer be handled
-          Promise.allSettled([loadgenDone, tasksReady]);
-          launcherCp.kill();
-        },
-      );
-    },
+    runLoadgen: makeLoadgenOperation({ pipedSpawn }),
   });
 };
