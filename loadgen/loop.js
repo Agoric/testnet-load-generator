@@ -1,4 +1,5 @@
 /* global setInterval clearInterval setTimeout clearTimeout */
+import { performance } from 'perf_hooks';
 import http from 'http';
 import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
@@ -23,31 +24,45 @@ const tasks = {
 };
 
 const runners = {}; // name -> { cycle, timer }
-const status = {}; // name -> { active, succeeded, failed } // JSON-serializable
+const status = {}; // name -> { active, succeeded, failed, next } // JSON-serializable
+
+function logdata(data) {
+  const timeMS = performance.timeOrigin + performance.now();
+  const time = timeMS / 1000;
+  // every line that starts with '{' should be JSON-parseable
+  console.log(JSON.stringify({ time, ...data }));
+}
 
 function maybeStartOneCycle(name, limit) {
+  logdata({ type: 'status', status });
   const s = status[name];
   if (s.active >= limit) {
     console.log(`not starting ${name}, active limit reached`);
     return;
   }
+  const seq = s.next;
+  s.next += 1;
   s.active += 1;
-  console.log(`starting ${name}, active=${s.active} at ${new Date()}`);
+  console.log(`starting ${name} [${seq}], active=${s.active} at ${new Date()}`);
+  logdata({ type: 'start', task: name, seq });
   runners[name]
     .cycle()
     .then(
       () => {
         console.log(` finished ${name} at ${new Date()}`);
+        logdata({ type: 'finish', task: name, seq, success: true });
         s.succeeded += 1;
       },
       err => {
         console.log(`[${name}] failed:`, err);
+        logdata({ type: 'finish', task: name, seq, success: false });
         s.failed += 1;
       },
     )
     .then(() => {
       s.active -= 1;
       console.log(` ${name}.active now ${s.active}`);
+      logdata({ type: 'status', status });
     });
 }
 
@@ -105,7 +120,7 @@ function updateConfig(config) {
 function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    console.log(`pathname ${url.pathname}, ${req.method}`);
+    // console.log(`pathname ${url.pathname}, ${req.method}`);
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     if (url.pathname === '/config') {
       if (req.method === 'PUT') {
@@ -152,7 +167,7 @@ export default async function runCycles(homePromise, deployPowers) {
     // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
     runners[name] = { cycle };
-    status[name] = { active: 0, succeeded: 0, failed: 0 };
+    status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
   console.log('all tasks ready');
   startServer();
