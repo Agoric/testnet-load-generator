@@ -11,7 +11,7 @@ import http from 'http';
 
 import {
   childProcessDone,
-  makeSpawnWithPipedStream,
+  makeSpawnWithPrintAndPipeOutput,
 } from './helpers/child-process.js';
 import LineStreamTransform from './helpers/line-stream-transform.js';
 import { PromiseAllOrErrors, sleep, tryTimeout } from './helpers/async.js';
@@ -149,38 +149,10 @@ export const makeTestOperations = ({
   makeFIFO,
   getProcessInfo,
 }) => {
-  // TODO: Print out commands executed
-
-  const spawnWithPipe = makeSpawnWithPipedStream({ spawn, end: false });
-
-  /**
-   * @param {string} command
-   * @param {ReadonlyArray<string>} args
-   * @param {import("child_process").SpawnOptionsWithStdioTuple<'ignore' | undefined, import("stream").Writable, import("stream").Writable>} options
-   * @returns {import("child_process").ChildProcessByStdio<null, import("stream").Readable, import("stream").Readable>}
-   */
-  const spawnPrintAndPipeOutput = (command, args, options) => {
-    const env = (options.env !== process.env ? options.env : null) || {};
-    const envPairs = Object.entries(
-      // While prototype properties are used by spawn
-      // don't clutter the print output with the "inherited" env
-      Object.getOwnPropertyDescriptors(env),
-    )
-      .filter(([_, desc]) => desc.enumerable)
-      .map(([name, desc]) => `${name}=${desc.value}`);
-
-    const [_, out, err, ...others] = options.stdio;
-
-    out.write(`${[...envPairs, command, ...args].join(' ')}\n`);
-
-    const childProcess = spawnWithPipe(command, args, {
-      ...options,
-      stdio: ['ignore', out, err, ...others],
-    });
-
-    // The childProcess does include the out and err streams but spawnWithPipe doesn't have the correct return type
-    return /** @type {*} */ (childProcess);
-  };
+  const spawnPrintAndPipeOutput = makeSpawnWithPrintAndPipeOutput({
+    spawn,
+    end: false,
+  });
 
   /**
    * @param {string} prefix
