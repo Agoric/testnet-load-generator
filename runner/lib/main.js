@@ -564,6 +564,49 @@ const main = async (progName, rawArgs, powers) => {
     logPerfEvent('stage-start');
     const stageStart = performance.now();
 
+    const stageSleep = async () => {
+      /** @type {Promise<void>} */
+      let sleeping;
+      if (duration < 0) {
+        // sleeping forever
+        sleeping = new Promise(() => {});
+        stageConsole.log('Stage ready, waiting for end of chain');
+      } else {
+        const sleepTime = Math.max(
+          0,
+          duration - (performance.now() - stageStart),
+        );
+        if (sleepTime) {
+          sleeping = sleep(sleepTime);
+          stageConsole.log(
+            'Stage ready, going to sleep for',
+            Math.round(sleepTime / (1000 * 60)),
+            'minutes',
+          );
+        } else {
+          sleeping = Promise.resolve();
+          stageConsole.log('Stage ready, no time to sleep, moving on');
+        }
+      }
+      logPerfEvent('stage-ready');
+
+      const signal = makePromiseKit();
+      const onInterrupt = () => signal.reject(new Error('Interrupted'));
+      process.once('SIGINT', onInterrupt);
+      process.once('SIGTERM', onInterrupt);
+
+      await aggregateTryFinally(
+        async () => {
+          await Promise.race([sleeping, signal.promise]);
+          logPerfEvent('stage-shutdown');
+        },
+        async () => {
+          process.off('SIGINT', onInterrupt);
+          process.off('SIGTERM', onInterrupt);
+        },
+      );
+    };
+
     stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
     logPerfEvent('run-chain-start');
     const runChainResult = await runChain({ stdout: out, stderr: err });
@@ -591,7 +634,9 @@ const main = async (progName, rawArgs, powers) => {
 
         await chainFirstEmptyBlock;
 
-        if (!chainOnly) {
+        if (chainOnly) {
+          await stageSleep();
+        } else {
           stageConsole.log('Running client');
           logPerfEvent('run-client-start');
           const runClientStart = performance.now();
@@ -620,33 +665,7 @@ const main = async (progName, rawArgs, powers) => {
                   await runLoadgenResult.ready;
                   logPerfEvent('loadgen-ready');
 
-                  const sleepTime = Math.max(
-                    0,
-                    duration - (performance.now() - stageStart),
-                  );
-                  stageConsole.log(
-                    'Stage ready, going to sleep for',
-                    Math.round(sleepTime / (1000 * 60)),
-                    'minutes',
-                  );
-                  logPerfEvent('stage-ready');
-
-                  const signal = makePromiseKit();
-                  const onInterrupt = () =>
-                    signal.reject(new Error('Interrupted'));
-                  process.once('SIGINT', onInterrupt);
-                  process.once('SIGTERM', onInterrupt);
-
-                  await aggregateTryFinally(
-                    async () => {
-                      await Promise.race([sleep(sleepTime), signal.promise]);
-                      logPerfEvent('stage-shutdown');
-                    },
-                    async () => {
-                      process.off('SIGINT', onInterrupt);
-                      process.off('SIGTERM', onInterrupt);
-                    },
-                  );
+                  await stageSleep();
                 },
                 async () => {
                   stageConsole.log('Stopping loadgen');
@@ -755,7 +774,9 @@ const main = async (progName, rawArgs, powers) => {
         );
 
         const duration =
-          Number(stageConfig.duration || sharedStageDurationMinutes) *
+          (stageConfig.duration != null
+            ? Number(stageConfig.duration)
+            : (!chainOnly && sharedStageDurationMinutes) || 0) *
           60 *
           1000;
 
