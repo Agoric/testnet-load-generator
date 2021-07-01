@@ -114,14 +114,13 @@ const getChildMatchingArgv = async (launcherInfo, argvMatcher) => {
 };
 
 const chainDirPrefix = '_agstate/agoric-servers/local-chain-';
-const loadGenConfig = { faucet: { interval: 30 } };
 
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientStartRE = /\bsolo\b\S+entrypoint\.[cm]?js start/;
 const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
-const loadGenStartRE = /deploy.*loadgen\/loop\.js/;
-const loadGenReadyRE = /server running/;
+const loadgenStartRE = /deploy.*loadgen\/loop\.js/;
+const loadgenReadyRE = /server running/;
 
 const chainNodeArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
   getArgvMatcher([/node$/, /chain-entrypoint/]),
@@ -200,22 +199,29 @@ export const makeTestOperations = ({
   };
 
   return harden({
-    resetChain: async ({ stdout, stderr }) => {
+    setupTest: async ({ stdout, stderr, config = {} }) => {
       const { console, stdio } = getConsoleAndStdio(
-        'reset-chain',
+        'setup-test',
         stdout,
         stderr,
       );
 
       console.log('Starting');
 
-      const stateDir = dirname(chainDirPrefix);
-      await childProcessDone(
-        spawnPrintAndPipeOutput('rm', ['-rf', stateDir], { stdio }),
-      );
-      await childProcessDone(
-        spawnPrintAndPipeOutput('git', ['checkout', '--', stateDir], { stdio }),
-      );
+      const { reset } = /** @type {{reset?: boolean}} */ (config);
+
+      if (reset) {
+        console.log('Resetting state');
+        const stateDir = dirname(chainDirPrefix);
+        await childProcessDone(
+          spawnPrintAndPipeOutput('rm', ['-rf', stateDir], { stdio }),
+        );
+        await childProcessDone(
+          spawnPrintAndPipeOutput('git', ['checkout', '--', stateDir], {
+            stdio,
+          }),
+        );
+      }
       await childProcessDone(
         spawnPrintAndPipeOutput('agoric', ['install'], { stdio }),
       );
@@ -378,18 +384,18 @@ export const makeTestOperations = ({
         },
       );
     },
-    runLoadGen: async ({ stdout, stderr, timeout = 10 }) => {
-      const { console, stdio } = getConsoleAndStdio('load-gen', stdout, stderr);
+    runLoadgen: async ({ stdout, stderr, timeout = 10, config = {} }) => {
+      const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
 
       console.log('Starting load gen');
 
-      const loadGenEnv = Object.create(process.env);
-      // loadGenEnv.DEBUG = 'agoric';
+      const loadgenEnv = Object.create(process.env);
+      // loadgenEnv.DEBUG = 'agoric';
 
       const launcherCp = spawnPrintAndPipeOutput(
         'agoric',
         ['deploy', 'loadgen/loop.js'],
-        { stdio, env: loadGenEnv, detached: true },
+        { stdio, env: loadgenEnv, detached: true },
       );
 
       let stopped = false;
@@ -399,11 +405,11 @@ export const makeTestOperations = ({
       };
 
       // Load gen exit with non-zero code when killed
-      const loadGenDone = childProcessDone(launcherCp).catch((err) =>
+      const loadgenDone = childProcessDone(launcherCp).catch((err) =>
         stopped ? 0 : Promise.reject(err),
       );
 
-      loadGenDone.then(
+      loadgenDone.then(
         () => console.log('Load gen app stopped successfully'),
         (error) => console.error('Load gen app stopped with error', error),
       );
@@ -419,7 +425,7 @@ export const makeTestOperations = ({
 
       const [deploying, tasksReady, outputParsed] = whenStreamSteps(
         combinedOutput,
-        [{ matcher: loadGenStartRE }, { matcher: loadGenReadyRE }],
+        [{ matcher: loadgenStartRE }, { matcher: loadgenReadyRE }],
         {
           waitEnd: false,
         },
@@ -433,7 +439,7 @@ export const makeTestOperations = ({
 
       const done = PromiseAllOrErrors([
         outputParsed,
-        loadGenDone,
+        loadgenDone,
       ]).then(() => {});
 
       return tryTimeout(
@@ -445,7 +451,7 @@ export const makeTestOperations = ({
 
           const ready = tasksReady.then(async () => {
             console.log('Making request to start faucet');
-            const body = Buffer.from(JSON.stringify(loadGenConfig), 'utf8');
+            const body = Buffer.from(JSON.stringify(config), 'utf8');
 
             const res = await httpRequest('http://127.0.0.1:3352/config', {
               body,
@@ -471,7 +477,7 @@ export const makeTestOperations = ({
         },
         async () => {
           // Avoid unhandled rejections for promises that can no longer be handled
-          Promise.allSettled([loadGenDone, tasksReady]);
+          Promise.allSettled([loadgenDone, tasksReady]);
           launcherCp.kill();
         },
       );

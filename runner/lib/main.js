@@ -1,8 +1,6 @@
 /* global process setInterval clearInterval */
 /* eslint-disable no-continue */
 
-// import { Command } from 'commander';
-
 import { resolve as resolvePath, join as joinPath, basename } from 'path';
 import { performance } from 'perf_hooks';
 import zlib from 'zlib';
@@ -12,6 +10,7 @@ import {
   finished as finishedCallback,
 } from 'stream';
 
+import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
 import { makePromiseKit } from '@agoric/promise-kit';
 
@@ -31,9 +30,13 @@ import { makeTestOperations } from './test-local-chain.js';
 const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
 
-const monitorInterval = 5 * 60 * 1000;
-
-const stageDuration = 6 * 60 * 60 * 1000;
+const defaultLoadgenConfig = {
+  vault: { interval: 120 },
+  amm: { wait: 60, interval: 120 },
+};
+const defaultMonitorIntervalMinutes = 5;
+const defaultStageDurationMinutes = 6 * 60;
+const defaultNumberStages = 4 + 2;
 
 const vatIdentifierRE = /^(v\d+):(.*)$/;
 const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
@@ -103,6 +106,53 @@ const slogEventRE = new RegExp(
 );
 
 /**
+ * @param {unknown} maybeObj
+ * @param {Record<string, unknown>} [defaultValue]
+ */
+const coerceRecordOption = (maybeObj, defaultValue = {}) => {
+  if (maybeObj == null) {
+    return defaultValue;
+  }
+
+  if (typeof maybeObj !== 'object') {
+    throw new Error('Unexpected object option value');
+  }
+
+  return /** @type {Record<string, unknown>} */ (maybeObj);
+};
+
+/**
+ * @template {boolean | undefined} T
+ * @param {unknown} maybeBoolValue
+ * @param {T} defaultValue
+ * @param {boolean} [assertBool]
+ */
+const coerceBooleanOption = (
+  maybeBoolValue,
+  defaultValue,
+  assertBool = true,
+) => {
+  switch (maybeBoolValue) {
+    case 1:
+    case true:
+    case 'true':
+      return true;
+    case 0:
+    case false:
+    case 'false':
+      return false;
+    case null:
+    case undefined:
+      return defaultValue;
+    default:
+      if (assertBool) {
+        throw new Error(`Unexpected boolean option value ${maybeBoolValue}`);
+      }
+      return defaultValue;
+  }
+};
+
+/**
  *
  * @param {string} progName
  * @param {string[]} rawArgs
@@ -117,7 +167,8 @@ const slogEventRE = new RegExp(
 const main = async (progName, rawArgs, powers) => {
   const { stdout, stderr, fs, fsStream, spawn, tmpDir } = powers;
 
-  const outputDir = rawArgs[0] || `run-results-${Date.now()}`;
+  // TODO: switch to full yargs for documenting output
+  const argv = yargsParser(rawArgs);
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { findByPrefix, dirDiskUsage, makeFIFO } = makeFsHelper({
@@ -127,7 +178,7 @@ const main = async (progName, rawArgs, powers) => {
     tmpDir,
   });
 
-  const { resetChain, runChain, runClient, runLoadGen } = makeTestOperations({
+  const { setupTest, runChain, runClient, runLoadgen } = makeTestOperations({
     spawn,
     findDirByPrefix: findByPrefix,
     makeFIFO,
@@ -149,12 +200,16 @@ const main = async (progName, rawArgs, powers) => {
 
   let { console } = makeConsole();
 
+  const outputDir = String(argv.outputDir || `run-results-${Date.now()}`);
   console.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
 
   const outputStream = fsStream.createWriteStream(
     joinPath(outputDir, 'perf.jsonl'),
   );
+
+  const monitorInterval =
+    Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
   let currentStageElapsedOffsetNs = 0;
@@ -213,9 +268,9 @@ const main = async (progName, rawArgs, powers) => {
         await kernelProcessInfo.getChildren().catch(() => []),
       );
       for (const info of childrenInfos) {
-        const argv = await info.getArgv(); // eslint-disable-line no-await-in-loop
-        if (!argv || basename(argv[0]) !== 'xsnap') continue;
-        const vatIdentifierMatches = vatIdentifierRE.exec(argv[1]);
+        const vatArgv = await info.getArgv(); // eslint-disable-line no-await-in-loop
+        if (!vatArgv || basename(vatArgv[0]) !== 'xsnap') continue;
+        const vatIdentifierMatches = vatIdentifierRE.exec(vatArgv[1]);
         if (!vatIdentifierMatches) continue;
         const vatID = vatIdentifierMatches[1];
         const vatInfo = vatInfos.get(vatID);
@@ -491,15 +546,16 @@ const main = async (progName, rawArgs, powers) => {
 
   /**
    * @param {Object} param0
-   * @param {boolean} [param0.chainOnly]
+   * @param {boolean} param0.chainOnly
+   * @param {number} param0.duration
+   * @param {unknown} param0.loadgenConfig
    */
-  const runStage = async ({ chainOnly } = {}) => {
+  const runStage = async ({ chainOnly, duration, loadgenConfig }) => {
     /** @type {import("stream").Writable} */
     let out;
     /** @type {import("stream").Writable} */
     let err;
 
-    currentStage += 1;
     currentStageElapsedOffsetNs = performance.now() * 1000;
     ({ console, out, err } = makeConsole(`stage-${currentStage}`));
 
@@ -508,7 +564,7 @@ const main = async (progName, rawArgs, powers) => {
     logPerfEvent('stage-start');
     const stageStart = performance.now();
 
-    stageConsole.log('Running chain');
+    stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
     logPerfEvent('run-chain-start');
     const runChainResult = await runChain({ stdout: out, stderr: err });
     logPerfEvent('run-chain-finish');
@@ -552,20 +608,21 @@ const main = async (progName, rawArgs, powers) => {
 
               stageConsole.log('Running load gen');
               logPerfEvent('run-loadgen-start');
-              const runLoadGenResult = await runLoadGen({
+              const runLoadgenResult = await runLoadgen({
                 stdout: out,
                 stderr: err,
+                config: loadgenConfig,
               });
               logPerfEvent('run-loadgen-finish');
 
               await aggregateTryFinally(
                 async () => {
-                  await runLoadGenResult.ready;
+                  await runLoadgenResult.ready;
                   logPerfEvent('loadgen-ready');
 
                   const sleepTime = Math.max(
                     0,
-                    stageDuration - (performance.now() - stageStart),
+                    duration - (performance.now() - stageStart),
                   );
                   stageConsole.log(
                     'Stage ready, going to sleep for',
@@ -592,10 +649,10 @@ const main = async (progName, rawArgs, powers) => {
                   );
                 },
                 async () => {
-                  stageConsole.log('Stopping load-gen');
+                  stageConsole.log('Stopping loadgen');
 
-                  runLoadGenResult.stop();
-                  await runLoadGenResult.done;
+                  runLoadgenResult.stop();
+                  await runLoadgenResult.done;
                   logPerfEvent('loadgen-stopped');
                 },
               );
@@ -647,20 +704,68 @@ const main = async (progName, rawArgs, powers) => {
         // TODO: add other interesting info here
       });
 
-      logPerfEvent('reset-chain-start');
-      await resetChain({ stdout: out, stderr: err });
-      logPerfEvent('reset-chain-finish');
+      const reset = coerceBooleanOption(argv.reset, true);
+      const setupConfig = { reset };
+      logPerfEvent('setup-test-start', setupConfig);
+      await setupTest({ stdout: out, stderr: err, config: setupConfig });
+      logPerfEvent('setup-test-finish');
 
-      // Initialize the chain and restart
-      await runStage({ chainOnly: true });
+      const stages =
+        argv.stages != null
+          ? parseInt(String(argv.stages), 10)
+          : defaultNumberStages;
 
-      // Run 4 load gen stages
-      while (currentStage < 4) {
-        await runStage(); // eslint-disable-line no-await-in-loop
+      const stageConfigs = coerceRecordOption(argv.stage);
+
+      const sharedLoadgenConfig = coerceRecordOption(
+        stageConfigs.loadgen,
+        defaultLoadgenConfig,
+      );
+
+      const sharedStageDurationMinutes =
+        stageConfigs.duration != null
+          ? Number(stageConfigs.duration)
+          : defaultStageDurationMinutes;
+
+      while (currentStage < stages - 1) {
+        currentStage += 1;
+
+        const stageConfig = coerceRecordOption(stageConfigs[currentStage]);
+
+        const withLoadgen = coerceBooleanOption(
+          stageConfig.loadgen,
+          undefined,
+          false,
+        );
+
+        const loadgenConfig =
+          withLoadgen == null
+            ? coerceRecordOption(stageConfig.loadgen, sharedLoadgenConfig)
+            : sharedLoadgenConfig;
+
+        // By default the first stage will only initialize the chain from genesis
+        // and the last stage will only capture the chain restart time
+        // loadgen and chainOnly options overide default
+        const chainOnly = coerceBooleanOption(
+          stageConfig.chainOnly,
+          withLoadgen != null
+            ? !withLoadgen // use boolean loadgen option value as default chainOnly
+            : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
+                (currentStage === 0 || currentStage === stages - 1),
+        );
+
+        const duration =
+          Number(stageConfig.duration || sharedStageDurationMinutes) *
+          60 *
+          1000;
+
+        // eslint-disable-next-line no-await-in-loop
+        await runStage({
+          chainOnly,
+          duration,
+          loadgenConfig,
+        });
       }
-
-      // One final restart to capture the replay time
-      await runStage({ chainOnly: true });
     },
     async () => {
       outputStream.end();

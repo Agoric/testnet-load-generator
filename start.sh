@@ -52,4 +52,4 @@ yarn link-cli "${AGORIC_BIN_DIR}/agoric"
 
 cd "$LOADGEN_DIR"
 agoric install
-exec ./runner/bin/loadgen-runner "${OUTPUT_DIR}" "$@" 2>&1 
+exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" "$@" 2>&1 
