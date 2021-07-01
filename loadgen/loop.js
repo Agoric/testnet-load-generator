@@ -32,12 +32,12 @@ function maybeStartOneCycle(name, limit) {
     return;
   }
   s.active += 1;
-  console.log(`starting ${name}, active=${s.active}`);
+  console.log(`starting ${name}, active=${s.active} at ${new Date()}`);
   runners[name]
     .cycle()
     .then(
       () => {
-        console.log(` finished ${name}`);
+        console.log(` finished ${name} at ${new Date()}`);
         s.succeeded += 1;
       },
       err => {
