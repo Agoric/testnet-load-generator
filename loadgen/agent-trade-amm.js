@@ -1,6 +1,6 @@
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
-import { amountMath } from '@agoric/ertp';
+import { AmountMath, AssetKind } from '@agoric/ertp';
 import { pursePetnames, issuerPetnames } from './petnames';
 import { disp } from './display';
 import { allValues } from './allValues';
@@ -30,7 +30,7 @@ export default async function startAgent([key, home]) {
     let bal;
     if (which === 'RUN') {
       bal = await E(runPurse).getCurrentAmount();
-      if (bal.value === BigInt(0)) {
+      if (AmountMath.isEmpty(bal)) {
         // some chain setups currently fail to make the purses visible with
         // the right denominations
         throw Error(`no RUN, trade-amm cannot proceed`);
@@ -39,7 +39,7 @@ export default async function startAgent([key, home]) {
     }
     if (which === 'BLD') {
       bal = await E(bldPurse).getCurrentAmount();
-      if (bal.value === BigInt(0)) {
+      if (AmountMath.isEmpty(bal)) {
         throw Error(`no BLD, trade-amm cannot proceed`);
       }
       return bal;
@@ -53,7 +53,7 @@ export default async function startAgent([key, home]) {
 
   async function buyRunWithBld(bldOffered) {
     const proposal = harden({
-      want: { Out: amountMath.make(runBrand, BigInt(0)) },
+      want: { Out: AmountMath.makeEmpty(runBrand, AssetKind.NAT) },
       give: { In: bldOffered },
     });
     const payment = harden({ In: E(bldPurse).withdraw(bldOffered) });
@@ -74,7 +74,7 @@ export default async function startAgent([key, home]) {
 
   async function buyBldWithRun(runOffered) {
     const proposal = harden({
-      want: { Out: amountMath.make(bldBrand, BigInt(0)) },
+      want: { Out: AmountMath.makeEmpty(bldBrand, AssetKind.NAT) },
       give: { In: runOffered },
     });
     const payment = harden({ In: E(runPurse).withdraw(runOffered) });
@@ -101,12 +101,13 @@ export default async function startAgent([key, home]) {
     if (1) {
       // setup: buy RUN with 50% of our BLD
       console.error(`trade-amm: buying initial RUN with 50% of our BLD`);
-      const halfAmount = amountMath.make(bldBrand, bld.value / BigInt(2));
+      const halfAmount = AmountMath.make(bldBrand, bld.value / BigInt(2));
       await buyRunWithBld(halfAmount);
       ({ run, bld } = await getBalances());
     }
-    const runPerCycle = amountMath.make(runBrand, run.value / BigInt(100));
-    const bldPerCycle = amountMath.make(bldBrand, bld.value / BigInt(100));
+    // we sell 1% of the holdings each time
+    const runPerCycle = AmountMath.make(runBrand, run.value / BigInt(100));
+    const bldPerCycle = AmountMath.make(bldBrand, bld.value / BigInt(100));
     console.error(`setup: RUN=${disp(run)} BLD=${disp(bld)}`);
     console.error(
       `will trade about ${disp(runPerCycle)} RUN and ${disp(
@@ -121,12 +122,12 @@ export default async function startAgent([key, home]) {
     async doAMMCycle() {
       console.error('trade-amm cycle: BLD->RUN');
       const bld = await getBalance('BLD');
-      const bldOffered = amountMath.make(bldBrand, bld.value / BigInt(100));
+      const bldOffered = AmountMath.make(bldBrand, bld.value / BigInt(100));
       await buyRunWithBld(bldOffered);
 
       console.error('trade-amm cycle: RUN->BLD');
       const run = await getBalance('RUN');
-      const runOffered = amountMath.make(runBrand, run.value / BigInt(100));
+      const runOffered = AmountMath.make(runBrand, run.value / BigInt(100));
       await buyBldWithRun(runOffered);
 
       const [newRunBalance, newBldBalance] = await Promise.all([

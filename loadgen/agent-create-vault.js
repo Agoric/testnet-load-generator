@@ -1,6 +1,6 @@
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
-import { amountMath } from '@agoric/ertp';
+import { AmountMath } from '@agoric/ertp';
 // import { allComparable } from '@agoric/same-structure';
 import { multiplyBy, makeRatio } from '@agoric/zoe/src/contractSupport';
 import { pursePetnames, issuerPetnames } from './petnames';
@@ -32,12 +32,15 @@ export default async function startAgent([key, home]) {
   const treasuryPublicFacet = E(zoe).getPublicFacet(treasuryInstance);
 
   const bldBalance = await E(bldPurse).getCurrentAmount();
-  if (bldBalance.value === BigInt(0)) {
+  if (AmountMath.isEmpty(bldBalance)) {
     throw Error(`create-vault: getCurrentAmount(BLD) broken (says 0)`);
   }
   console.error(`create-vault: initial balance: ${disp(bldBalance)} BLD`);
-  const bldToLock = amountMath.make(bldBrand, bldBalance.value / BigInt(100));
+  // put 1% into the vault
+  const bldToLock = AmountMath.make(bldBrand, bldBalance.value / BigInt(100));
 
+  // we only withdraw half the value of the collateral, giving us 200%
+  // collateralization
   const collaterals = await E(treasuryPublicFacet).getCollaterals();
   const cdata = collaterals.find(c => c.brand === bldBrand);
   const priceRate = cdata.marketPrice;
@@ -50,6 +53,8 @@ export default async function startAgent([key, home]) {
     `create-vault: bldToLock=${disp(bldToLock)}, wantedRun=${disp(wantedRun)}`,
   );
 
+  // we fix the 1% 'bldToLock' value at startup, and use it for all cycles
+  // (we close over 'bldToLock')
   async function openVault() {
     console.error('create-vault: openVault');
     const openInvitationP = E(treasuryPublicFacet).makeLoanInvitation();
@@ -86,7 +91,7 @@ export default async function startAgent([key, home]) {
         RUN: runNeeded,
       },
       want: {
-        Collateral: amountMath.makeEmpty(bldBrand),
+        Collateral: AmountMath.makeEmpty(bldBrand),
       },
     };
     const payment = harden({ RUN: E(runPurse).withdraw(runNeeded) });
