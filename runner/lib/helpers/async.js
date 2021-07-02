@@ -3,9 +3,12 @@
 /** @type {import("./async.js").sleep} */
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** @param {Error[]} errors */
-const makeAggregateError = (errors) => {
-  const err = new Error();
+/**
+ * @param {Error[]} errors
+ * @param {string} [message]
+ */
+const makeAggregateError = (errors, message) => {
+  const err = new Error(message);
   Object.defineProperties(err, {
     name: {
       value: 'AggregateError',
@@ -68,8 +71,8 @@ export const warnOnRejection = (operation, console, ...messages) => {
 /** @type {import("./async.js").aggregateTryFinally} */
 export const aggregateTryFinally = async (trier, finalizer) =>
   trier().then(
-    (result) => finalizer().then(() => result),
-    (tryError) =>
+    async (result) => finalizer().then(() => result),
+    async (tryError) =>
       finalizer()
         .then(
           () => tryError,
@@ -79,19 +82,19 @@ export const aggregateTryFinally = async (trier, finalizer) =>
   );
 
 /** @type {import("./async.js").tryTimeout} */
-export const tryTimeout = async (timeoutMs, trier, canceler) => {
+export const tryTimeout = async (timeoutMs, trier, onError) => {
   const result = Promise.race([
     sleep(timeoutMs).then(() => Promise.reject(new Error('Timeout'))),
     trier(),
   ]);
 
-  return !canceler
+  return !onError
     ? result
-    : result.catch((error) =>
-        canceler()
+    : result.catch(async (error) =>
+        onError()
           .then(
             () => error,
-            (cancelerError) => makeAggregateError([error, cancelerError]),
+            (cleanupError) => makeAggregateError([error, cleanupError]),
           )
           .then((finalError) => Promise.reject(finalError)),
       );

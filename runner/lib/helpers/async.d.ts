@@ -23,7 +23,7 @@ export declare function aggregateTryFinally<T>(
 export declare function tryTimeout<T>(
   timeoutMs: number,
   trier: () => Promise<T>,
-  canceler?: () => Promise<void>,
+  onError?: () => Promise<void>,
 ): Promise<T>;
 
 export declare function PromiseAllOrErrors<
