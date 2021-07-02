@@ -84,7 +84,7 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
 
   let testnetOrigin = 'https://testnet.agoric.net';
 
-  /** @param {import("./test-operations.js").OperationBaseOption & {config?: {reset?: boolean, chainOnly?: boolean, testnetOrigin?: string}}} options */
+  /** @param {import("./test-operations.js").OperationBaseOption & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string}}} options */
   const setupTest = async ({
     stdout,
     stderr,
@@ -92,6 +92,7 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     config: {
       reset = true,
       chainOnly,
+      withMonitor = true,
       testnetOrigin: testnetOriginOption,
     } = {},
   }) => {
@@ -103,56 +104,58 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       testnetOrigin = testnetOriginOption;
     }
 
-    if (reset) {
-      console.log('Resetting chain node');
-      await childProcessDone(
-        pipedSpawn('rm', ['-rf', chainStateDir], { stdio }),
-      );
-    }
+    if (withMonitor !== false) {
+      if (reset) {
+        console.log('Resetting chain node');
+        await childProcessDone(
+          pipedSpawn('rm', ['-rf', chainStateDir], { stdio }),
+        );
+      }
 
-    const chainDirStat = await fs
-      .stat(chainStateDir)
-      .catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
+      const chainDirStat = await fs
+        .stat(chainStateDir)
+        .catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
 
-    if (!chainDirStat) {
-      console.log('Fetching network config and genesis');
-      const {
-        chainName,
-        peers,
-        seeds,
-      } = /** @type {{chainName: string, peers: string[], seeds: string[]}} */ (await fetchAsJSON(
-        `${testnetOrigin}/network-config`,
-      ));
-      const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
+      if (!chainDirStat) {
+        console.log('Fetching network config and genesis');
+        const {
+          chainName,
+          peers,
+          seeds,
+        } = /** @type {{chainName: string, peers: string[], seeds: string[]}} */ (await fetchAsJSON(
+          `${testnetOrigin}/network-config`,
+        ));
+        const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
 
-      await childProcessDone(
-        pipedSpawn(
-          'ag-chain-cosmos',
-          ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
-          { stdio },
-        ),
-      );
+        await childProcessDone(
+          pipedSpawn(
+            'ag-chain-cosmos',
+            ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
+            { stdio },
+          ),
+        );
 
-      fs.writeFile(
-        joinPath(chainStateDir, 'config', 'genesis.json'),
-        JSON.stringify(genesis),
-      );
+        fs.writeFile(
+          joinPath(chainStateDir, 'config', 'genesis.json'),
+          JSON.stringify(genesis),
+        );
 
-      await childProcessDone(
-        pipedSpawn('ag-chain-cosmos', ['unsafe-reset-all'], { stdio }),
-      );
+        await childProcessDone(
+          pipedSpawn('ag-chain-cosmos', ['unsafe-reset-all'], { stdio }),
+        );
 
-      const configPath = joinPath(chainStateDir, 'config', 'config.toml');
+        const configPath = joinPath(chainStateDir, 'config', 'config.toml');
 
-      console.log('Patching config');
-      const config = await TOML.parse.async(
-        await fs.readFile(configPath, 'utf-8'),
-      );
-      const configP2p = /** @type {TOML.JsonMap} */ (config.p2p);
-      configP2p.persistent_peers = peers.join(',');
-      configP2p.seeds = seeds.join(',');
-      delete config.log_level;
-      await fs.writeFile(configPath, TOML.stringify(config));
+        console.log('Patching config');
+        const config = await TOML.parse.async(
+          await fs.readFile(configPath, 'utf-8'),
+        );
+        const configP2p = /** @type {TOML.JsonMap} */ (config.p2p);
+        configP2p.persistent_peers = peers.join(',');
+        configP2p.seeds = seeds.join(',');
+        delete config.log_level;
+        await fs.writeFile(configPath, TOML.stringify(config));
+      }
     }
 
     if (reset) {

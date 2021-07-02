@@ -612,8 +612,14 @@ const main = async (progName, rawArgs, powers) => {
    * @param {boolean} param0.chainOnly
    * @param {number} param0.duration
    * @param {unknown} param0.loadgenConfig
+   * @param {boolean} param0.withMonitor
    */
-  const runStage = async ({ chainOnly, duration, loadgenConfig }) => {
+  const runStage = async ({
+    chainOnly,
+    duration,
+    loadgenConfig,
+    withMonitor,
+  }) => {
     /** @type {import("stream").Writable} */
     let out;
     /** @type {import("stream").Writable} */
@@ -760,12 +766,19 @@ const main = async (progName, rawArgs, powers) => {
     };
 
     await aggregateTryFinally(
-      async () =>
-        spawnChain(
-          chainOnly
-            ? stageReady
-            : async () => spawnClient(async () => spawnLoadgen(stageReady)),
-        ),
+      async () => {
+        const mainTask = chainOnly
+          ? stageReady
+          : async () => spawnClient(async () => spawnLoadgen(stageReady));
+
+        if (withMonitor) {
+          return spawnChain(mainTask);
+        } else if (!chainOnly) {
+          return mainTask();
+        } else {
+          throw new Error('Nothing to do');
+        }
+      },
       async () =>
         aggregateTryFinally(
           async () => {
@@ -808,11 +821,12 @@ const main = async (progName, rawArgs, powers) => {
         // TODO: add other interesting info here
       });
 
+      const withMonitor = coerceBooleanOption(argv.monitor, true);
       {
         const { releaseInterrupt } = makeInterrupterKit();
 
         const reset = coerceBooleanOption(argv.reset, true);
-        const setupConfig = { reset, testnetOrigin };
+        const setupConfig = { reset, withMonitor, testnetOrigin };
         logPerfEvent('setup-test-start', setupConfig);
         await aggregateTryFinally(
           // Do not short-circuit on interrupt, let the spawned setup process terminate
@@ -866,6 +880,7 @@ const main = async (progName, rawArgs, powers) => {
           withLoadgen != null
             ? !withLoadgen // use boolean loadgen option value as default chainOnly
             : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
+                withMonitor && // If monitor is disabled, chainOnly has no meaning
                 (currentStage === 0 || currentStage === stages - 1),
         );
 
@@ -881,6 +896,7 @@ const main = async (progName, rawArgs, powers) => {
           chainOnly,
           duration,
           loadgenConfig,
+          withMonitor,
         });
       }
     },
