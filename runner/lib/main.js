@@ -153,6 +153,47 @@ const coerceBooleanOption = (
   }
 };
 
+const makeInterrupterKit = () => {
+  const signal = makePromiseKit();
+  /** @type {Error | null} */
+  let rejection = null;
+  const onInterrupt = () => {
+    if (rejection) {
+      console.warn('Interruption already in progress');
+    } else {
+      rejection = new Error('Interrupted');
+      signal.reject(rejection);
+    }
+  };
+  const onExit = () => {
+    throw new Error('Interrupt was not cleaned up');
+  };
+  process.on('SIGINT', onInterrupt);
+  process.on('SIGTERM', onInterrupt);
+  process.on('exit', onExit);
+
+  let orInterruptCalled = false;
+
+  const orInterrupt = async (job = Promise.resolve()) => {
+    orInterruptCalled = true;
+    return Promise.race([signal.promise, job]);
+  };
+
+  const releaseInterrupt = async () => {
+    process.off('SIGINT', onInterrupt);
+    process.off('SIGTERM', onInterrupt);
+    process.off('exit', onExit);
+    if (!orInterruptCalled && rejection) {
+      throw rejection;
+    }
+  };
+
+  // Prevent unhandled rejection when orInterrupt is called after interruption
+  signal.promise.catch(() => {});
+
+  return { orInterrupt, releaseInterrupt };
+};
+
 /**
  *
  * @param {string} progName
@@ -578,15 +619,118 @@ const main = async (progName, rawArgs, powers) => {
     /** @type {import("stream").Writable} */
     let err;
 
+    /** @type {string | void} */
+    let chainStorageLocation;
     currentStageElapsedOffsetNs = performance.now() * 1000;
     ({ console, out, err } = makeConsole(`stage-${currentStage}`));
 
     const { console: stageConsole } = makeConsole('runner', out, err);
 
+    const { orInterrupt, releaseInterrupt } = makeInterrupterKit();
+
     logPerfEvent('stage-start');
     const stageStart = performance.now();
 
-    const stageSleep = async () => {
+    /** @param {() => Promise<void>} nextStep */
+    const spawnChain = async (nextStep) => {
+      stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
+      logPerfEvent('run-chain-start');
+      const runChainResult = await runChain({ stdout: out, stderr: err });
+      logPerfEvent('run-chain-finish');
+
+      currentStageElapsedOffsetNs =
+        (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
+      chainStorageLocation = runChainResult.storageLocation;
+      /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
+      const {
+        promise: chainFirstEmptyBlock,
+        resolve: resolveFirstEmptyBlock,
+      } = makePromiseKit();
+      const monitorChainDone = monitorChain(runChainResult, {
+        resolveFirstEmptyBlock,
+        out,
+        err,
+      });
+
+      await aggregateTryFinally(
+        async () => {
+          await orInterrupt(runChainResult.ready);
+          logPerfEvent('chain-ready');
+          stageConsole.log('Chain ready');
+
+          await orInterrupt(chainFirstEmptyBlock);
+
+          await nextStep();
+        },
+        async () => {
+          stageConsole.log('Stopping chain');
+
+          runChainResult.stop();
+          await runChainResult.done;
+          logPerfEvent('chain-stopped');
+
+          await monitorChainDone;
+        },
+      );
+    };
+
+    /** @param {() => Promise<void>} nextStep */
+    const spawnClient = async (nextStep) => {
+      stageConsole.log('Running client');
+      logPerfEvent('run-client-start');
+      const runClientStart = performance.now();
+      const runClientResult = await runClient({ stdout: out, stderr: err });
+      logPerfEvent('run-client-finish');
+
+      await aggregateTryFinally(
+        async () => {
+          await orInterrupt(runClientResult.ready);
+          logPerfEvent('client-ready', {
+            duration:
+              Math.round((performance.now() - runClientStart) * 1000) / 1e6,
+          });
+
+          await nextStep();
+        },
+        async () => {
+          stageConsole.log('Stopping client');
+
+          runClientResult.stop();
+          await runClientResult.done;
+          logPerfEvent('client-stopped');
+        },
+      );
+    };
+
+    /** @param {() => Promise<void>} nextStep */
+    const spawnLoadgen = async (nextStep) => {
+      stageConsole.log('Running load gen');
+      logPerfEvent('run-loadgen-start');
+      const runLoadgenResult = await runLoadgen({
+        stdout: out,
+        stderr: err,
+        config: loadgenConfig,
+      });
+      logPerfEvent('run-loadgen-finish');
+
+      await aggregateTryFinally(
+        async () => {
+          await orInterrupt(runLoadgenResult.ready);
+          logPerfEvent('loadgen-ready');
+
+          await nextStep();
+        },
+        async () => {
+          stageConsole.log('Stopping loadgen');
+
+          runLoadgenResult.stop();
+          await runLoadgenResult.done;
+          logPerfEvent('loadgen-stopped');
+        },
+      );
+    };
+
+    const stageReady = async () => {
       /** @type {Promise<void>} */
       let sleeping;
       if (duration < 0) {
@@ -611,132 +755,51 @@ const main = async (progName, rawArgs, powers) => {
         }
       }
       logPerfEvent('stage-ready');
-
-      const signal = makePromiseKit();
-      const onInterrupt = () => signal.reject(new Error('Interrupted'));
-      process.once('SIGINT', onInterrupt);
-      process.once('SIGTERM', onInterrupt);
-
-      await aggregateTryFinally(
-        async () => {
-          await Promise.race([sleeping, signal.promise]);
-          logPerfEvent('stage-shutdown');
-        },
-        async () => {
-          process.off('SIGINT', onInterrupt);
-          process.off('SIGTERM', onInterrupt);
-        },
-      );
+      await orInterrupt(sleeping);
+      logPerfEvent('stage-shutdown');
     };
 
-    stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
-    logPerfEvent('run-chain-start');
-    const runChainResult = await runChain({ stdout: out, stderr: err });
-    logPerfEvent('run-chain-finish');
-
-    currentStageElapsedOffsetNs =
-      (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
-    const chainStorageLocation = runChainResult.storageLocation;
-    /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
-    const {
-      promise: chainFirstEmptyBlock,
-      resolve: resolveFirstEmptyBlock,
-    } = makePromiseKit();
-    const monitorChainDone = monitorChain(runChainResult, {
-      resolveFirstEmptyBlock,
-      out,
-      err,
-    });
-
     await aggregateTryFinally(
-      async () => {
-        await runChainResult.ready;
-        logPerfEvent('chain-ready');
-        stageConsole.log('Chain ready');
-
-        await chainFirstEmptyBlock;
-
-        if (chainOnly) {
-          await stageSleep();
-        } else {
-          stageConsole.log('Running client');
-          logPerfEvent('run-client-start');
-          const runClientStart = performance.now();
-          const runClientResult = await runClient({ stdout: out, stderr: err });
-          logPerfEvent('run-client-finish');
-
-          await aggregateTryFinally(
-            async () => {
-              await runClientResult.ready;
-              logPerfEvent('client-ready', {
-                duration:
-                  Math.round((performance.now() - runClientStart) * 1000) / 1e6,
-              });
-
-              stageConsole.log('Running load gen');
-              logPerfEvent('run-loadgen-start');
-              const runLoadgenResult = await runLoadgen({
-                stdout: out,
-                stderr: err,
-                config: loadgenConfig,
-              });
-              logPerfEvent('run-loadgen-finish');
-
-              await aggregateTryFinally(
-                async () => {
-                  await runLoadgenResult.ready;
-                  logPerfEvent('loadgen-ready');
-
-                  await stageSleep();
-                },
-                async () => {
-                  stageConsole.log('Stopping loadgen');
-
-                  runLoadgenResult.stop();
-                  await runLoadgenResult.done;
-                  logPerfEvent('loadgen-stopped');
-                },
+      async () =>
+        spawnChain(
+          chainOnly
+            ? stageReady
+            : async () => spawnClient(async () => spawnLoadgen(stageReady)),
+        ),
+      async () =>
+        aggregateTryFinally(
+          async () => {
+            if (chainStorageLocation != null) {
+              stageConsole.log('Saving chain storage');
+              await childProcessDone(
+                spawn('tar', [
+                  '-cSJf',
+                  joinPath(
+                    outputDir,
+                    `chain-storage-stage-${currentStage}.tar.xz`,
+                  ),
+                  chainStorageLocation,
+                ]),
               );
-            },
-            async () => {
-              stageConsole.log('Stopping client');
+            }
+          },
+          async () => {
+            releaseInterrupt();
 
-              runClientResult.stop();
-              await runClientResult.done;
-              logPerfEvent('client-stopped');
-            },
-          );
-        }
-      },
-      async () => {
-        stageConsole.log('Stopping chain');
-
-        runChainResult.stop();
-        await runChainResult.done;
-        logPerfEvent('chain-stopped');
-
-        await PromiseAllOrErrors([
-          childProcessDone(
-            spawn('tar', [
-              '-cSJf',
-              joinPath(outputDir, `chain-storage-stage-${currentStage}.tar.xz`),
-              chainStorageLocation,
-            ]),
-          ),
-          monitorChainDone,
-        ]);
-      },
+            logPerfEvent('stage-finish');
+            currentStageElapsedOffsetNs = 0;
+          },
+        ),
     );
-
-    logPerfEvent('stage-finish');
-    currentStageElapsedOffsetNs = 0;
   };
 
   // Main
 
   await aggregateTryFinally(
     async () => {
+      /** @type {import("stream").Writable} */
       let out;
+      /** @type {import("stream").Writable} */
       let err;
       ({ console, out, err } = makeConsole('init'));
       logPerfEvent('start', {
@@ -745,11 +808,22 @@ const main = async (progName, rawArgs, powers) => {
         // TODO: add other interesting info here
       });
 
-      const reset = coerceBooleanOption(argv.reset, true);
-      const setupConfig = { reset, testnetOrigin };
-      logPerfEvent('setup-test-start', setupConfig);
-      await setupTest({ stdout: out, stderr: err, config: setupConfig });
-      logPerfEvent('setup-test-finish');
+      {
+        const { releaseInterrupt } = makeInterrupterKit();
+
+        const reset = coerceBooleanOption(argv.reset, true);
+        const setupConfig = { reset, testnetOrigin };
+        logPerfEvent('setup-test-start', setupConfig);
+        await aggregateTryFinally(
+          // Do not short-circuit on interrupt, let the spawned setup process terminate
+          async () =>
+            setupTest({ stdout: out, stderr: err, config: setupConfig }),
+
+          // This will throw if there was any interrupt, and prevent further execution
+          async () => releaseInterrupt(),
+        );
+        logPerfEvent('setup-test-finish');
+      }
 
       const stages =
         argv.stages != null
