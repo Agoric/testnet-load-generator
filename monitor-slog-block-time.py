@@ -22,8 +22,8 @@ def perc(n):
     return "%3d%%" % (n * 100)
 
 
-head = "-- block  swingset (avg2min)    %  --   block (avg2min)  "
-fmt  = "  %5d     %6s   %6s  %4s  --  %6s   %6s"
+head = "-- block  cranks(avg)   swingset(avg)     %  --  cosmos --  block(avg)"
+fmt  = "  %5d   %4s(%5s)  %6s(%6s)  %4s  --  %6s -- %6s(%6s)"
 
 class Summary:
     headline_counter = 0
@@ -32,22 +32,31 @@ class Summary:
             print(head)
             self.headline_counter = 20
         self.headline_counter -= 1
-        ( height, block_time, idle_time, swingset_time, swingset_percentage ) = recent_blocks[-1]
+        ( height, cranks, block_time, idle_time, cosmos_time, swingset_time, swingset_percentage ) = recent_blocks[-1]
+        cranks_s = "%3d" % cranks if cranks is not None else " "*4
         # 2 minutes is nominally 120/6= 20 blocks
         recent = recent_blocks[-20:]
-        avg_block_time = sum(b[1] for b in recent) / len(recent)
-        avg_swingset_time = sum(b[3] for b in recent) / len(recent)
-        avg_swingset_percentage = sum(b[4] for b in recent) / len(recent)
+        avg_cranks = sum(b[1] or 0 for b in recent) / len(recent)
+        avg_cranks_s = "%3.1f" % avg_cranks
+        avg_block_time = sum(b[2] for b in recent) / len(recent)
+        avg_swingset_time = sum(b[5] for b in recent) / len(recent)
+        avg_swingset_percentage = sum(b[6] for b in recent) / len(recent)
 
         print(fmt % (height,
+                     cranks_s, avg_cranks_s,
                      abbrev(swingset_time), abbrev(avg_swingset_time),
                      perc(avg_swingset_percentage),
+                     abbrev(cosmos_time),
                      abbrev(block_time), abbrev(avg_block_time)))
 
 s = Summary()
 
+last_crank = None
+
 for line in sys.stdin:
     data = json.loads(line)
+    if data["type"] == "deliver" and "crankNum" in data:
+        last_crank = data["crankNum"]
     if data["type"] in ["cosmic-swingset-begin-block",
                         "cosmic-swingset-end-block-start",
                         "cosmic-swingset-end-block-finish"]:
@@ -57,13 +66,19 @@ for line in sys.stdin:
         if len(blocks) < 2:
             continue
         if t == "end-block-finish":
+            if last_crank:
+                blocks[height]["last-crank"] = last_crank
             idle_time = None
             block_time = None
+            cosmos_time = blocks[height]["end-block-start"] - blocks[height]["begin-block"]
             swingset_time = blocks[height]["end-block-finish"] - blocks[height]["end-block-start"]
             if blocks[height-1]:
                 idle_time = blocks[height]["begin-block"] - blocks[height-1]["end-block-finish"]
                 block_time = blocks[height]["end-block-finish"] - blocks[height-1]["end-block-finish"]
                 swingset_percentage = swingset_time / block_time
-            recent_blocks.append([ height, block_time, idle_time, swingset_time, swingset_percentage ])
+                cranks = None
+                if "last-crank" in blocks[height-1]:
+                    cranks = blocks[height]["last-crank"] - blocks[height-1]["last-crank"]
+            recent_blocks.append([ height, cranks, block_time, idle_time, cosmos_time, swingset_time, swingset_percentage ])
             s.summarize()
 
