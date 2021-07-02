@@ -25,7 +25,8 @@ import { makeFsHelper } from './helpers/fs.js';
 import { makeProcfsHelper } from './helpers/procsfs.js';
 import { makeOutputter } from './helpers/outputter.js';
 
-import { makeTestOperations } from './test-local-chain.js';
+import { makeTestOperations as makeLocalTestOperations } from './test-local-chain.js';
+import { makeTestOperations as makeTestnetTestOperations } from './test-testnet.js';
 
 const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
@@ -178,13 +179,6 @@ const main = async (progName, rawArgs, powers) => {
     tmpDir,
   });
 
-  const { setupTest, runChain, runClient, runLoadgen } = makeTestOperations({
-    spawn,
-    findDirByPrefix: findByPrefix,
-    makeFIFO,
-    getProcessInfo,
-  });
-
   /**
    * @param {string} [prefix]
    * @param {import("stream").Writable} [out]
@@ -203,6 +197,34 @@ const main = async (progName, rawArgs, powers) => {
   const outputDir = String(argv.outputDir || `run-results-${Date.now()}`);
   console.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
+
+  let makeTestOperations;
+  /** @type {string} */
+  let testnetOrigin;
+
+  switch (argv.profile) {
+    case null:
+    case undefined:
+    case 'local':
+      makeTestOperations = makeLocalTestOperations;
+      testnetOrigin = '';
+      break;
+    case 'testnet':
+    case 'stage':
+      makeTestOperations = makeTestnetTestOperations;
+      testnetOrigin = `https://${argv.profile}.agoric.net`;
+      break;
+    default:
+      throw new Error(`Unexpected profile option: ${argv.profile}`);
+  }
+
+  const { setupTest, runChain, runClient, runLoadgen } = makeTestOperations({
+    spawn,
+    fs,
+    findDirByPrefix: findByPrefix,
+    makeFIFO,
+    getProcessInfo,
+  });
 
   const outputStream = fsStream.createWriteStream(
     joinPath(outputDir, 'perf.jsonl'),
@@ -724,7 +746,7 @@ const main = async (progName, rawArgs, powers) => {
       });
 
       const reset = coerceBooleanOption(argv.reset, true);
-      const setupConfig = { reset };
+      const setupConfig = { reset, testnetOrigin };
       logPerfEvent('setup-test-start', setupConfig);
       await setupTest({ stdout: out, stderr: err, config: setupConfig });
       logPerfEvent('setup-test-finish');

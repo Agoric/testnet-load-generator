@@ -78,7 +78,7 @@ integration-test/transform-tests/output
 
 solo
 dev
-testnet
+testnet-*
 chain
 ve*
-local*
+local-*
