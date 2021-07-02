@@ -3,6 +3,7 @@ import chalk from 'chalk';
 // TODO: pass an "httpRequest" as power instead of importing
 import http from 'http';
 import https from 'https';
+import fs from 'fs';
 
 import { sleep } from './helpers/async.js';
 import { makeOutputter } from './helpers/outputter.js';
@@ -21,6 +22,19 @@ export const httpRequest = (urlOrString, options = {}) => {
   return new Promise((resolve, reject) => {
     const url =
       typeof urlOrString === 'string' ? new URL(urlOrString) : urlOrString;
+
+    if (url.protocol === 'file:') {
+      const stream = fs.createReadStream(url.pathname);
+      // Ugly cast hack to make res look like what the consumer cares about
+      const res = /** @type {http.IncomingMessage} */ (harden(
+        /** @type {unknown} */ ({
+          [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
+          statusCode: 200,
+        }),
+      ));
+      resolve(res);
+      return;
+    }
 
     if (!(url.protocol in protocolModules)) {
       throw new Error(`Invalid protocol ${url.protocol}`);

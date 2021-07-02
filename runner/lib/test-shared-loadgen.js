@@ -82,7 +82,7 @@ export const makeLoadgenOperation = ({ pipedSpawn }) => {
         console.log('Load gen app running');
 
         const ready = tasksReady.then(async () => {
-          console.log('Making request to start faucet');
+          console.log('Making request to loadgen');
           const body = Buffer.from(JSON.stringify(config), 'utf8');
 
           const res = await httpRequest('http://127.0.0.1:3352/config', {

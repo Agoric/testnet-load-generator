@@ -253,7 +253,8 @@ const main = async (progName, rawArgs, powers) => {
     case 'testnet':
     case 'stage':
       makeTestOperations = makeTestnetTestOperations;
-      testnetOrigin = `https://${argv.profile}.agoric.net`;
+      testnetOrigin =
+        argv.testnetOrigin || `https://${argv.profile}.agoric.net`;
       break;
     default:
       throw new Error(`Unexpected profile option: ${argv.profile}`);
