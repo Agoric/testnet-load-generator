@@ -2,6 +2,7 @@ import http from 'http';
 import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
+import { prepareSimpleExchange } from './task-trade-simple-exchange';
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
@@ -9,6 +10,7 @@ let currentConfig = {
   faucet: null, // or { interval=60, limit=1, wait=0 }
   amm: null,
   vault: null,
+  exchange: null,
 };
 
 const tasks = {
@@ -17,6 +19,7 @@ const tasks = {
   // measure the balance
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
+  exchange: [prepareSimpleExchange],
 };
 
 const runners = {}; // name -> { cycle, timer }
