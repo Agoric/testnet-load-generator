@@ -155,6 +155,9 @@ export const makeTestOperations = ({
         const stop = () => {
           stopped = true;
           process.kill(processInfo.pid);
+          if (slogFifo.pending) {
+            slogFifo.close();
+          }
         };
 
         return harden({
