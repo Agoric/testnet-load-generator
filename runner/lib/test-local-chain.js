@@ -82,7 +82,7 @@ export const makeTestOperations = ({
   };
 
   /** @param {import("./test-operations.js").OperationBaseOption} options */
-  const runChain = async ({ stdout, stderr, timeout = 30 }) => {
+  const runChain = async ({ stdout, stderr, timeout = 120 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
 
     console.log('Starting chain');
@@ -178,7 +178,7 @@ export const makeTestOperations = ({
   };
 
   /** @param {import("./test-operations.js").OperationBaseOption} options */
-  const runClient = async ({ stdout, stderr, timeout = 20 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
 
     console.log('Starting client');

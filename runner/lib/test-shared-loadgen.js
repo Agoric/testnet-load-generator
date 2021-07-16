@@ -19,7 +19,7 @@ const loadgenReadyRE = /server running/;
  *
  */
 export const makeLoadgenOperation = ({ pipedSpawn }) => {
-  return harden(async ({ stdout, stderr, timeout = 10, config = {} }) => {
+  return harden(async ({ stdout, stderr, timeout = 30, config = {} }) => {
     const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
 
     console.log('Starting loadgen');
