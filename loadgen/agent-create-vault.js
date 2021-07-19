@@ -79,7 +79,7 @@ export default async function startAgent([key, home]) {
     ]);
     const offerResult = await E(seatP).getOfferResult();
     console.error(`create-vault: vault opened`);
-    return offerResult.vault;
+    return offerResult;
   }
 
   async function closeVault(vault) {
@@ -107,10 +107,19 @@ export default async function startAgent([key, home]) {
     console.error(`create-vault: vault closed`);
   }
 
+  const depositLiquidationPayout = async liquidationPayout => {
+    const vaultSeatPayments = await liquidationPayout;
+    await Promise.all(
+      [E(runPurse).deposit(vaultSeatPayments.RUN),
+      E(bldPurse).deposit(vaultSeatPayments.Collateral)]
+    );
+  };
+
   const agent = Far('vault agent', {
     async doVaultCycle() {
-      const vault = await openVault(bldToLock);
-      await closeVault(vault);
+      const offerResult = await openVault();
+      depositLiquidationPayout(offerResult.liquidationPayout);
+      await closeVault(offerResult.vault);
       const [newRunBalance, newBldBalance] = await Promise.all([
         E(runPurse).getCurrentAmount(),
         E(bldPurse).getCurrentAmount(),
