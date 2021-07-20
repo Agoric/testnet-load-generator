@@ -44,19 +44,27 @@ const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
 
 /**
  * @typedef { |
- *    'create-vat' |
- *    'vat-startup-finish' |
- *    'replay-transcript-start' |
+ *    'cosmic-swingset-bootstrap-block-start' |
+ *    'cosmic-swingset-bootstrap-block-finish' |
  *    'cosmic-swingset-end-block-start' |
  *    'cosmic-swingset-end-block-finish' |
  *    'cosmic-swingset-begin-block'
- * } SupportedSlogEventTypes
+ * } SlogCosmicSwingsetEventTypes
+ */
+
+/**
+ * @typedef { |
+ *    'create-vat' |
+ *    'vat-startup-finish' |
+ *    'replay-transcript-start' |
+ *    SlogCosmicSwingsetEventTypes
+ * } SlogSupportedEventTypes
  */
 
 /**
  * @typedef {{
  *   time: number,
- *   type: SupportedSlogEventTypes
+ *   type: SlogSupportedEventTypes
  * }} SlogEventBase
  */
 
@@ -85,18 +93,19 @@ const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
 /**
  * @typedef {{
  *   time: number,
- *   type: 'cosmic-swingset-end-block-start' |
- *         'cosmic-swingset-end-block-finish' |
- *         'cosmic-swingset-begin-block',
- *   vatID: string
+ *   type: SlogCosmicSwingsetEventTypes,
+ *   blockHeight?: number,
+ *   blockTime: number
  * } & Record<string, unknown>} SlogCosmicSwingsetEvent
  */
 
-/** @type {SupportedSlogEventTypes[]} */
+/** @type {SlogSupportedEventTypes[]} */
 const supportedSlogEventTypes = [
   'create-vat',
   'vat-startup-finish',
   'replay-transcript-start',
+  'cosmic-swingset-bootstrap-block-start',
+  'cosmic-swingset-bootstrap-block-finish',
   'cosmic-swingset-end-block-start',
   'cosmic-swingset-end-block-finish',
   'cosmic-swingset-begin-block',
@@ -554,8 +563,18 @@ const main = async (progName, rawArgs, powers) => {
           }
           break;
         }
+        case 'cosmic-swingset-bootstrap-block-start': {
+          logPerfEvent('chain-first-init-start');
+          break;
+        }
+        case 'cosmic-swingset-bootstrap-block-finish': {
+          logPerfEvent('chain-first-init-finish');
+          break;
+        }
         case 'cosmic-swingset-end-block-start': {
           if (event.blockHeight === 0) {
+            // Before https://github.com/Agoric/agoric-sdk/pull/3491
+            // bootstrap didn't have it's own slog entry
             logPerfEvent('chain-first-init-start');
           }
           slogLinesInBlock = 0;
