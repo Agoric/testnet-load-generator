@@ -633,12 +633,14 @@ const main = async (progName, rawArgs, powers) => {
    * @param {number} param0.duration
    * @param {unknown} param0.loadgenConfig
    * @param {boolean} param0.withMonitor
+   * @param {boolean} param0.saveStorage
    */
   const runStage = async ({
     chainOnly,
     duration,
     loadgenConfig,
     withMonitor,
+    saveStorage,
   }) => {
     /** @type {import("stream").Writable} */
     let out;
@@ -802,7 +804,7 @@ const main = async (progName, rawArgs, powers) => {
       async () =>
         aggregateTryFinally(
           async () => {
-            if (chainStorageLocation != null) {
+            if (saveStorage && chainStorageLocation != null) {
               stageConsole.log('Saving chain storage');
               await childProcessDone(
                 spawn('tar', [
@@ -904,6 +906,11 @@ const main = async (progName, rawArgs, powers) => {
                 (currentStage === 0 || currentStage === stages - 1),
         );
 
+        const saveStorage = coerceBooleanOption(
+          stageConfig.saveStorage,
+          !chainOnly || currentStage === 0,
+        );
+
         const duration =
           (stageConfig.duration != null
             ? Number(stageConfig.duration)
@@ -917,6 +924,7 @@ const main = async (progName, rawArgs, powers) => {
           duration,
           loadgenConfig,
           withMonitor,
+          saveStorage,
         });
       }
     },
