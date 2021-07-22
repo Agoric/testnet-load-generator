@@ -670,7 +670,7 @@ const main = async (progName, rawArgs, powers) => {
       logPerfEvent('run-chain-finish');
 
       let chainExited = false;
-      runChainResult.done.finally(() => {
+      const done = runChainResult.done.finally(() => {
         chainExited = true;
         logPerfEvent('chain-stopped');
       });
@@ -697,14 +697,14 @@ const main = async (progName, rawArgs, powers) => {
 
           await orInterrupt(chainFirstEmptyBlock);
 
-          await nextStep(runChainResult.done);
+          await nextStep(done);
         },
         async () => {
           if (!chainExited) {
             stageConsole.log('Stopping chain');
 
             runChainResult.stop();
-            await runChainResult.done;
+            await done;
           }
 
           await monitorChainDone;
@@ -721,7 +721,7 @@ const main = async (progName, rawArgs, powers) => {
       logPerfEvent('run-client-finish');
 
       let clientExited = false;
-      runClientResult.done.finally(() => {
+      const done = runClientResult.done.finally(() => {
         clientExited = true;
         logPerfEvent('client-stopped');
       });
@@ -734,14 +734,14 @@ const main = async (progName, rawArgs, powers) => {
               Math.round((performance.now() - runClientStart) * 1000) / 1e6,
           });
 
-          await nextStep(runClientResult.done);
+          await nextStep(done);
         },
         async () => {
           if (!clientExited) {
             stageConsole.log('Stopping client');
 
             runClientResult.stop();
-            await runClientResult.done;
+            await done;
           }
         },
       );
@@ -759,7 +759,7 @@ const main = async (progName, rawArgs, powers) => {
       logPerfEvent('run-loadgen-finish');
 
       let loadgenExited = false;
-      runLoadgenResult.done.finally(() => {
+      const done = runLoadgenResult.done.finally(() => {
         loadgenExited = true;
         logPerfEvent('loadgen-stopped');
       });
@@ -769,14 +769,14 @@ const main = async (progName, rawArgs, powers) => {
           await orInterrupt(runLoadgenResult.ready);
           logPerfEvent('loadgen-ready');
 
-          await nextStep(runLoadgenResult.done);
+          await nextStep(done);
         },
         async () => {
           if (!loadgenExited) {
             stageConsole.log('Stopping loadgen');
 
             runLoadgenResult.stop();
-            await runLoadgenResult.done;
+            await done;
           }
         },
       );
@@ -816,7 +816,9 @@ const main = async (progName, rawArgs, powers) => {
       async () => {
         /** @type {Task} */
         const rootTask = async (nextStep) => {
-          await nextStep(orInterrupt());
+          const done = orInterrupt();
+          done.catch(() => {});
+          await nextStep(done);
         };
 
         /** @type {Task[]} */
