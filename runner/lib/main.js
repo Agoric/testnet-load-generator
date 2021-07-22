@@ -19,6 +19,7 @@ import {
   PromiseAllOrErrors,
   warnOnRejection,
   aggregateTryFinally,
+  sequential,
 } from './helpers/async.js';
 import { childProcessDone } from './helpers/child-process.js';
 import { makeFsHelper } from './helpers/fs.js';
@@ -27,6 +28,8 @@ import { makeOutputter } from './helpers/outputter.js';
 
 import { makeTestOperations as makeLocalTestOperations } from './test-local-chain.js';
 import { makeTestOperations as makeTestnetTestOperations } from './test-testnet.js';
+
+/** @typedef {import('./helpers/async.js').Task} Task */
 
 const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
@@ -183,7 +186,7 @@ const makeInterrupterKit = () => {
 
   let orInterruptCalled = false;
 
-  const orInterrupt = async (job = Promise.resolve()) => {
+  const orInterrupt = async (job = new Promise(() => {})) => {
     orInterruptCalled = true;
     return Promise.race([signal.promise, job]);
   };
@@ -659,12 +662,18 @@ const main = async (progName, rawArgs, powers) => {
     logPerfEvent('stage-start');
     const stageStart = performance.now();
 
-    /** @param {() => Promise<void>} nextStep */
+    /** @type {Task} */
     const spawnChain = async (nextStep) => {
       stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
+
+      let chainExited = false;
+      runChainResult.done.finally(() => {
+        chainExited = true;
+        logPerfEvent('chain-stopped');
+      });
 
       currentStageElapsedOffsetNs =
         (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
@@ -688,27 +697,34 @@ const main = async (progName, rawArgs, powers) => {
 
           await orInterrupt(chainFirstEmptyBlock);
 
-          await nextStep();
+          await nextStep(runChainResult.done);
         },
         async () => {
-          stageConsole.log('Stopping chain');
+          if (!chainExited) {
+            stageConsole.log('Stopping chain');
 
-          runChainResult.stop();
-          await runChainResult.done;
-          logPerfEvent('chain-stopped');
+            runChainResult.stop();
+            await runChainResult.done;
+          }
 
           await monitorChainDone;
         },
       );
     };
 
-    /** @param {() => Promise<void>} nextStep */
+    /** @type {Task} */
     const spawnClient = async (nextStep) => {
       stageConsole.log('Running client');
       logPerfEvent('run-client-start');
       const runClientStart = performance.now();
       const runClientResult = await runClient({ stdout: out, stderr: err });
       logPerfEvent('run-client-finish');
+
+      let clientExited = false;
+      runClientResult.done.finally(() => {
+        clientExited = true;
+        logPerfEvent('client-stopped');
+      });
 
       await aggregateTryFinally(
         async () => {
@@ -718,19 +734,20 @@ const main = async (progName, rawArgs, powers) => {
               Math.round((performance.now() - runClientStart) * 1000) / 1e6,
           });
 
-          await nextStep();
+          await nextStep(runClientResult.done);
         },
         async () => {
-          stageConsole.log('Stopping client');
+          if (!clientExited) {
+            stageConsole.log('Stopping client');
 
-          runClientResult.stop();
-          await runClientResult.done;
-          logPerfEvent('client-stopped');
+            runClientResult.stop();
+            await runClientResult.done;
+          }
         },
       );
     };
 
-    /** @param {() => Promise<void>} nextStep */
+    /** @type {Task} */
     const spawnLoadgen = async (nextStep) => {
       stageConsole.log('Running load gen');
       logPerfEvent('run-loadgen-start');
@@ -741,24 +758,32 @@ const main = async (progName, rawArgs, powers) => {
       });
       logPerfEvent('run-loadgen-finish');
 
+      let loadgenExited = false;
+      runLoadgenResult.done.finally(() => {
+        loadgenExited = true;
+        logPerfEvent('loadgen-stopped');
+      });
+
       await aggregateTryFinally(
         async () => {
           await orInterrupt(runLoadgenResult.ready);
           logPerfEvent('loadgen-ready');
 
-          await nextStep();
+          await nextStep(runLoadgenResult.done);
         },
         async () => {
-          stageConsole.log('Stopping loadgen');
+          if (!loadgenExited) {
+            stageConsole.log('Stopping loadgen');
 
-          runLoadgenResult.stop();
-          await runLoadgenResult.done;
-          logPerfEvent('loadgen-stopped');
+            runLoadgenResult.stop();
+            await runLoadgenResult.done;
+          }
         },
       );
     };
 
-    const stageReady = async () => {
+    /** @type {Task} */
+    const stageReady = async (nextStep) => {
       /** @type {Promise<void>} */
       let sleeping;
       if (duration < 0) {
@@ -783,23 +808,35 @@ const main = async (progName, rawArgs, powers) => {
         }
       }
       logPerfEvent('stage-ready');
-      await orInterrupt(sleeping);
+      await nextStep(sleeping);
       logPerfEvent('stage-shutdown');
     };
 
     await aggregateTryFinally(
       async () => {
-        const mainTask = chainOnly
-          ? stageReady
-          : async () => spawnClient(async () => spawnLoadgen(stageReady));
+        /** @type {Task} */
+        const rootTask = async (nextStep) => {
+          await nextStep(orInterrupt());
+        };
+
+        /** @type {Task[]} */
+        const tasks = [rootTask];
 
         if (withMonitor) {
-          return spawnChain(mainTask);
-        } else if (!chainOnly) {
-          return mainTask();
-        } else {
-          throw new Error('Nothing to do');
+          tasks.push(spawnChain);
         }
+
+        if (!chainOnly) {
+          tasks.push(spawnClient, spawnLoadgen);
+        }
+
+        if (tasks.length === 1) {
+          throw new Error('Nothing to do');
+        } else {
+          tasks.push(stageReady);
+        }
+
+        await sequential(...tasks)((stop) => stop);
       },
       async () =>
         aggregateTryFinally(

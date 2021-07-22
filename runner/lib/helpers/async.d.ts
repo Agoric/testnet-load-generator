@@ -136,3 +136,15 @@ export declare function PromiseAllOrErrors<T1, T2>(
 export declare function PromiseAllOrErrors<T>(
   values: readonly (T | PromiseLike<T>)[],
 ): Promise<T[]>;
+
+export interface NextStep {
+  (stop: Promise<void>): Promise<void>;
+}
+
+export interface Task {
+  (nextStep: NextStep): Promise<void>;
+}
+
+export declare function sequential(...tasks: readonly Task[]): Task;
+
+export declare function parallel(...tasks: readonly Task[]): Task;

@@ -1,5 +1,7 @@
 /* global setTimeout */
 
+import { makePromiseKit } from '@agoric/promise-kit';
+
 /** @type {import("./async.js").sleep} */
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -98,4 +100,48 @@ export const tryTimeout = async (timeoutMs, trier, onError) => {
           )
           .then((finalError) => Promise.reject(finalError)),
       );
+};
+
+/** @typedef {import("./async.js").Task} Task */
+/**
+ * @template T
+ * @typedef {import('@agoric/promise-kit').PromiseRecord<T>} PromiseRecord<T>
+ */
+
+/**
+ * @param {Task[]} tasks
+ * @returns {Task}
+ */
+export const sequential = (...tasks) => {
+  return tasks.reduceRight((accumulatedTask, prevTask) => async (nextStep) => {
+    await prevTask(async (stopPrev) => {
+      await accumulatedTask(async (stopAcc) => {
+        await nextStep(Promise.race([stopAcc, stopPrev]));
+      });
+    });
+  });
+};
+
+/**
+ * @param {Task[]} tasks
+ * @returns {Task}
+ */
+export const parallel = (...tasks) => async (nextStep) => {
+  /** @type {PromiseRecord<{stop: Promise<void>}>[]} */
+  const kits = tasks.map(() => makePromiseKit());
+  /** @type {PromiseRecord<void>} */
+  const nextStepDone = makePromiseKit();
+  Promise.all(kits.map((kit) => kit.promise)).then((wrappedStops) => {
+    nextStepDone.resolve(
+      nextStep(Promise.race(wrappedStops.map(({ stop }) => stop))),
+    );
+  });
+  await Promise.all(
+    tasks.map((task, i) =>
+      task((stop) => {
+        kits[i].resolve({ stop });
+        return nextStepDone.promise;
+      }),
+    ),
+  );
 };
