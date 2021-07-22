@@ -135,6 +135,10 @@ COPY library-scripts/go-debian.sh /tmp/library-scripts/
 RUN bash /tmp/library-scripts/go-debian.sh "none" "/usr/local/go" "${GOPATH}" "node" "false" \
     && apt-get clean -y && rm -rf /tmp/library-scripts
 
+# Add Tini
+ENV TINI_VERSION v0.19.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+RUN chmod +x /tini
 
 ##############################
 FROM base
@@ -154,4 +158,4 @@ RUN mkdir -p $SDK_SRC $OUTPUT_DIR && chown $USER_UID:$USER_GID $SDK_SRC $OUTPUT_
 
 USER $USER_UID:$USER_GID
 
-ENTRYPOINT ["/app/start.sh"]
+ENTRYPOINT ["/tini", "--", "/app/start.sh"]
