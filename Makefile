@@ -30,6 +30,11 @@ run-chain:
 run-client:
 	$(MAKE) -C $(CSDIR) scenario2-run-client
 
+build-docker:
+	docker build -t loadgen-runner .
+
+daily-perf:
+	cd results && ../scripts/run-daily-perf.sh
 
 run-loadgen:
 	yarn loadgen

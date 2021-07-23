@@ -247,7 +247,7 @@ const main = async (progName, rawArgs, powers) => {
 
   let { console } = makeConsole();
 
-  const outputDir = String(argv.outputDir || `run-results-${Date.now()}`);
+  const outputDir = String(argv.outputDir || `results/run-${Date.now()}`);
   console.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
 

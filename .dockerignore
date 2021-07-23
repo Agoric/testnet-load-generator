@@ -5,4 +5,5 @@ _agstate/yarn-links/
 .idea/
 ui/.cache/
 ui/dist/
-./Dockerfile
+/Dockerfile
+/results

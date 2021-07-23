@@ -5,3 +5,5 @@ _agstate/yarn-links/
 .idea/
 ui/.cache/
 ui/dist/
+/results/*
+!/results/.keep
