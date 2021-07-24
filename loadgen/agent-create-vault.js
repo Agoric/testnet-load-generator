@@ -42,7 +42,7 @@ export default async function startAgent([key, home]) {
   // we only withdraw half the value of the collateral, giving us 200%
   // collateralization
   const collaterals = await E(treasuryPublicFacet).getCollaterals();
-  const cdata = collaterals.find(c => c.brand === bldBrand);
+  const cdata = collaterals.find((c) => c.brand === bldBrand);
   const priceRate = cdata.marketPrice;
   const half = makeRatio(BigInt(50), runBrand);
   const wantedRun = multiplyBy(multiplyBy(bldToLock, priceRate), half);

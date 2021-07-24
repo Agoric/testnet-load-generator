@@ -14,6 +14,7 @@
     "lint:js": "eslint '**/*.{js,ts}'",
     "lint:prettier": "prettier --check '**/*.{js,ts}'",
     "lint:types": "tsc -p jsconfig.json",
+    "lint-check": "yarn lint",
     "lint-fix": "yarn lint-fix:js && yarn lint-fix:prettier",
     "lint-fix:js": "eslint --fix '**/*.{js,ts}'",
     "lint-fix:prettier": "prettier --write '**/*.{js,ts}'"
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@agoric/eslint-config": "^0.3.6",
     "@types/readline-transform": "^1.0.0",
+    "@types/yargs-parser": "^20.2.1",
     "ava": "^3.13.0",
     "eslint": "^7.11.0",
     "prettier": "^2.1.2"

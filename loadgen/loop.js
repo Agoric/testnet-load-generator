@@ -55,7 +55,7 @@ function maybeStartOneCycle(name, limit) {
         logdata({ type: 'finish', task: name, seq, success: true });
         s.succeeded += 1;
       },
-      err => {
+      (err) => {
         console.log(`[${name}] failed:`, err);
         logdata({ type: 'finish', task: name, seq, success: false });
         s.failed += 1;
@@ -128,7 +128,7 @@ async function startServer() {
       if (req.method === 'PUT') {
         let body = '';
         req.setEncoding('utf8');
-        req.on('data', chunk => {
+        req.on('data', (chunk) => {
           body += chunk;
         });
         req.on('end', () => {
