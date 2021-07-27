@@ -26,11 +26,13 @@ const tasks = {
 const runners = {}; // name -> { cycle, timer }
 const status = {}; // name -> { active, succeeded, failed, next } // JSON-serializable
 
+let start;
 function logdata(data) {
   const timeMS = performance.timeOrigin + performance.now();
   const time = timeMS / 1000;
+  const delta = (timeMS - start) / 1000;
   // every line that starts with '{' should be JSON-parseable
-  console.log(JSON.stringify({ time, ...data }));
+  console.log(JSON.stringify({ time, delta, ...data }));
 }
 
 function maybeStartOneCycle(name, limit) {
@@ -177,5 +179,6 @@ export default async function runCycles(homePromise, deployPowers) {
   }
   updateConfig(currentConfig);
   console.log(`updated config: ${JSON.stringify(currentConfig)}`);
+  start = Date.now();
   await new Promise(() => 0); // runs forever
 }
