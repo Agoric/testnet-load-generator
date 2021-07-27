@@ -27,10 +27,13 @@
     "lint-check": "yarn workspaces run lint-check",
     "test": "yarn workspaces run test",
     "build": "yarn workspaces run build",
-    "loadgen": "agoric deploy loadgen/loop.js"
+    "loadgen": "agoric deploy loadgen/loop.js",
+    "workbench": "agoric deploy workbench/main.js"
   },
   "dependencies": {
     "agoric": "*",
-    "@endo/eslint-config": "^0.3.9"
+    "@endo/eslint-config": "^0.3.9",
+    "json-rpc-2.0": "^0.2.17",
+    "ws": "^7.5.3"
   }
 }
