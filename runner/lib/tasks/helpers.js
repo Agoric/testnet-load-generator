@@ -5,8 +5,8 @@ import http from 'http';
 import https from 'https';
 import fs from 'fs';
 
-import { sleep } from './helpers/async.js';
-import { makeOutputter } from './helpers/outputter.js';
+import { sleep } from '../helpers/async.js';
+import { makeOutputter } from '../helpers/outputter.js';
 
 const protocolModules = {
   'http:': http,
@@ -74,10 +74,10 @@ export const wrapArgvMatcherIgnoreEnvShebang = (argvMatcher) => (argv) =>
   argvMatcher(argv) || (/env$/.test(argv[0]) && argvMatcher(argv.slice(1)));
 
 /**
- * @param {import('./helpers/process-info.js').ProcessInfo} launcherInfo
+ * @param {import('../helpers/process-info.js').ProcessInfo} launcherInfo
  * @param {ArgvMatcher} argvMatcher
  * @param {number} [retries]
- * @returns {Promise<import('./helpers/process-info.js').ProcessInfo>}
+ * @returns {Promise<import('../helpers/process-info.js').ProcessInfo>}
  */
 export const getChildMatchingArgv = async (
   launcherInfo,

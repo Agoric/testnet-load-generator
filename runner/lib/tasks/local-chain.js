@@ -7,17 +7,17 @@ import { pipeline as pipelineCallback } from 'stream';
 import {
   childProcessDone,
   makeSpawnWithPrintAndPipeOutput,
-} from './helpers/child-process.js';
-import LineStreamTransform from './helpers/line-stream-transform.js';
-import { PromiseAllOrErrors, tryTimeout } from './helpers/async.js';
-import { whenStreamSteps } from './helpers/stream-steps.js';
+} from '../helpers/child-process.js';
+import LineStreamTransform from '../helpers/line-stream-transform.js';
+import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
+import { whenStreamSteps } from '../helpers/stream-steps.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
-} from './test-helpers.js';
-import { makeLoadgenOperation } from './test-shared-loadgen.js';
+} from './helpers.js';
+import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
@@ -43,13 +43,13 @@ const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
  *
  * @param {Object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
- * @param {import("./helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
- * @param {import("./helpers/fs.js").FindByPrefix} powers.findDirByPrefix
- * @param {import("./helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
- * @returns {import("./test-operations.js").TestOperations}
+ * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
+ * @param {import("../helpers/fs.js").FindByPrefix} powers.findDirByPrefix
+ * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @returns {import("./types.js").OrchestratorTasks}
  *
  */
-export const makeTestOperations = ({
+export const makeTasks = ({
   spawn,
   findDirByPrefix,
   makeFIFO,
@@ -60,9 +60,13 @@ export const makeTestOperations = ({
     end: false,
   });
 
-  /** @param {import("./test-operations.js").OperationBaseOption & {config?: {reset?: boolean}}} options */
-  const setupTest = async ({ stdout, stderr, config: { reset } = {} }) => {
-    const { console, stdio } = getConsoleAndStdio('setup-test', stdout, stderr);
+  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean}}} options */
+  const setupTasks = async ({ stdout, stderr, config: { reset } = {} }) => {
+    const { console, stdio } = getConsoleAndStdio(
+      'setup-tasks',
+      stdout,
+      stderr,
+    );
 
     console.log('Starting');
 
@@ -81,7 +85,7 @@ export const makeTestOperations = ({
     console.log('Done');
   };
 
-  /** @param {import("./test-operations.js").OperationBaseOption} options */
+  /** @param {import("./types.js").TaskBaseOptions} options */
   const runChain = async ({ stdout, stderr, timeout = 120 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
 
@@ -180,7 +184,7 @@ export const makeTestOperations = ({
     );
   };
 
-  /** @param {import("./test-operations.js").OperationBaseOption} options */
+  /** @param {import("./types.js").TaskBaseOptions} options */
   const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
 
@@ -241,9 +245,9 @@ export const makeTestOperations = ({
   };
 
   return harden({
-    setupTest,
+    setupTasks,
     runChain,
     runClient,
-    runLoadgen: makeLoadgenOperation({ pipedSpawn }),
+    runLoadgen: makeLoadgenTask({ pipedSpawn }),
   });
 };

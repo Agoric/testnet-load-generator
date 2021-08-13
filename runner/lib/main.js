@@ -26,8 +26,8 @@ import { makeFsHelper } from './helpers/fs.js';
 import { makeProcfsHelper } from './helpers/procsfs.js';
 import { makeOutputter } from './helpers/outputter.js';
 
-import { makeTestOperations as makeLocalTestOperations } from './test-local-chain.js';
-import { makeTestOperations as makeTestnetTestOperations } from './test-testnet.js';
+import { makeTasks as makeLocalChainTasks } from './tasks/local-chain.js';
+import { makeTasks as makeTestnetTasks } from './tasks/testnet.js';
 
 /** @typedef {import('./helpers/async.js').Task} Task */
 
@@ -251,7 +251,7 @@ const main = async (progName, rawArgs, powers) => {
   console.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
 
-  let makeTestOperations;
+  let makeTasks;
   /** @type {string} */
   let testnetOrigin;
 
@@ -259,12 +259,12 @@ const main = async (progName, rawArgs, powers) => {
     case null:
     case undefined:
     case 'local':
-      makeTestOperations = makeLocalTestOperations;
+      makeTasks = makeLocalChainTasks;
       testnetOrigin = '';
       break;
     case 'testnet':
     case 'stage':
-      makeTestOperations = makeTestnetTestOperations;
+      makeTasks = makeTestnetTasks;
       testnetOrigin =
         argv.testnetOrigin || `https://${argv.profile}.agoric.net`;
       break;
@@ -272,7 +272,7 @@ const main = async (progName, rawArgs, powers) => {
       throw new Error(`Unexpected profile option: ${argv.profile}`);
   }
 
-  const { setupTest, runChain, runClient, runLoadgen } = makeTestOperations({
+  const { setupTasks, runChain, runClient, runLoadgen } = makeTasks({
     spawn,
     fs,
     findDirByPrefix: findByPrefix,
@@ -315,7 +315,7 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /**
-   * @param {import("./test-operations.js").RunChainInfo} chainInfo
+   * @param {import("./tasks/types.js").RunChainInfo} chainInfo
    * @param {Object} param1
    * @param {() => void} param1.resolveFirstEmptyBlock
    * @param {import("stream").Writable} param1.out
@@ -888,16 +888,16 @@ const main = async (progName, rawArgs, powers) => {
 
         const reset = coerceBooleanOption(argv.reset, true);
         const setupConfig = { reset, withMonitor, testnetOrigin };
-        logPerfEvent('setup-test-start', setupConfig);
+        logPerfEvent('setup-tasks-start', setupConfig);
         await aggregateTryFinally(
           // Do not short-circuit on interrupt, let the spawned setup process terminate
           async () =>
-            setupTest({ stdout: out, stderr: err, config: setupConfig }),
+            setupTasks({ stdout: out, stderr: err, config: setupConfig }),
 
           // This will throw if there was any interrupt, and prevent further execution
           async () => releaseInterrupt(),
         );
-        logPerfEvent('setup-test-finish');
+        logPerfEvent('setup-tasks-finish');
       }
 
       const stages =

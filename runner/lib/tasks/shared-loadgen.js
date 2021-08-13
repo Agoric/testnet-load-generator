@@ -2,11 +2,11 @@
 
 import { PassThrough } from 'stream';
 
-import { childProcessDone } from './helpers/child-process.js';
-import LineStreamTransform from './helpers/line-stream-transform.js';
-import { PromiseAllOrErrors, tryTimeout } from './helpers/async.js';
-import { whenStreamSteps } from './helpers/stream-steps.js';
-import { httpRequest, getConsoleAndStdio } from './test-helpers.js';
+import { childProcessDone } from '../helpers/child-process.js';
+import LineStreamTransform from '../helpers/line-stream-transform.js';
+import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
+import { whenStreamSteps } from '../helpers/stream-steps.js';
+import { httpRequest, getConsoleAndStdio } from './helpers.js';
 
 const loadgenStartRE = /deploy.*loadgen\/loop\.js/;
 const loadgenReadyRE = /server running/;
@@ -14,11 +14,11 @@ const loadgenReadyRE = /server running/;
 /**
  *
  * @param {Object} powers
- * @param {import("./helpers/child-process.js").PipedSpawn} powers.pipedSpawn Spawn with piped output
- * @returns {import("./test-operations.js").TestOperations['runLoadgen']}
+ * @param {import("../helpers/child-process.js").PipedSpawn} powers.pipedSpawn Spawn with piped output
+ * @returns {import("./types.js").OrchestratorTasks['runLoadgen']}
  *
  */
-export const makeLoadgenOperation = ({ pipedSpawn }) => {
+export const makeLoadgenTask = ({ pipedSpawn }) => {
   return harden(async ({ stdout, stderr, timeout = 30, config = {} }) => {
     const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
 

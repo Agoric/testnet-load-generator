@@ -10,23 +10,23 @@ import TOML from '@iarna/toml';
 import {
   childProcessDone,
   makeSpawnWithPrintAndPipeOutput,
-} from './helpers/child-process.js';
-import LineStreamTransform from './helpers/line-stream-transform.js';
+} from '../helpers/child-process.js';
+import LineStreamTransform from '../helpers/line-stream-transform.js';
 import {
   PromiseAllOrErrors,
   tryTimeout,
   sleep,
   aggregateTryFinally,
-} from './helpers/async.js';
-import { whenStreamSteps } from './helpers/stream-steps.js';
+} from '../helpers/async.js';
+import { whenStreamSteps } from '../helpers/stream-steps.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
   httpRequest,
-} from './test-helpers.js';
-import { makeLoadgenOperation } from './test-shared-loadgen.js';
+} from './helpers.js';
+import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
@@ -66,12 +66,12 @@ const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
  * @param {Object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
- * @param {import("./helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
- * @param {import("./helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
- * @returns {import("./test-operations.js").TestOperations}
+ * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
+ * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @returns {import("./types.js").OrchestratorTasks}
  *
  */
-export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
+export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
   const pipedSpawn = makeSpawnWithPrintAndPipeOutput({
     spawn,
     end: false,
@@ -84,8 +84,8 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
 
   let testnetOrigin = 'https://testnet.agoric.net';
 
-  /** @param {import("./test-operations.js").OperationBaseOption & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string}}} options */
-  const setupTest = async ({
+  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string}}} options */
+  const setupTasks = async ({
     stdout,
     stderr,
     timeout = 120,
@@ -96,7 +96,11 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       testnetOrigin: testnetOriginOption,
     } = {},
   }) => {
-    const { console, stdio } = getConsoleAndStdio('setup-test', stdout, stderr);
+    const { console, stdio } = getConsoleAndStdio(
+      'setup-tasks',
+      stdout,
+      stderr,
+    );
 
     console.log('Starting');
 
@@ -229,7 +233,7 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     console.log('Done');
   };
 
-  /** @param {import("./test-operations.js").OperationBaseOption} options */
+  /** @param {import("./types.js").TaskBaseOptions} options */
   const runChain = async ({ stdout, stderr, timeout = 30 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
 
@@ -355,7 +359,7 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     );
   };
 
-  /** @param {import("./test-operations.js").OperationBaseOption} options */
+  /** @param {import("./types.js").TaskBaseOptions} options */
   const runClient = async ({ stdout, stderr, timeout = 20 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
 
@@ -420,9 +424,9 @@ export const makeTestOperations = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
   };
 
   return harden({
-    setupTest,
+    setupTasks,
     runChain,
     runClient,
-    runLoadgen: makeLoadgenOperation({ pipedSpawn }),
+    runLoadgen: makeLoadgenTask({ pipedSpawn }),
   });
 };
