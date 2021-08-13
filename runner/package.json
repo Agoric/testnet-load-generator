@@ -6,6 +6,7 @@
   "parsers": {
     "js": "mjs"
   },
+  "type": "module",
   "bin": "bin/loadgen-runner",
   "scripts": {
     "build": "exit 0",
@@ -20,7 +21,7 @@
     "lint-fix:prettier": "prettier --write '**/*.{js,ts}'"
   },
   "devDependencies": {
-    "@agoric/eslint-config": "^0.3.6",
+    "@endo/eslint-config": "^0.3.9",
     "@types/readline-transform": "^1.0.0",
     "@types/yargs-parser": "^20.2.1",
     "ava": "^3.13.0",
@@ -36,7 +37,6 @@
     "anylogger": "^0.21.0",
     "chalk": "^2.4.2",
     "deterministic-json": "^1.0.5",
-    "esm": "^3.2.25",
     "inquirer": "^6.3.1",
     "readline-transform": "^1.0.0",
     "yargs-parser": "^20.2.2"
@@ -46,7 +46,7 @@
   "license": "Apache-2.0",
   "eslintConfig": {
     "extends": [
-      "@agoric"
+      "@endo"
     ],
     "rules": {
       "prettier/prettier": "off"
