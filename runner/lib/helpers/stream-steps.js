@@ -1,7 +1,7 @@
 import { promisify } from 'util';
 import { finished as finishedCallback } from 'stream';
 
-import { makePromiseKit } from '@agoric/promise-kit';
+import { makePromiseKit } from '../sdk/promise-kit.js';
 
 import LineStreamTransform from './line-stream-transform.js';
 
@@ -31,7 +31,7 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
       if (stepsAndKits.length) {
         const match = stepsAndKits[0].step.matcher.exec(line);
         if (match) {
-          const stepAndKit = /** @type {{step: StepConfig, kit: import('@agoric/promise-kit').PromiseRecord<any>}} */ (stepsAndKits.shift());
+          const stepAndKit = /** @type {{step: StepConfig, kit: import('../sdk/promise-kit.js').PromiseRecord<any>}} */ (stepsAndKits.shift());
           const {
             step: { resultIndex = 1 },
             kit: { resolve },

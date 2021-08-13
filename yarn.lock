@@ -356,19 +356,19 @@
     "@agoric/swingset-vat" "^0.16.0"
     "@agoric/zoe" "^0.15.0"
 
-"@agoric/promise-kit@*", "@agoric/promise-kit@^0.2.6":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@agoric/promise-kit/-/promise-kit-0.2.6.tgz#e11ac8fbeb00c144941fbf03f53203d55a5ec8ff"
-  integrity sha512-6RCPgt5RpRq6/a9NgH/7xAR2GaHTiUn7K+PJuW1vBMPMhn56qxx2Mw5Ieol4+DZ6TIcC4WOBGtCwL6YTAF5DKg==
-  dependencies:
-    "@agoric/eventual-send" "^0.13.6"
-
 "@agoric/promise-kit@^0.2.21":
   version "0.2.21"
   resolved "https://registry.yarnpkg.com/@agoric/promise-kit/-/promise-kit-0.2.21.tgz#66aa16a020479c610608f169ae08eea9d018d62a"
   integrity sha512-3v7FxmkH5qBkMjQ5Js99VJfKbi06ez5HaRTo/iX47x7i+rzyVB6f9wwVXnlPXWnbFyRxaOuiz1R4hqd6CHEDTA==
   dependencies:
     "@agoric/eventual-send" "^0.13.23"
+
+"@agoric/promise-kit@^0.2.6":
+  version "0.2.6"
+  resolved "https://registry.yarnpkg.com/@agoric/promise-kit/-/promise-kit-0.2.6.tgz#e11ac8fbeb00c144941fbf03f53203d55a5ec8ff"
+  integrity sha512-6RCPgt5RpRq6/a9NgH/7xAR2GaHTiUn7K+PJuW1vBMPMhn56qxx2Mw5Ieol4+DZ6TIcC4WOBGtCwL6YTAF5DKg==
+  dependencies:
+    "@agoric/eventual-send" "^0.13.6"
 
 "@agoric/registrar@^0.2.7":
   version "0.2.7"
@@ -5070,6 +5070,11 @@ ses@^0.13.4:
   version "0.13.4"
   resolved "https://registry.yarnpkg.com/ses/-/ses-0.13.4.tgz#d547202ccb180c4a161e52007a9edff51d5fa9fd"
   integrity sha512-7pgHZF4i6tuMAhD6GeNgA8fxfgzeQ5queyRFnKfKPM6nvCEKd8JP3ityQ04rVspTzkzu9R0b2I4nb05ukblQDA==
+
+ses@^0.14.0:
+  version "0.14.0"
+  resolved "https://registry.yarnpkg.com/ses/-/ses-0.14.0.tgz#d71a5ccac8e9054155c7e63a52325e924edd3b41"
+  integrity sha512-LQPb6IS19K12Osvndmu7lHoJVuYyxPPBAUSZlcVeOmHF4LMzjT8vIVoMYLyk4LHvmt6wBbrJph9JkIiD1+femQ==
 
 set-blocking@^2.0.0, set-blocking@~2.0.0:
   version "2.0.0"

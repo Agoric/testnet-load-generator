@@ -12,7 +12,7 @@ import {
 
 import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
-import { makePromiseKit } from '@agoric/promise-kit';
+import { makePromiseKit } from './sdk/promise-kit.js';
 
 import {
   sleep,
@@ -678,7 +678,7 @@ const main = async (progName, rawArgs, powers) => {
       currentStageElapsedOffsetNs =
         (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
       chainStorageLocation = runChainResult.storageLocation;
-      /** @type {import("@agoric/promise-kit").PromiseRecord<void>} */
+      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
       const {
         promise: chainFirstEmptyBlock,
         resolve: resolveFirstEmptyBlock,

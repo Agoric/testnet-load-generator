@@ -9,8 +9,6 @@
 
 import { performance } from 'perf_hooks';
 
-import assert from 'assert';
-
 import { childProcessDone } from './child-process.js';
 
 const statusLineFormat = /^([^:]+):[\s]+(.+)$/;

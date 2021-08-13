@@ -29,16 +29,13 @@
     "prettier": "^2.1.2"
   },
   "dependencies": {
-    "@agoric/assert": "*",
-    "@agoric/install-ses": "*",
-    "@agoric/promise-kit": "*",
     "@iarna/toml": "^2.2.3",
-    "agoric": "*",
     "anylogger": "^0.21.0",
     "chalk": "^2.4.2",
     "deterministic-json": "^1.0.5",
     "inquirer": "^6.3.1",
     "readline-transform": "^1.0.0",
+    "ses": "^0.14.0",
     "yargs-parser": "^20.2.2"
   },
   "keywords": [],

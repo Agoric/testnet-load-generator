@@ -2,7 +2,7 @@
 /* global process */
 // @ts-nocheck
 
-import '@agoric/install-ses';
+import './sdk/install-ses.js';
 
 import path from 'path';
 import { spawn } from 'child_process';
