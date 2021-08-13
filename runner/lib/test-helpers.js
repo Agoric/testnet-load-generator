@@ -54,33 +54,6 @@ export const httpRequest = (urlOrString, options = {}) => {
   });
 };
 
-/**
- *
- * @param {import('./helpers/process-info.js').ProcessInfo} info
- * @param {number} [retries]
- * @returns {Promise<string[] | null>}
- */
-export const untilArgv = async (info, retries = 50) => {
-  const argv = await info.getArgv();
-  return (
-    argv ||
-    (retries > 0 ? (await sleep(100), untilArgv(info, retries - 1)) : null)
-  );
-};
-
-/**
- *
- * @param {import('./helpers/process-info.js').ProcessInfo} info
- * @param {number} [retries]
- * @returns {Promise<import('./helpers/process-info.js').ProcessInfo[]>}
- */
-export const untilChildren = async (info, retries = 50) => {
-  const children = await info.getChildren();
-  return children.length || retries === 0
-    ? children
-    : (await sleep(100), untilChildren(info, retries - 1));
-};
-
 /** @typedef {(argv: string[]) => boolean} ArgvMatcher */
 
 /**
@@ -103,12 +76,18 @@ export const wrapArgvMatcherIgnoreEnvShebang = (argvMatcher) => (argv) =>
 /**
  * @param {import('./helpers/process-info.js').ProcessInfo} launcherInfo
  * @param {ArgvMatcher} argvMatcher
+ * @param {number} [retries]
+ * @returns {Promise<import('./helpers/process-info.js').ProcessInfo>}
  */
-export const getChildMatchingArgv = async (launcherInfo, argvMatcher) => {
+export const getChildMatchingArgv = async (
+  launcherInfo,
+  argvMatcher,
+  retries = 50,
+) => {
   const childrenWithArgv = await Promise.all(
-    (await untilChildren(launcherInfo)).map(async (info) => ({
+    (await launcherInfo.getChildren()).map(async (info) => ({
       info,
-      argv: await untilArgv(info),
+      argv: await info.getArgv(),
     })),
   );
 
@@ -116,17 +95,20 @@ export const getChildMatchingArgv = async (launcherInfo, argvMatcher) => {
 
   if (result) {
     return result.info;
+  } else if (retries > 0) {
+    await sleep(100);
+    return getChildMatchingArgv(launcherInfo, argvMatcher, retries - 1);
+  } else {
+    console.error(
+      `getChildMatchingArgv: ${
+        childrenWithArgv.length
+      } child process, none of ["${childrenWithArgv
+        .map(({ argv }) => (argv || ['no argv']).join(' '))
+        .join('", "')}"] match expected arguments`,
+    );
+
+    throw new Error("Couldn't find child process");
   }
-
-  console.error(
-    `getChildMatchingArgv: ${
-      childrenWithArgv.length
-    } child process, none of ["${childrenWithArgv
-      .map(({ argv }) => (argv || ['no argv']).join(' '))
-      .join('", "')}"] match expected arguments`,
-  );
-
-  throw new Error("Couldn't find child process");
 };
 
 /**
