@@ -19,8 +19,8 @@ let currentConfig = {
 
 const tasks = {
   faucet: [prepareFaucet],
-  // we must start the AMM task before Vault, because it sells BLD, and both
-  // measure the balance
+  // we must start the AMM task before Vault: AMM exchanges some RUN for BLD,
+  // and Vault measures the balances
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
 };

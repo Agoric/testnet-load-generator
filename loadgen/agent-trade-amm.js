@@ -30,18 +30,10 @@ export default async function startAgent([key, home]) {
     let bal;
     if (which === 'RUN') {
       bal = await E(runPurse).getCurrentAmount();
-      if (AmountMath.isEmpty(bal)) {
-        // some chain setups currently fail to make the purses visible with
-        // the right denominations
-        throw Error(`no RUN, trade-amm cannot proceed`);
-      }
       return bal;
     }
     if (which === 'BLD') {
       bal = await E(bldPurse).getCurrentAmount();
-      if (AmountMath.isEmpty(bal)) {
-        throw Error(`no BLD, trade-amm cannot proceed`);
-      }
       return bal;
     }
     throw Error(`unknown type ${which}`);
@@ -99,10 +91,13 @@ export default async function startAgent([key, home]) {
     console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
     // eslint-disable-next-line no-constant-condition
     if (1) {
-      // setup: buy RUN with 50% of our BLD
-      console.error(`trade-amm: buying initial RUN with 50% of our BLD`);
-      const halfAmount = AmountMath.make(bldBrand, bld.value / BigInt(2));
-      await buyRunWithBld(halfAmount);
+      // setup: buy BLD with 50% of our RUN
+      console.error(`trade-amm: buying initial BLD with 50% of our RUN`);
+      if (AmountMath.isEmpty(run)) {
+        throw Error(`no RUN, trade-amm cannot proceed`);
+      }
+      const halfAmount = AmountMath.make(runBrand, run.value / BigInt(2));
+      await buyBldWithRun(halfAmount);
       ({ run, bld } = await getBalances());
     }
     // we sell 1% of the holdings each time
