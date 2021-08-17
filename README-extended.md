@@ -1,4 +1,4 @@
-# Load Generator
+# Load Generator (Extended)
 
 ## Runner
 
