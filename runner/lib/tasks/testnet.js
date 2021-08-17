@@ -108,6 +108,15 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       testnetOrigin = testnetOriginOption;
     }
 
+    console.log('Fetching network config');
+    // eslint-disable-next-line jsdoc/check-alignment
+    const networkConfig = /** @type {{
+     *   chainName: string,
+     *   peers: string[],
+     *   seeds: string[]
+     * } & Record<string, unknown>}
+     */ (await fetchAsJSON(`${testnetOrigin}/network-config`));
+
     if (withMonitor !== false) {
       if (reset) {
         console.log('Resetting chain node');
@@ -121,14 +130,8 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
         .catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
 
       if (!chainDirStat) {
-        console.log('Fetching network config and genesis');
-        const {
-          chainName,
-          peers,
-          seeds,
-        } = /** @type {{chainName: string, peers: string[], seeds: string[]}} */ (await fetchAsJSON(
-          `${testnetOrigin}/network-config`,
-        ));
+        const { chainName, peers, seeds } = networkConfig;
+        console.log('Fetching genesis');
         const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
 
         await childProcessDone(
@@ -162,17 +165,15 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       }
     }
 
-    if (reset) {
-      console.log('Resetting client');
-      await childProcessDone(
-        pipedSpawn('rm', ['-rf', clientStateDir], { stdio }),
-      );
-
-      // TODO: start client to provision the first time then kill it
-    }
-
     // Make sure client is provisioned
     if (chainOnly !== true) {
+      if (reset) {
+        console.log('Resetting client');
+        await childProcessDone(
+          pipedSpawn('rm', ['-rf', clientStateDir], { stdio }),
+        );
+      }
+
       console.log('Provisioning client');
 
       const launcherCp = pipedSpawn(
