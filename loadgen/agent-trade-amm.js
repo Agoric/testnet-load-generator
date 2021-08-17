@@ -9,7 +9,7 @@ import { allValues } from './allValues';
 // The default export function is called with some args.
 
 export default async function startAgent([key, home]) {
-  const { zoe, scratch, agoricNames, wallet } = home;
+  const { zoe, scratch, agoricNames, wallet, faucet } = home;
 
   console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
@@ -91,13 +91,20 @@ export default async function startAgent([key, home]) {
     console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
     // eslint-disable-next-line no-constant-condition
     if (1) {
-      // setup: buy BLD with 50% of our RUN
-      console.error(`trade-amm: buying initial BLD with 50% of our RUN`);
+      // TODO: change to the appropriate amounts
+      // setup: buy BLD with 33% of our initial RUN
+      console.error(`trade-amm: buying initial BLD with 33% of our RUN`);
       if (AmountMath.isEmpty(run)) {
         throw Error(`no RUN, trade-amm cannot proceed`);
       }
-      const halfAmount = AmountMath.make(runBrand, run.value / BigInt(2));
-      await buyBldWithRun(halfAmount);
+      const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
+      await buyBldWithRun(thirdRunAmount);
+
+      // setup: transfer other 33% (remaining half) of our RUN to the feePurse
+      const feePurse = E(faucet).getFeePurse();
+      const feePayment = await E(runPurse).withdraw(thirdRunAmount);
+      await E(feePurse).deposit(feePayment);
+
       ({ run, bld } = await getBalances());
     }
     // we sell 1% of the holdings each time
