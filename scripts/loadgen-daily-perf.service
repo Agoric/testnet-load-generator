@@ -1,0 +1,17 @@
+[Unit]
+Description=Agoric SDK loadgen daily perf runner
+DefaultDependencies=no
+After=docker.service
+
+[Service]
+Type=exec
+User=benchmark
+Group=benchmark
+WorkingDirectory=/home/benchmark/workspace/daily-perf/
+ExecStart=/home/benchmark/workspace/daily-perf/run.sh
+TimeoutStartSec=0
+TimeoutStopSec=3600
+KillMode=mixed
+
+[Install]
+WantedBy=default.target
