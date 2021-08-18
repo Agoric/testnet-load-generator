@@ -22,6 +22,25 @@ export default async function startAgent([key, home]) {
     bldPurse: E(wallet).getPurse(pursePetnames.BLD),
   });
   // const bldBrand = await E(bldPurse).getAllegedBrand();
+
+  {
+    const run = await E(runPurse).getCurrentAmount();
+    const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
+
+    if (AmountMath.isEmpty(run)) {
+      throw Error(`no RUN, trade-amm cannot proceed`);
+    }
+
+    // TODO: change to the appropriate amounts
+    // setup: transfer 33% of our initial RUN to the feePurse
+    console.error(
+      `trade-amm: depositing ${disp(thirdRunAmount)} into the fee purse`,
+    );
+    const feePurse = E(faucet).getFeePurse();
+    const feePayment = await E(runPurse).withdraw(thirdRunAmount);
+    await E(feePurse).deposit(feePayment);
+  }
+
   const publicFacet = await E(zoe).getPublicFacet(autoswap);
 
   console.error(`trade-amm: tools installed`);
@@ -91,20 +110,10 @@ export default async function startAgent([key, home]) {
     console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
     // eslint-disable-next-line no-constant-condition
     if (1) {
-      // TODO: change to the appropriate amounts
-      // setup: buy BLD with 33% of our initial RUN
-      console.error(`trade-amm: buying initial BLD with 33% of our RUN`);
-      if (AmountMath.isEmpty(run)) {
-        throw Error(`no RUN, trade-amm cannot proceed`);
-      }
-      const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
-      await buyBldWithRun(thirdRunAmount);
-
-      // setup: transfer other 33% (remaining half) of our RUN to the feePurse
-      const feePurse = E(faucet).getFeePurse();
-      const feePayment = await E(runPurse).withdraw(thirdRunAmount);
-      await E(feePurse).deposit(feePayment);
-
+      // setup: buy BLD with 50% of our remaining RUN (33% of initial amount)
+      console.error(`trade-amm: buying BLD with 33% of our initial RUN`);
+      const halfAmount = AmountMath.make(runBrand, run.value / BigInt(2));
+      await buyBldWithRun(halfAmount);
       ({ run, bld } = await getBalances());
     }
     // we sell 1% of the holdings each time
