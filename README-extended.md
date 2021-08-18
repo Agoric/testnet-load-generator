@@ -38,7 +38,7 @@ Currently the following options are available:
 - `--stage.duration`: the time in minutes to use as default duration for each loadgen stage (non chain-only, see below). Defaults to 360 minutes (6 hours).
 - `--stage.n.*`: Override config for a given stage 0 <= n < `--stages`
 - `--stage.n.loadgen.*`: the object to use as loadgen config for the given stage. If specified and `chain-only` is missing Created from multiple arguments and passed as-is to the loadgen tool.
-- `--stage.n.
+- `--stage.n.`
 - `--stage.n.chain-only`: boolean flag specifying if the stage should only run the chain node and not start a client or loadgen. Defaults to `true` for first and last stage. Defaults to `false` for other stages, or if `--stage.n.loadgen.*` is specified.
 - `--stage.n.save-storage`: boolean indicating if the storage of the chain node should be saved at the end of the stage. Defaults to `true` for non stage-only stages (where the loadgen runs), as well as for stage 0 (to capture local bootstrap).
 - `--stage.n.duration`: the time in minutes for the stage duration. Defaults to the shared duration above for non chain-only stages, or 0 (immediate stop after start) otherwise. Use a negative value to run until interrupted.

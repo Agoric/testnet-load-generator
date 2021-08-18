@@ -52,7 +52,7 @@ or directly using the `agoric` cli
 agoric deploy loadgen/loop.js
 ```
 
-See the [delpoy CLI reference](https://agoric.com/documentation/guides/agoric-cli/commands.html#agoric-deploy) for options like configuring the host/port of the client.
+See the [deploy CLI reference](https://agoric.com/documentation/guides/agoric-cli/commands.html#agoric-deploy) for options like configuring the host/port of the client.
 
 ## Loadgen types
 
