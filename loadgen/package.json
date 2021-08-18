@@ -30,6 +30,7 @@
     "@agoric/install-ses": "*",
     "@agoric/marshal": "*",
     "@agoric/notifier": "*",
+    "@agoric/promise-kit": "*",
     "@agoric/store": "*",
     "@agoric/ui-components": "*",
     "@agoric/zoe": "*",

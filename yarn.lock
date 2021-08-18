@@ -356,7 +356,7 @@
     "@agoric/swingset-vat" "^0.16.0"
     "@agoric/zoe" "^0.15.0"
 
-"@agoric/promise-kit@^0.2.21":
+"@agoric/promise-kit@*", "@agoric/promise-kit@^0.2.21":
   version "0.2.21"
   resolved "https://registry.yarnpkg.com/@agoric/promise-kit/-/promise-kit-0.2.21.tgz#66aa16a020479c610608f169ae08eea9d018d62a"
   integrity sha512-3v7FxmkH5qBkMjQ5Js99VJfKbi06ez5HaRTo/iX47x7i+rzyVB6f9wwVXnlPXWnbFyRxaOuiz1R4hqd6CHEDTA==

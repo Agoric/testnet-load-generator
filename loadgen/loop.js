@@ -3,6 +3,9 @@
 
 import { performance } from 'perf_hooks';
 import http from 'http';
+
+import { getFirebaseHandler } from './firebase.js';
+
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
@@ -16,6 +19,8 @@ let currentConfig = {
   // amm: { interval: 120},
   // vault: { interval: 120, wait: 60 },
 };
+
+let pushHandler;
 
 const tasks = {
   // faucet: [prepareFaucet],
@@ -119,37 +124,59 @@ function updateConfig(config) {
   }
 }
 
+function handleConfigRequest(req, res, get, set) {
+  if (req.method === 'PUT') {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', async () => {
+      try {
+        await set(body);
+        res.end('config updated\n');
+      } catch (err) {
+        console.log(`config update error`, err);
+        res.end(`config error ${err}\n`);
+      }
+    });
+  } else {
+    Promise.resolve(get()).then((config) => res.end(`${config}\n`));
+  }
+}
+
 async function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     // console.log(`pathname ${url.pathname}, ${req.method}`);
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     if (url.pathname === '/config') {
-      if (req.method === 'PUT') {
-        let body = '';
-        req.setEncoding('utf8');
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-        req.on('end', () => {
-          try {
-            const newConfig = JSON.parse(body);
-            if (checkConfig(newConfig)) {
-              console.log(`updating config:`);
-              console.log(`from: ${JSON.stringify(currentConfig)}`);
-              console.log(`  to: ${JSON.stringify(newConfig)}`);
-              currentConfig = newConfig;
-              updateConfig(currentConfig);
-            }
-            res.end('config updated\n');
-          } catch (err) {
-            console.log(`config update error`, err);
-            res.end(`config error ${err}\n`);
+      handleConfigRequest(
+        req,
+        res,
+        () => JSON.stringify(currentConfig),
+        (body) => {
+          const newConfig = JSON.parse(body);
+          if (checkConfig(newConfig)) {
+            console.log(`updating config:`);
+            console.log(`from: ${JSON.stringify(currentConfig)}`);
+            console.log(`  to: ${JSON.stringify(newConfig)}`);
+            currentConfig = newConfig;
+            updateConfig(currentConfig);
           }
-        });
-      } else {
-        res.end(`${JSON.stringify(currentConfig)}\n`);
-      }
+        },
+      );
+    } else if (url.pathname === '/push-config') {
+      handleConfigRequest(
+        req,
+        res,
+        () => (pushHandler ? pushHandler.getId() : ''),
+        async (newConfig) => {
+          const newPushHandler = await getFirebaseHandler(newConfig);
+          pushHandler = newPushHandler;
+          console.log(`new push config:`, pushHandler.getId());
+        },
+      );
     } else {
       res.end(`${JSON.stringify(status)}\n`);
     }
