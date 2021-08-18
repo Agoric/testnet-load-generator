@@ -3,14 +3,14 @@
 
 import { performance } from 'perf_hooks';
 import http from 'http';
-import { prepareFaucet } from './task-tap-faucet';
+// import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
 let currentConfig = {
-  faucet: null, // or { interval=60, limit=1, wait=0 }
+  // faucet: null, // or { interval=60, limit=1, wait=0 }
   amm: null,
   vault: null,
   // amm: { interval: 120},
@@ -18,9 +18,9 @@ let currentConfig = {
 };
 
 const tasks = {
-  faucet: [prepareFaucet],
-  // we must start the AMM task before Vault, because it sells BLD, and both
-  // measure the balance
+  // faucet: [prepareFaucet],
+  // we must start the AMM task before Vault: AMM exchanges some RUN for BLD,
+  // and Vault measures the balances
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
 };

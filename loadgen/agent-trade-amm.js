@@ -9,7 +9,7 @@ import { allValues } from './allValues';
 // The default export function is called with some args.
 
 export default async function startAgent([key, home]) {
-  const { zoe, scratch, agoricNames, wallet } = home;
+  const { zoe, scratch, agoricNames, wallet, faucet } = home;
 
   console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
@@ -22,6 +22,25 @@ export default async function startAgent([key, home]) {
     bldPurse: E(wallet).getPurse(pursePetnames.BLD),
   });
   // const bldBrand = await E(bldPurse).getAllegedBrand();
+
+  {
+    const run = await E(runPurse).getCurrentAmount();
+    const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
+
+    if (AmountMath.isEmpty(run)) {
+      throw Error(`no RUN, trade-amm cannot proceed`);
+    }
+
+    // TODO: change to the appropriate amounts
+    // setup: transfer 33% of our initial RUN to the feePurse
+    console.error(
+      `trade-amm: depositing ${disp(thirdRunAmount)} into the fee purse`,
+    );
+    const feePurse = E(faucet).getFeePurse();
+    const feePayment = await E(runPurse).withdraw(thirdRunAmount);
+    await E(feePurse).deposit(feePayment);
+  }
+
   const publicFacet = await E(zoe).getPublicFacet(autoswap);
 
   console.error(`trade-amm: tools installed`);
@@ -30,18 +49,10 @@ export default async function startAgent([key, home]) {
     let bal;
     if (which === 'RUN') {
       bal = await E(runPurse).getCurrentAmount();
-      if (AmountMath.isEmpty(bal)) {
-        // some chain setups currently fail to make the purses visible with
-        // the right denominations
-        throw Error(`no RUN, trade-amm cannot proceed`);
-      }
       return bal;
     }
     if (which === 'BLD') {
       bal = await E(bldPurse).getCurrentAmount();
-      if (AmountMath.isEmpty(bal)) {
-        throw Error(`no BLD, trade-amm cannot proceed`);
-      }
       return bal;
     }
     throw Error(`unknown type ${which}`);
@@ -99,10 +110,10 @@ export default async function startAgent([key, home]) {
     console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
     // eslint-disable-next-line no-constant-condition
     if (1) {
-      // setup: buy RUN with 50% of our BLD
-      console.error(`trade-amm: buying initial RUN with 50% of our BLD`);
-      const halfAmount = AmountMath.make(bldBrand, bld.value / BigInt(2));
-      await buyRunWithBld(halfAmount);
+      // setup: buy BLD with 50% of our remaining RUN (33% of initial amount)
+      console.error(`trade-amm: buying BLD with 33% of our initial RUN`);
+      const halfAmount = AmountMath.make(runBrand, run.value / BigInt(2));
+      await buyBldWithRun(halfAmount);
       ({ run, bld } = await getBalances());
     }
     // we sell 1% of the holdings each time

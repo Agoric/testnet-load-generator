@@ -22,6 +22,7 @@ then
     then
         git -C "${SDK_SRC}" reset --hard ${SDK_REVISION}
     fi
+    SDK_BUILD=1
 fi
 
 SDK_FULL_REVISION=$(git -C "${SDK_SRC}" rev-parse HEAD)
@@ -43,9 +44,11 @@ mkdir -p "${OUTPUT_DIR}"
 export PATH=$AGORIC_BIN_DIR:$PATH
 
 cd "$SDK_SRC"
-yarn install
-yarn build
-make -C packages/cosmic-swingset
+if [ "x$SDK_BUILD" != "x0" ]; then
+    yarn install
+    yarn build
+    make -C packages/cosmic-swingset
+fi
 
 rm -f "${AGORIC_BIN_DIR}/agoric"
 yarn link-cli "${AGORIC_BIN_DIR}/agoric"

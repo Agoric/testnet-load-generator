@@ -145,7 +145,12 @@ const coerceBooleanOption = (
   defaultValue,
   assertBool = true,
 ) => {
-  switch (maybeBoolValue) {
+  const value =
+    assertBool && Array.isArray(maybeBoolValue)
+      ? maybeBoolValue.slice(-1)[0]
+      : maybeBoolValue;
+
+  switch (value) {
     case 1:
     case true:
     case 'true':
@@ -883,11 +888,17 @@ const main = async (progName, rawArgs, powers) => {
       });
 
       const withMonitor = coerceBooleanOption(argv.monitor, true);
+      const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       {
         const { releaseInterrupt } = makeInterrupterKit();
 
         const reset = coerceBooleanOption(argv.reset, true);
-        const setupConfig = { reset, withMonitor, testnetOrigin };
+        const setupConfig = {
+          reset,
+          chainOnly: globalChainOnly,
+          withMonitor,
+          testnetOrigin,
+        };
         logPerfEvent('setup-tasks-start', setupConfig);
         await aggregateTryFinally(
           // Do not short-circuit on interrupt, let the spawned setup process terminate
@@ -924,7 +935,7 @@ const main = async (progName, rawArgs, powers) => {
 
         const withLoadgen = coerceBooleanOption(
           stageConfig.loadgen,
-          undefined,
+          globalChainOnly ? false : undefined,
           false,
         );
 
@@ -936,14 +947,16 @@ const main = async (progName, rawArgs, powers) => {
         // By default the first stage will only initialize the chain from genesis
         // and the last stage will only capture the chain restart time
         // loadgen and chainOnly options overide default
-        const chainOnly = coerceBooleanOption(
-          stageConfig.chainOnly,
-          withLoadgen != null
-            ? !withLoadgen // use boolean loadgen option value as default chainOnly
-            : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
-                withMonitor && // If monitor is disabled, chainOnly has no meaning
-                (currentStage === 0 || currentStage === stages - 1),
-        );
+        const chainOnly =
+          globalChainOnly ||
+          coerceBooleanOption(
+            stageConfig.chainOnly,
+            withLoadgen != null
+              ? !withLoadgen // use boolean loadgen option value as default chainOnly
+              : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
+                  withMonitor && // If monitor is disabled, chainOnly has no meaning
+                  (currentStage === 0 || currentStage === stages - 1),
+          );
 
         const saveStorage = coerceBooleanOption(
           stageConfig.saveStorage,
