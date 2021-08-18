@@ -145,7 +145,12 @@ const coerceBooleanOption = (
   defaultValue,
   assertBool = true,
 ) => {
-  switch (maybeBoolValue) {
+  const value =
+    assertBool && Array.isArray(maybeBoolValue)
+      ? maybeBoolValue.slice(-1)[0]
+      : maybeBoolValue;
+
+  switch (value) {
     case 1:
     case true:
     case 'true':

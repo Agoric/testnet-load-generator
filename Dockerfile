@@ -150,6 +150,7 @@ ENV IS_DOCKER=true
 ENV SDK_SRC=/src
 ENV OUTPUT_DIR=/out
 ENV SDK_REVISION=
+ENV SDK_BUILD=0
 
 WORKDIR /app
 COPY --chown=$USER_UID:$USER_GID . .
@@ -158,4 +159,4 @@ RUN mkdir -p $SDK_SRC $OUTPUT_DIR && chown $USER_UID:$USER_GID $SDK_SRC $OUTPUT_
 
 USER $USER_UID:$USER_GID
 
-ENTRYPOINT ["/tini", "--", "/app/start.sh"]
+ENTRYPOINT ["/tini", "--", "/app/start.sh", "--no-reset"]

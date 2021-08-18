@@ -7,3 +7,13 @@ ui/.cache/
 ui/dist/
 /Dockerfile
 /results
+
+_agstate/agoric-wallet
+_agstate/keys
+
+_agstate/agoric-servers/solo
+_agstate/agoric-servers/dev
+_agstate/agoric-servers/testnet-*
+_agstate/agoric-servers/chain
+_agstate/agoric-servers/ve*
+_agstate/agoric-servers/local-*
