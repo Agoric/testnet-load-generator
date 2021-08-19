@@ -20,7 +20,7 @@ let currentConfig = {
   // vault: { interval: 120, wait: 60 },
 };
 
-let pushHandler;
+let pushHandler = null;
 
 const tasks = {
   // faucet: [prepareFaucet],
@@ -124,6 +124,20 @@ function updateConfig(config) {
   }
 }
 
+const checkAndUpdateConfig = (newConfigOrNull) => {
+  const newConfig = newConfigOrNull || {};
+  if (checkConfig(newConfig)) {
+    console.log(`updating config:`);
+    console.log(`from: ${JSON.stringify(currentConfig)}`);
+    console.log(`  to: ${JSON.stringify(newConfig)}`);
+    currentConfig = newConfig;
+    updateConfig(currentConfig);
+    if (pushHandler) {
+      pushHandler.configUpdated(newConfig);
+    }
+  }
+};
+
 function handleConfigRequest(req, res, get, set) {
   if (req.method === 'PUT') {
     let body = '';
@@ -157,13 +171,7 @@ async function startServer() {
         () => JSON.stringify(currentConfig),
         (body) => {
           const newConfig = JSON.parse(body);
-          if (checkConfig(newConfig)) {
-            console.log(`updating config:`);
-            console.log(`from: ${JSON.stringify(currentConfig)}`);
-            console.log(`  to: ${JSON.stringify(newConfig)}`);
-            currentConfig = newConfig;
-            updateConfig(currentConfig);
-          }
+          checkAndUpdateConfig(newConfig);
         },
       );
     } else if (url.pathname === '/push-config') {
@@ -172,9 +180,25 @@ async function startServer() {
         res,
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
-          const newPushHandler = await getFirebaseHandler(newConfig);
+          const newPushHandler = newConfig.trim()
+            ? await getFirebaseHandler(newConfig)
+            : null;
+          if (pushHandler === newPushHandler) return;
+
+          if (pushHandler) {
+            pushHandler.setRequestedConfigHandler(null);
+            pushHandler.disconnect();
+          }
           pushHandler = newPushHandler;
-          console.log(`new push config:`, pushHandler.getId());
+          if (pushHandler) {
+            pushHandler.setRequestedConfigHandler(checkAndUpdateConfig);
+            pushHandler.configUpdated(currentConfig);
+          }
+
+          console.log(
+            `new push config:`,
+            pushHandler ? pushHandler.getId() : 'none',
+          );
         },
       );
     } else {
