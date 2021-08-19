@@ -26,7 +26,7 @@ cd testnet-load-generator
 To interact with the chain, a client must be running. With a local agoric-sdk available, the easiest to run a client for the testnet chain is directly using the following command:
 
 ```sh
-agoric start testnet
+agoric start testnet 8000 https://testnet.agoric.net/network-config
 ```
 
 The above command stores the client's state in the current directory's `_agstate/agoric-servers/testnet-8000`. If for any reason you need to reset your client, you can delete that directory.
