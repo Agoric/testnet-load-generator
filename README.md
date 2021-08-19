@@ -12,7 +12,21 @@ Since the loadgen is a dapp, it requires a local `agoric-sdk` to execute, and a 
 
 ### Prerequisite
 
-Make sure you have the `agoric-sdk` with the correct revision built, with the `agoric` cli available in your PATH. Follow the steps in the guide to [Install the SDK](https://github.com/Agoric/agoric-sdk/wiki/Validator-Guide-for-Incentivized-Testnet#install-agoric-sdk).
+Make sure you have the `agoric-sdk` with the correct revision built, with the `agoric` cli available in your PATH. Follow the steps in the [Getting started documentation](https://agoric.com/documentation/getting-started/before-using-agoric.html). You'll need to checkout the [version of the SDK](https://github.com/Agoric/agoric-sdk/wiki/Validator-Guide-for-Incentivized-Testnet#network-status) corresponding to the testnet .
+
+```sh
+git clone https://github.com/Agoric/agoric-sdk.git -b agorictest-17
+git checkout 
+
+# Install and build Agoric Javascript packages
+yarn install
+yarn build
+
+# Install and build Agoric Cosmos SDK support
+(cd packages/cosmic-swingset && make)
+
+yarn link-cli <agoric script location>
+```
 
 Clone the loadgen and cd into the directory. All following commands run from the loadgen folder.
 
@@ -41,11 +55,19 @@ To avoid having the solo client, and by extension the loadgen, be impacted by lo
 
 ```sh
 wget https://testnet.agoric.net/network-config
-vi network-config # add/replace rpcAddrs with the address of the local chain node
+vi network-config # add/replace rpcAddrs with the address of the local chain node as `"xxx.xxx.xxx.xxx:yyyyy"`
 agoric start testnet 8000 $(pwd)/network-config
 ```
 
-### Start the loadgen
+If you need to edit the `rpcAddresses` after the first start, you can modify `_agstate/agoric-servers/testnet-8000/connections.json`.
+
+### Setup and start the loadgen
+
+The first time, you need to install the loadgen dependencies:
+
+```sh
+agoric install
+```
 
 After the client is started (`Deployed Wallet!` shown in the output), the loadgen can be started as well.
 
@@ -65,7 +87,7 @@ See the [deploy CLI reference](https://agoric.com/documentation/guides/agoric-cl
 
 The loadgen's config can be remotely controlled by an orchestration service (currently using Firebase).
 
-To link the loadgen to the remote orchestrator, you need to provide authentication details. For the incentivized testnet, login to https://submit.agoric.app/, visit the [Load Generator Key](https://submit.agoric.app/participant/loadGenKey) page, and follow instructions.
+To link the loadgen to the remote orchestrator, you need to provide authentication details. For the incentivized testnet, login to https://submit.agoric.app/, visit the [Load Generator Key](https://submit.agoric.app/participant/loadGenKey) page, and follow the instructions.
 
 ## Loadgen types
 
