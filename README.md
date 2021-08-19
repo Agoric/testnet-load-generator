@@ -14,6 +14,13 @@ Since the loadgen is a dapp, it requires a local `agoric-sdk` to execute, and a 
 
 Make sure you have the `agoric-sdk` with the correct revision built, with the `agoric` cli available in your PATH. Follow the steps in the guide to [Install the SDK](https://github.com/Agoric/agoric-sdk/wiki/Validator-Guide-for-Incentivized-Testnet#install-agoric-sdk).
 
+Clone the loadgen and cd into the directory. All following commands run from the loadgen folder.
+
+```sh
+git clone https://github.com/Agoric/testnet-load-generator.git
+cd testnet-load-generator
+```
+
 ### Running client
 
 To interact with the chain, a client must be running. With a local agoric-sdk available, the easiest to run a client for the testnet chain is directly using the following command:
