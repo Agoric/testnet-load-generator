@@ -256,6 +256,7 @@ const main = async (progName, rawArgs, powers) => {
   console.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
 
+  /** @type {typeof makeLocalChainTasks | typeof makeTestnetTasks} */
   let makeTasks;
   /** @type {string} */
   let testnetOrigin;
@@ -966,7 +967,9 @@ const main = async (progName, rawArgs, powers) => {
         const duration =
           (stageConfig.duration != null
             ? Number(stageConfig.duration)
-            : (!chainOnly && sharedStageDurationMinutes) || 0) *
+            : (!(chainOnly && makeTasks === makeLocalChainTasks) &&
+                sharedStageDurationMinutes) ||
+              0) *
           60 *
           1000;
 
