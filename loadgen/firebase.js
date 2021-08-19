@@ -25,7 +25,7 @@ import {
 
 const objectsForAuthDomain = new Map();
 
-const makeFirebaseConnectionHandler = (app) => {
+const makeFirebaseConnectionHandler = (app, clientAddress) => {
   const db = getDatabase(app);
   goOffline(db);
 
@@ -75,6 +75,7 @@ const makeFirebaseConnectionHandler = (app) => {
 
       await set(loadgen, {
         userId,
+        clientAddress,
         connected: false,
         connectedAt: null,
         disconnectedAt: null,
@@ -179,7 +180,7 @@ const getCredentials = async (auth, newToken) => {
   return newCredentials;
 };
 
-export async function getFirebaseHandler(customToken) {
+export async function getFirebaseHandler(customToken, clientAddress) {
   const firstDot = customToken.indexOf('.');
   const encodedFirebaseConfig =
     firstDot >= 0 ? customToken.slice(0, firstDot) : customToken;
@@ -206,7 +207,10 @@ export async function getFirebaseHandler(customToken) {
   } else {
     const app = initializeApp(firebaseConfig, firebaseConfig.projectId);
     const auth = getAuth(app);
-    const { connectFacet, configFacet } = makeFirebaseConnectionHandler(app);
+    const { connectFacet, configFacet } = makeFirebaseConnectionHandler(
+      app,
+      clientAddress,
+    );
     authDomainObjects = {
       auth,
       connectFacet,

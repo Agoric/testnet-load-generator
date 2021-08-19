@@ -4,11 +4,15 @@
 import { performance } from 'perf_hooks';
 import http from 'http';
 
+import { E } from '@agoric/eventual-send';
+
 import { getFirebaseHandler } from './firebase.js';
 
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
+
+let myAddr;
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
@@ -190,7 +194,7 @@ async function startServer() {
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
           const newPushHandler = newConfig.trim()
-            ? await getFirebaseHandler(newConfig)
+            ? await getFirebaseHandler(newConfig, myAddr)
             : null;
           if (pushHandler === newPushHandler) return;
 
@@ -234,9 +238,11 @@ export default async function runCycles(homePromise, deployPowers) {
     runners[name] = { cycle };
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
+  const { myAddressNameAdmin } = await homePromise;
+  myAddr = await E(myAddressNameAdmin).getMyAddress();
   console.log('all tasks ready');
   await startServer();
-  console.log('server running on 127.0.0.1:3352');
+  console.log(`server running for ${myAddr} on 127.0.0.1:3352`);
 
   if (!checkConfig(currentConfig)) {
     throw Error('bad config');
