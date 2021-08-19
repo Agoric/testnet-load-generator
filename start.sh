@@ -52,7 +52,7 @@ fi
 
 rm -f "${AGORIC_BIN_DIR}/agoric"
 yarn link-cli "${AGORIC_BIN_DIR}/agoric"
-ln -s "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR}/ag-chain-cosmos"
+ln -sf "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR}/ag-chain-cosmos"
 
 cd "$LOADGEN_DIR"
 agoric install
