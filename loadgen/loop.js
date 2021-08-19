@@ -52,17 +52,26 @@ function maybeStartOneCycle(name, limit) {
   s.active += 1;
   console.log(`starting ${name} [${seq}], active=${s.active} at ${new Date()}`);
   logdata({ type: 'start', task: name, seq });
+  if (pushHandler) {
+    pushHandler.recordTaskStart(name, seq);
+  }
   runners[name]
     .cycle()
     .then(
       () => {
         console.log(` finished ${name} at ${new Date()}`);
         logdata({ type: 'finish', task: name, seq, success: true });
+        if (pushHandler) {
+          pushHandler.recordTaskEnd(name, seq, true);
+        }
         s.succeeded += 1;
       },
       (err) => {
         console.log(`[${name}] failed:`, err);
         logdata({ type: 'finish', task: name, seq, success: false });
+        if (pushHandler) {
+          pushHandler.recordTaskEnd(name, seq, false);
+        }
         s.failed += 1;
       },
     )

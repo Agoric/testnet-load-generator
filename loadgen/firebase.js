@@ -32,6 +32,7 @@ const makeFirebaseConnectionHandler = (app) => {
   const loadgen = push(ref(db, 'loadgens'));
   const loadgenId = loadgen.key;
   const loadgenConfigs = child(loadgen, 'configs');
+  const loadgenTasks = child(loadgen, 'tasks');
 
   let user;
   let userActiveLoadgen;
@@ -135,6 +136,23 @@ const makeFirebaseConnectionHandler = (app) => {
     }
   };
 
+  const recordTaskStart = (type, seq) => {
+    set(child(loadgenTasks, `${type}/${seq}`), {
+      startedAt: Date.now(),
+    }).catch((err) =>
+      console.error(`recordTaskStart ${type} ${seq} error`, err),
+    );
+  };
+
+  const recordTaskEnd = (type, seq, success) => {
+    update(child(loadgenTasks, `${type}/${seq}`), {
+      endedAt: Date.now(),
+      success,
+    }).catch((err) =>
+      console.error(`recordTaskEnd ${type} ${seq} ${success} error`, err),
+    );
+  };
+
   return harden({
     connectFacet: {
       connect,
@@ -144,6 +162,8 @@ const makeFirebaseConnectionHandler = (app) => {
       getId,
       configUpdated,
       setRequestedConfigHandler,
+      recordTaskStart,
+      recordTaskEnd,
     },
   });
 };
