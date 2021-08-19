@@ -6,13 +6,14 @@ import http from 'http';
 
 import { E } from '@agoric/eventual-send';
 
-import { getFirebaseHandler } from './firebase.js';
+import { makeAuthBroker } from './firebase/auth.js';
+import { makeClientConnectionHandlerFactory } from './firebase/client.js';
 
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
-let myAddr;
+let pushHandlerBroker;
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
@@ -194,7 +195,7 @@ async function startServer() {
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
           const newPushHandler = newConfig.trim()
-            ? await getFirebaseHandler(newConfig, myAddr)
+            ? await pushHandlerBroker(newConfig)
             : null;
           if (pushHandler === newPushHandler) return;
 
@@ -239,7 +240,9 @@ export default async function runCycles(homePromise, deployPowers) {
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
   const { myAddressNameAdmin } = await homePromise;
-  myAddr = await E(myAddressNameAdmin).getMyAddress();
+  const myAddr = await E(myAddressNameAdmin).getMyAddress();
+  const connectionHandlerFactory = makeClientConnectionHandlerFactory(myAddr);
+  pushHandlerBroker = makeAuthBroker(connectionHandlerFactory);
   console.log('all tasks ready');
   await startServer();
   console.log(`server running for ${myAddr} on 127.0.0.1:3352`);
