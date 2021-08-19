@@ -9,30 +9,35 @@ import {
   update,
   set,
   push,
-  child,
   onValue,
   serverTimestamp,
   onDisconnect,
   goOnline,
   goOffline,
   remove,
+  child,
 } from 'firebase/database';
 
-export const makeClientConnectionHandlerFactory = (clientAddress) => (app) => {
+export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   const db = getDatabase(app);
   goOffline(db);
 
-  const loadgen = push(ref(db, 'loadgens'));
-  const loadgenId = loadgen.key;
-  const loadgenConfigs = child(loadgen, 'configs');
-  const loadgenTasks = child(loadgen, 'tasks');
+  const loadgenRoot = ref(db, 'loadgen');
+
+  const client = push(child(loadgenRoot, 'clients'));
+  const clientId = client.key;
+  const cycles = child(loadgenRoot, 'cycles');
+  const configs = child(loadgenRoot, 'configs');
+  const requestedConfig = child(loadgenRoot, `requestedConfigs/${clientId}`);
+
+  const pendingCycles = new Map();
 
   let user;
-  let userActiveLoadgen;
+  let userActiveClient;
   let connectedUnsubscribe;
 
   let configHandler;
-  let requestConfigUnsubscribe;
+  let requestedConfigUnsubscribe;
 
   const connect = async (newUser) => {
     const connectedRef = ref(db, '.info/connected');
@@ -43,15 +48,16 @@ export const makeClientConnectionHandlerFactory = (clientAddress) => (app) => {
       connectedUnsubscribe();
       connectedUnsubscribe = null;
       await Promise.all([
-        update(loadgen, {
+        update(client, {
           disconnectedAt: serverTimestamp(),
           connected: false,
         }),
-        remove(userActiveLoadgen),
+        remove(userActiveClient),
+        remove(requestedConfig),
         onDisconnect(ref(db)).cancel(),
       ]);
       goOffline(db);
-      userActiveLoadgen = null;
+      userActiveClient = null;
     }
 
     user = newUser;
@@ -61,33 +67,36 @@ export const makeClientConnectionHandlerFactory = (clientAddress) => (app) => {
       let firstConnection = makePromiseKit();
 
       const userId = user.uid;
-      userActiveLoadgen = ref(
+      userActiveClient = ref(
         db,
-        `users/${userId}/activeLoadgens/${loadgenId}`,
+        `users/${userId}/activeLoadgenClients/${clientId}`,
       );
 
-      await set(loadgen, {
-        userId,
-        clientAddress,
-        connected: false,
-        connectedAt: null,
-        disconnectedAt: null,
-        requestedConfig: null,
-      });
+      await Promise.all([
+        set(client, {
+          userId,
+          walletAddress,
+          connected: false,
+          connectedAt: null,
+          disconnectedAt: null,
+        }),
+        remove(requestedConfig),
+      ]);
 
       connectedUnsubscribe = onValue(connectedRef, (snap) => {
         if (snap.val() === true) {
           const done = Promise.all([
-            update(loadgen, {
+            update(client, {
               connectedAt: serverTimestamp(),
               connected: true,
             }),
-            set(userActiveLoadgen, true),
-            onDisconnect(loadgen).update({
+            set(userActiveClient, true),
+            onDisconnect(client).update({
               disconnectedAt: serverTimestamp(),
               connected: false,
             }),
-            onDisconnect(userActiveLoadgen).remove(),
+            onDisconnect(userActiveClient).remove(),
+            onDisconnect(requestedConfig).remove(),
           ]).then(() => {});
           if (firstConnection) {
             firstConnection.resolve(done);
@@ -102,44 +111,53 @@ export const makeClientConnectionHandlerFactory = (clientAddress) => (app) => {
     }
   };
 
-  const getId = () => loadgenId;
+  const getId = () => clientId;
 
   const configUpdated = async (newConfig) => {
-    await push(loadgenConfigs, {
+    await push(configs, {
+      clientId,
       updatedAt: Date.now(),
       data: newConfig,
     });
   };
 
   const setRequestedConfigHandler = (newConfigHandler) => {
-    if (requestConfigUnsubscribe) {
-      requestConfigUnsubscribe();
-      requestConfigUnsubscribe = null;
+    if (requestedConfigUnsubscribe) {
+      requestedConfigUnsubscribe();
+      requestedConfigUnsubscribe = null;
       configHandler = null;
     }
 
     configHandler = newConfigHandler;
 
     if (configHandler) {
-      requestConfigUnsubscribe = onValue(
-        child(loadgen, 'requestedConfig'),
-        (snap) => {
-          configHandler(snap.val());
-        },
-      );
+      requestedConfigUnsubscribe = onValue(requestedConfig, (snap) => {
+        configHandler(snap.val());
+      });
     }
   };
 
   const recordTaskStart = (type, seq) => {
-    set(child(loadgenTasks, `${type}/${seq}`), {
+    const cycle = push(cycles, {
+      clientId,
+      type,
+      seq,
       startedAt: Date.now(),
-    }).catch((err) =>
+    });
+
+    pendingCycles.set(`${type}/${seq}`, cycle);
+
+    cycle.catch((err) =>
       console.error(`recordTaskStart ${type} ${seq} error`, err),
     );
   };
 
   const recordTaskEnd = (type, seq, success) => {
-    update(child(loadgenTasks, `${type}/${seq}`), {
+    const key = `${type}/${seq}`;
+    const cycle = pendingCycles.get(key);
+    pendingCycles.delete(key);
+
+    update(cycle, {
       endedAt: Date.now(),
       success,
     }).catch((err) =>
