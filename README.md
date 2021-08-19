@@ -2,7 +2,7 @@
 
 The loadgen is implemented as a dapp deploy script which runs forever and listens for config updates. It can perform 3 different type of load generating tasks at any given interval (cycle): `faucet`, `amm`, `vault`. Each task is deployed to a vat on the solo client. Additionally the `faucet` task installs a faucet app on the chain. When the loadgen server starts a task's cycle, it invokes the task's agent running on the solo client, which performs its load generation on the chain.
 
-The loadgen accepts config updates from a local http port.
+The loadgen accepts config updates from a local http port, or by connecting to a remote orchestration service.
 
 For alternative usages of the loadgen, see the [Extended Readme](./README-extended.md).
 
@@ -53,6 +53,12 @@ agoric deploy loadgen/loop.js
 ```
 
 See the [deploy CLI reference](https://agoric.com/documentation/guides/agoric-cli/commands.html#agoric-deploy) for options like configuring the host/port of the client.
+
+### (Testnet) Link loadgen to remote orchestrator
+
+The loadgen's config can be remotely controlled by an orchestration service (currently using Firebase).
+
+To link the loadgen to the remote orchestrator, you need to provide authentication details. For the incentivized testnet, login to https://submit.agoric.app/, visit the [Load Generator Key](https://submit.agoric.app/participant/loadGenKey) page, and follow instructions.
 
 ## Loadgen types
 
