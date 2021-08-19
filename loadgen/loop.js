@@ -3,9 +3,16 @@
 
 import { performance } from 'perf_hooks';
 import http from 'http';
+
+import { E } from '@agoric/eventual-send';
+
+import { getFirebaseHandler } from './firebase.js';
+
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
+
+let myAddr;
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
@@ -16,6 +23,8 @@ let currentConfig = {
   // amm: { interval: 120},
   // vault: { interval: 120, wait: 60 },
 };
+
+let pushHandler = null;
 
 const tasks = {
   // faucet: [prepareFaucet],
@@ -47,17 +56,26 @@ function maybeStartOneCycle(name, limit) {
   s.active += 1;
   console.log(`starting ${name} [${seq}], active=${s.active} at ${new Date()}`);
   logdata({ type: 'start', task: name, seq });
+  if (pushHandler) {
+    pushHandler.recordTaskStart(name, seq);
+  }
   runners[name]
     .cycle()
     .then(
       () => {
         console.log(` finished ${name} at ${new Date()}`);
         logdata({ type: 'finish', task: name, seq, success: true });
+        if (pushHandler) {
+          pushHandler.recordTaskEnd(name, seq, true);
+        }
         s.succeeded += 1;
       },
       (err) => {
         console.log(`[${name}] failed:`, err);
         logdata({ type: 'finish', task: name, seq, success: false });
+        if (pushHandler) {
+          pushHandler.recordTaskEnd(name, seq, false);
+        }
         s.failed += 1;
       },
     )
@@ -119,37 +137,83 @@ function updateConfig(config) {
   }
 }
 
+const checkAndUpdateConfig = (newConfigOrNull) => {
+  const newConfig = newConfigOrNull || {};
+  if (checkConfig(newConfig)) {
+    console.log(`updating config:`);
+    console.log(`from: ${JSON.stringify(currentConfig)}`);
+    console.log(`  to: ${JSON.stringify(newConfig)}`);
+    currentConfig = newConfig;
+    updateConfig(currentConfig);
+    if (pushHandler) {
+      pushHandler.configUpdated(newConfig);
+    }
+  }
+};
+
+function handleConfigRequest(req, res, get, set) {
+  if (req.method === 'PUT') {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', async () => {
+      try {
+        await set(body);
+        res.end('config updated\n');
+      } catch (err) {
+        console.log(`config update error`, err);
+        res.end(`config error ${err}\n`);
+      }
+    });
+  } else {
+    Promise.resolve(get()).then((config) => res.end(`${config}\n`));
+  }
+}
+
 async function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     // console.log(`pathname ${url.pathname}, ${req.method}`);
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     if (url.pathname === '/config') {
-      if (req.method === 'PUT') {
-        let body = '';
-        req.setEncoding('utf8');
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-        req.on('end', () => {
-          try {
-            const newConfig = JSON.parse(body);
-            if (checkConfig(newConfig)) {
-              console.log(`updating config:`);
-              console.log(`from: ${JSON.stringify(currentConfig)}`);
-              console.log(`  to: ${JSON.stringify(newConfig)}`);
-              currentConfig = newConfig;
-              updateConfig(currentConfig);
-            }
-            res.end('config updated\n');
-          } catch (err) {
-            console.log(`config update error`, err);
-            res.end(`config error ${err}\n`);
+      handleConfigRequest(
+        req,
+        res,
+        () => JSON.stringify(currentConfig),
+        (body) => {
+          const newConfig = JSON.parse(body);
+          checkAndUpdateConfig(newConfig);
+        },
+      );
+    } else if (url.pathname === '/push-config') {
+      handleConfigRequest(
+        req,
+        res,
+        () => (pushHandler ? pushHandler.getId() : ''),
+        async (newConfig) => {
+          const newPushHandler = newConfig.trim()
+            ? await getFirebaseHandler(newConfig, myAddr)
+            : null;
+          if (pushHandler === newPushHandler) return;
+
+          if (pushHandler) {
+            pushHandler.setRequestedConfigHandler(null);
+            pushHandler.disconnect();
           }
-        });
-      } else {
-        res.end(`${JSON.stringify(currentConfig)}\n`);
-      }
+          pushHandler = newPushHandler;
+          if (pushHandler) {
+            pushHandler.setRequestedConfigHandler(checkAndUpdateConfig);
+            pushHandler.configUpdated(currentConfig);
+          }
+
+          console.log(
+            `new push config:`,
+            pushHandler ? pushHandler.getId() : 'none',
+          );
+        },
+      );
     } else {
       res.end(`${JSON.stringify(status)}\n`);
     }
@@ -174,9 +238,11 @@ export default async function runCycles(homePromise, deployPowers) {
     runners[name] = { cycle };
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
+  const { myAddressNameAdmin } = await homePromise;
+  myAddr = await E(myAddressNameAdmin).getMyAddress();
   console.log('all tasks ready');
   await startServer();
-  console.log('server running on 127.0.0.1:3352');
+  console.log(`server running for ${myAddr} on 127.0.0.1:3352`);
 
   if (!checkConfig(currentConfig)) {
     throw Error('bad config');
