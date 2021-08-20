@@ -200,8 +200,8 @@ async function startServer() {
           if (pushHandler === newPushHandler) return;
 
           if (pushHandler) {
-            pushHandler.setRequestedConfigHandler(null);
             pushHandler.disconnect();
+            pushHandler.setRequestedConfigHandler(null);
           }
           pushHandler = newPushHandler;
           if (pushHandler) {

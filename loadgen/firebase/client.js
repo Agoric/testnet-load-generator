@@ -47,17 +47,11 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
     if (user) {
       connectedUnsubscribe();
       connectedUnsubscribe = null;
-      await Promise.all([
-        update(client, {
-          disconnectedAt: serverTimestamp(),
-          connected: false,
-        }),
-        remove(userActiveClient),
-        remove(requestedConfig),
-        onDisconnect(ref(db)).cancel(),
-      ]);
       goOffline(db);
       userActiveClient = null;
+      if (configHandler) {
+        configHandler(null);
+      }
     }
 
     user = newUser;
@@ -146,8 +140,12 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
     });
 
     pendingCycles.set(`${type}/${seq}`, cycle);
+    const onDisconnectUpdate = onDisconnect(cycle).update({
+      disconnectedAt: serverTimestamp(),
+      success: false,
+    });
 
-    cycle.catch((err) =>
+    Promise.all([cycle, onDisconnectUpdate]).catch((err) =>
       console.error(`recordTaskStart ${type} ${seq} error`, err),
     );
   };
@@ -155,12 +153,18 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   const recordTaskEnd = (type, seq, success) => {
     const key = `${type}/${seq}`;
     const cycle = pendingCycles.get(key);
-    pendingCycles.delete(key);
 
-    update(cycle, {
-      endedAt: Date.now(),
-      success,
-    }).catch((err) =>
+    if (!cycle) return;
+
+    pendingCycles.delete(key);
+    Promise.all([
+      onDisconnect(cycle).cancel(),
+      update(cycle, {
+        endedAt: Date.now(),
+        disconnectedAt: null,
+        success,
+      }),
+    ]).catch((err) =>
       console.error(`recordTaskEnd ${type} ${seq} ${success} error`, err),
     );
   };
