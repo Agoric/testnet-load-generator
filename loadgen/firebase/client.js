@@ -45,8 +45,10 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
     if (user === newUser) return;
 
     if (user) {
-      connectedUnsubscribe();
-      connectedUnsubscribe = null;
+      if (connectedUnsubscribe) {
+        connectedUnsubscribe();
+        connectedUnsubscribe = null;
+      }
       goOffline(db);
       userActiveClient = null;
       if (configHandler) {
