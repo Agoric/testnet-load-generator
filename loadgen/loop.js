@@ -6,13 +6,14 @@ import http from 'http';
 
 import { E } from '@agoric/eventual-send';
 
-import { getFirebaseHandler } from './firebase.js';
+import { makeAuthBroker } from './firebase/auth.js';
+import { makeClientConnectionHandlerFactory } from './firebase/client.js';
 
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
-let myAddr;
+let pushHandlerBroker;
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
@@ -34,7 +35,7 @@ const tasks = {
   vault: [prepareVaultCycle],
 };
 
-const runners = {}; // name -> { cycle, timer }
+const runners = {}; // name -> { cycle, stop?, limit }
 const status = {}; // name -> { active, succeeded, failed, next } // JSON-serializable
 
 function logdata(data) {
@@ -44,13 +45,17 @@ function logdata(data) {
   console.log(JSON.stringify({ time, ...data }));
 }
 
-function maybeStartOneCycle(name, limit) {
+function maybeStartOneCycle(name) {
   logdata({ type: 'status', status });
   const s = status[name];
-  if (s.active >= limit) {
-    console.log(`not starting ${name}, active limit reached`);
+  const r = runners[name];
+  if (s.active >= r.limit) {
+    console.log(
+      `not starting ${name}, ${s.active} active reached dynamic limit ${r.limit}`,
+    );
     return;
   }
+  r.limit = Math.max(0, r.limit - 1);
   const seq = s.next;
   s.next += 1;
   s.active += 1;
@@ -82,7 +87,7 @@ function maybeStartOneCycle(name, limit) {
     .then(() => {
       s.active -= 1;
       console.log(` ${name}.active now ${s.active}`);
-      logdata({ type: 'status', status });
+      maybeStartOneCycle(name);
     });
 }
 
@@ -113,10 +118,12 @@ function checkConfig(config) {
 // curl -X PUT --data '{"faucet":null}' http://127.0.0.1:3352/config
 
 function updateConfig(config) {
-  for (const r of Object.values(runners)) {
+  for (const [name, r] of Object.entries(runners)) {
     if (r.stop) {
       r.stop();
       r.stop = undefined;
+      const { limit = 1 } = config[name] || { limit: 0 };
+      r.limit = Math.min(r.limit, limit);
     }
   }
   for (const [name, data] of Object.entries(config)) {
@@ -125,14 +132,17 @@ function updateConfig(config) {
       continue;
     }
     const { interval = 60, limit = 1, wait = 0 } = data;
-    function start() {
-      const timer = setInterval(
-        () => maybeStartOneCycle(name, limit),
-        interval * 1000,
-      );
-      runners[name].stop = () => clearInterval(timer);
+    function bump() {
+      const r = runners[name];
+      r.limit = Math.min(r.limit + 1, limit);
+      maybeStartOneCycle(name);
     }
-    const timer = setTimeout(start, wait * 1000);
+    function start() {
+      const timer = setInterval(bump, Math.min(interval * 1000, 2 ** 31 - 1));
+      runners[name].stop = () => clearInterval(timer);
+      bump();
+    }
+    const timer = setTimeout(start, Math.min(wait * 1000, 2 ** 31 - 1));
     runners[name].stop = () => clearTimeout(timer);
   }
 }
@@ -194,13 +204,13 @@ async function startServer() {
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
           const newPushHandler = newConfig.trim()
-            ? await getFirebaseHandler(newConfig, myAddr)
+            ? await pushHandlerBroker(newConfig)
             : null;
           if (pushHandler === newPushHandler) return;
 
           if (pushHandler) {
-            pushHandler.setRequestedConfigHandler(null);
             pushHandler.disconnect();
+            pushHandler.setRequestedConfigHandler(null);
           }
           pushHandler = newPushHandler;
           if (pushHandler) {
@@ -235,11 +245,13 @@ export default async function runCycles(homePromise, deployPowers) {
   for (const [name, [prepare]] of Object.entries(tasks)) {
     // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
-    runners[name] = { cycle };
+    runners[name] = { cycle, limit: 0, stop: undefined };
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
   const { myAddressNameAdmin } = await homePromise;
-  myAddr = await E(myAddressNameAdmin).getMyAddress();
+  const myAddr = await E(myAddressNameAdmin).getMyAddress();
+  const connectionHandlerFactory = makeClientConnectionHandlerFactory(myAddr);
+  pushHandlerBroker = makeAuthBroker(connectionHandlerFactory);
   console.log('all tasks ready');
   await startServer();
   console.log(`server running for ${myAddr} on 127.0.0.1:3352`);
