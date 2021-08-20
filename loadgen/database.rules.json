@@ -20,7 +20,7 @@
     },
     "loadgen": {
       "clients": {
-        ".indexOn": ["connected"],
+        ".indexOn": ["connected", "userId"],
         "$clientId": {
           ".write": "newData.child('userId').val() === auth.uid",
           "connected": {
@@ -44,6 +44,7 @@
         }
       },
       "configs": {
+        ".indexOn": ["clientId"],
         "$configId": {
           ".write": "root.child('loadgen/clients').child(newData.child('clientId').val()).child('userId').val() === auth.uid",
           "clientId": {
@@ -61,7 +62,7 @@
         }
       },
       "cycles": {
-        ".indexOn": ["success"],
+        ".indexOn": ["success", "clientId"],
         "$cycleId": {
           ".write": "root.child('loadgen/clients').child(newData.child('clientId').val()).child('userId').val() === auth.uid",
           "clientId": {
