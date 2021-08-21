@@ -41,8 +41,8 @@ def perc(n):
     return "%3d%%" % (n * 100)
 
 
-head = "- block  blockTime   lag  -> cranks(avg)  swingset(avg)   +  cosmos = proc% (avg)"
-fmt  = "  %5d   %2d(%1.1f)  %6s -> %4s(%5s)  %6s(%6s)  +  %6s = %4s (%4s)"
+head = "- block  blockTime   lag  -> cranks(avg) computrons swingset(avg)   +  cosmos = proc% (avg)"
+fmt  = "  %5d   %2d(%1.1f)  %6s -> %4s(%5s)  %9d %6s(%6s)  +  %6s = %4s (%4s)"
 
 class Summary:
     headline_counter = 0
@@ -54,7 +54,7 @@ class Summary:
         ( height, cranks,
           block_time, proc_frac, cosmos_time, chain_block_time,
           swingset_time, swingset_percentage,
-          lag ) = recent_blocks[-1]
+          lag, computrons ) = recent_blocks[-1]
         cranks_s = "%3d" % cranks if cranks is not None else " "*4
         # 2 minutes is nominally 120/6= 20 blocks
         recent = recent_blocks[-20:]
@@ -70,6 +70,7 @@ class Summary:
                      chain_block_time, avg_chain_block_time,
                      abbrev(lag),
                      cranks_s, avg_cranks_s,
+                     computrons,
                      abbrev(swingset_time), abbrev(avg_swingset_time),
                      abbrev(cosmos_time),
                      perc(proc_frac), abbrev1(100.0 * avg_proc_frac),
@@ -78,11 +79,16 @@ class Summary:
 s = Summary()
 
 last_crank = None
+computrons = 0
 
 for line in sys.stdin:
     data = json.loads(line)
     if data["type"] == "deliver" and "crankNum" in data:
         last_crank = data["crankNum"]
+    if data["type"] == "deliver-result":
+        mr = data["dr"][2];
+        if mr and "compute" in mr:
+            computrons += mr["compute"]
     if data["type"] in ["cosmic-swingset-begin-block",
                         "cosmic-swingset-end-block-start",
                         "cosmic-swingset-end-block-finish"]:
@@ -92,6 +98,8 @@ for line in sys.stdin:
         blocks[height]["blockTime"] = data["blockTime"]
         if len(blocks) < 2:
             continue
+        if t == "begin-block":
+            computrons = 0
         if t == "end-block-finish":
             if last_crank:
                 blocks[height]["last-crank"] = last_crank
@@ -113,6 +121,6 @@ for line in sys.stdin:
             recent_blocks.append([ height, cranks,
                                    block_time, proc_frac, cosmos_time, chain_block_time,
                                    swingset_time, swingset_percentage,
-                                   lag])
+                                   lag, computrons])
             s.summarize()
 
