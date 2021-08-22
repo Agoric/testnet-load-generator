@@ -88,7 +88,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
   const setupTasks = async ({
     stdout,
     stderr,
-    timeout = 120,
+    timeout = 10 * 60,
     config: {
       reset = true,
       chainOnly,
