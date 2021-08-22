@@ -12,7 +12,7 @@
         "activeLoadgenClients": {
           ".write": "$userId === auth.uid",
           "$clientId": {
-            ".validate": "newData.val() === true && root.child('loadgen').child('clients').child($clientId).exists()"
+            ".validate": "(newData.val() === true || newData.val() == now) && root.child('loadgen').child('clients').child($clientId).exists()"
           }
         }
         // Allow other fields on user

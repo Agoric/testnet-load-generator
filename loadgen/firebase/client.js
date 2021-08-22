@@ -1,3 +1,5 @@
+/* global setInterval clearInterval */
+
 // Protobufjs patch is mostly necessary for Firestore but keep around as it doesn't hurt
 import './setup-protobufjs-inquire.js';
 
@@ -14,7 +16,6 @@ import {
   onDisconnect,
   goOnline,
   goOffline,
-  remove,
   child,
 } from 'firebase/database';
 
@@ -24,7 +25,7 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
 
   const loadgenRoot = ref(db, 'loadgen');
 
-  const client = push(child(loadgenRoot, 'clients'));
+  const client = push(child(loadgenRoot, 'clients')).ref;
   const clientId = client.key;
   const cycles = child(loadgenRoot, 'cycles');
   const configs = child(loadgenRoot, 'configs');
@@ -34,6 +35,7 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
 
   let user;
   let userActiveClient;
+  let userActiveIntervalHandle;
   let connectedUnsubscribe;
 
   let configHandler;
@@ -41,15 +43,22 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
 
   const connect = async (newUser) => {
     const connectedRef = ref(db, '.info/connected');
+    const clearActive = () => {
+      if (userActiveIntervalHandle) {
+        clearInterval(userActiveIntervalHandle);
+        userActiveIntervalHandle = null;
+      }
+    };
 
     if (user === newUser) return;
 
     if (user) {
+      goOffline(db);
+      clearActive();
       if (connectedUnsubscribe) {
         connectedUnsubscribe();
         connectedUnsubscribe = null;
       }
-      goOffline(db);
       userActiveClient = null;
       if (configHandler) {
         configHandler(null);
@@ -76,29 +85,35 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
           connectedAt: null,
           disconnectedAt: null,
         }),
-        remove(requestedConfig),
+        set(requestedConfig, null),
       ]);
 
       connectedUnsubscribe = onValue(connectedRef, (snap) => {
         if (snap.val() === true) {
+          console.log('Firebase connected');
+          const updateActive = () => set(userActiveClient, serverTimestamp());
           const done = Promise.all([
-            update(client, {
-              connectedAt: serverTimestamp(),
-              connected: true,
-            }),
-            set(userActiveClient, true),
             onDisconnect(client).update({
               disconnectedAt: serverTimestamp(),
               connected: false,
             }),
-            onDisconnect(userActiveClient).remove(),
-            onDisconnect(requestedConfig).remove(),
+            onDisconnect(userActiveClient).set(null),
+            onDisconnect(requestedConfig).set(null),
+            update(client, {
+              connectedAt: serverTimestamp(),
+              connected: true,
+            }),
+            updateActive(),
           ]).then(() => {});
+          userActiveIntervalHandle = setInterval(updateActive, 60 * 1000);
           if (firstConnection) {
             firstConnection.resolve(done);
           } else {
             done.catch((err) => console.error('onConnected error', err));
           }
+        } else {
+          clearActive();
+          console.log('Firebase disconnected');
         }
       });
 
@@ -134,22 +149,29 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   };
 
   const recordTaskStart = (type, seq) => {
-    const cycle = push(cycles, {
+    const startedAt = Date.now();
+    const cycle = push(cycles).ref;
+    pendingCycles.set(`${type}/${seq}`, cycle);
+
+    set(cycle, {
       clientId,
       type,
       seq,
-      startedAt: Date.now(),
-    });
-
-    pendingCycles.set(`${type}/${seq}`, cycle);
-    const onDisconnectUpdate = onDisconnect(cycle).update({
-      disconnectedAt: serverTimestamp(),
-      success: false,
-    });
-
-    Promise.all([cycle, onDisconnectUpdate]).catch((err) =>
-      console.error(`recordTaskStart ${type} ${seq} error`, err),
-    );
+    })
+      .then(() =>
+        Promise.all([
+          onDisconnect(cycle).update({
+            disconnectedAt: serverTimestamp(),
+            success: false,
+          }),
+          update(cycle, {
+            startedAt,
+          }),
+        ]),
+      )
+      .catch((err) =>
+        console.error(`recordTaskStart ${type} ${seq} error`, err),
+      );
   };
 
   const recordTaskEnd = (type, seq, success) => {
@@ -157,8 +179,8 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
     const cycle = pendingCycles.get(key);
 
     if (!cycle) return;
-
     pendingCycles.delete(key);
+
     Promise.all([
       onDisconnect(cycle).cancel(),
       update(cycle, {
