@@ -1,0 +1,106 @@
+{
+  "rules": {
+    ".read": true, // 2021-9-15
+    "users": {
+      "$userId": {
+        "activeLoadgens": {
+          "$loadgenId": {
+            // Do not allow old loadgens
+            ".validate": false
+          }
+        },
+        "activeLoadgenClients": {
+          ".write": "$userId === auth.uid",
+          "$clientId": {
+            ".validate": "(newData.val() === true || newData.val() == now) && root.child('loadgen').child('clients').child($clientId).exists()"
+          }
+        }
+        // Allow other fields on user
+      }
+    },
+    "loadgen": {
+      "clients": {
+        ".indexOn": ["connected", "userId"],
+        "$clientId": {
+          ".write": "newData.child('userId').val() === auth.uid",
+          "connected": {
+            ".validate": "newData.isBoolean()"
+          },
+          "connectedAt": {
+            ".validate": "newData.val() == now"
+          },
+          "disconnectedAt": {
+            ".validate": "newData.val() == now"
+          },
+          "userId": {
+            ".validate": "(!data.exists() || newData.val() === data.val()) && newData.val() === auth.uid"
+          },
+          "walletAddress": {
+            ".validate": "(!data.exists() || newData.val() === data.val()) && newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "configs": {
+        ".indexOn": ["clientId"],
+        "$configId": {
+          ".write": "root.child('loadgen/clients').child(newData.child('clientId').val()).child('userId').val() === auth.uid",
+          "clientId": {
+            ".validate": "!data.exists()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "data": {
+            ".validate": true
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "cycles": {
+        ".indexOn": ["success", "clientId"],
+        "$cycleId": {
+          ".write": "root.child('loadgen/clients').child(newData.child('clientId').val()).child('userId').val() === auth.uid",
+          "clientId": {
+            ".validate": "!data.exists()"
+          },
+          "startedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "endedAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "disconnectedAt": {
+            ".validate": "newData.val() == now"
+          },
+          "type": {
+            ".validate": "!data.exists() && newData.isString()"
+          },
+          "seq": {
+            ".validate": "!data.exists() && newData.isNumber()"
+          },
+          "success": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "requestedConfigs": {
+        ".write": "root.child('users').child(auth.uid).child('admin').val() === true",
+        "$clientId": {
+          ".write": "!newData.exists() && root.child('loadgen/clients').child($clientId).child('userId').val() === auth.uid",
+          ".validate": "root.child('loadgen/clients').child($clientId).exists()"
+        }
+      }
+    },
+    "$other": {
+      ".validate": false
+    }
+  }
+}

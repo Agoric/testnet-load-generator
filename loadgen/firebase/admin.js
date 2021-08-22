@@ -81,10 +81,8 @@ export const adminConnectionHandlerFactory = (app) => {
 
     if (
       Number.isNaN(effectiveCycleStarts) ||
-      Math.abs(
-        ((effectiveCycleStarts - targetCycleStarts) * 2) /
-          (effectiveCycleStarts + targetCycleStarts),
-      ) >
+      Math.abs((effectiveCycleStarts - targetCycleStarts) * 2) /
+        (effectiveCycleStarts + targetCycleStarts) >
         10 / 100
     ) {
       console.log(
@@ -98,7 +96,8 @@ export const adminConnectionHandlerFactory = (app) => {
 
     // console.log({ requestedClients, candidates });
     if (
-      ((requestedClients - candidates) * 2) / (requestedClients + candidates) >
+      Math.abs((requestedClients - candidates) * 2) /
+        (requestedClients + candidates) >
       10 / 100
     ) {
       console.log(
@@ -144,7 +143,7 @@ export const adminConnectionHandlerFactory = (app) => {
 
     user = newUser;
 
-    if (user || true) {
+    if (user) {
       goOnline(db);
       console.log('connecting');
     }
