@@ -1,150 +1,77 @@
 // Protobufjs patch is mostly necessary for Firestore but keep around as it doesn't hurt
 import './setup-protobufjs-inquire.js';
 
-import {
-  getDatabase,
-  ref,
-  set,
-  child,
-  onValue,
-  goOnline,
-  goOffline,
-  orderByChild,
-  query,
-  equalTo,
-  onChildAdded,
-  onChildRemoved,
-} from 'firebase/database';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/database';
+
+import { debounce } from './admin/helpers.js';
+import { updateConfigs, updateNeeded } from './admin/config.js';
+
+export const makeAdminApp = (firebaseConfig, name) =>
+  firebase.initializeApp(firebaseConfig, name);
 
 export const adminConnectionHandlerFactory = (app) => {
-  const db = getDatabase(app);
-  goOffline(db);
+  const db = firebase.database(app);
+  db.goOffline();
 
   let user;
 
-  const loadgenRoot = ref(db, 'loadgen');
-  const clients = child(loadgenRoot, 'clients');
-  const cycles = child(loadgenRoot, 'cycles');
-  const admin = child(loadgenRoot, 'admin');
-  const requestedConfigs = child(loadgenRoot, 'requestedConfigs');
+  const loadgenRoot = db.ref('loadgen');
 
-  const connectedClients = query(
-    clients,
-    orderByChild('connected'),
-    equalTo(true),
+  loadgenRoot.child('admin').on(
+    'value',
+    debounce((snap) => {
+      if (updateNeeded(snap)) {
+        updateConfigs(snap).catch((err) =>
+          console.error('updateConfigs error', err),
+        );
+      }
+    }),
   );
 
-  const activeCycles = query(cycles, orderByChild('success'), equalTo(null));
+  loadgenRoot
+    .child('cycles')
+    .orderByChild('success')
+    .equalTo(null)
+    .on('value', (snap) => {
+      const count =
+        snap.numChildren() &&
+        Object.values(snap.val()).reduce(
+          (acc, cycle) => (cycle.startedAt ? acc + 1 : acc),
+          0,
+        );
 
-  const connectedClientIds = new Set();
-  let requestedClients = 0;
-  let currentInterval = Infinity;
-  let targetCycleStarts = 0;
+      return loadgenRoot.child('admin/computed/activeCycles').set(count);
+    });
 
-  function updateConfigs() {
-    const candidates = connectedClientIds.size;
+  loadgenRoot
+    .child('clients')
+    .orderByChild('connected')
+    .equalTo(true)
+    .on('value', (snap) => {
+      const count = snap.numChildren();
 
-    const interval = candidates
-      ? (60 * 2 * candidates) / targetCycleStarts
-      : Infinity;
-    const waitOffset = interval / candidates;
+      return loadgenRoot.child('admin/computed/connectedClients').set(count);
+    });
 
-    const configs =
-      interval === Infinity
-        ? null
-        : Object.fromEntries(
-            [...connectedClientIds].map((clientId, idx) => [
-              clientId,
-              {
-                amm: { interval, wait: interval / 2 + idx * waitOffset },
-                vault: { interval, wait: idx * waitOffset },
-              },
-            ]),
-          );
+  loadgenRoot.child('requestedConfigs').on('value', (snap) => {
+    const count = snap.numChildren();
 
-    currentInterval = interval;
-    requestedClients = candidates;
-    set(requestedConfigs, configs).catch((err) =>
-      console.error('error updating requested configs', err),
-    );
-  }
-
-  function checkTargets() {
-    const effectiveCycleStarts = (requestedClients * 2 * 60) / currentInterval;
-
-    // console.log({
-    //   requestedClients,
-    //   currentInterval,
-    //   effectiveCycleStarts,
-    //   targetCycleStarts,
-    // });
-
-    if (
-      Number.isNaN(effectiveCycleStarts) ||
-      Math.abs((effectiveCycleStarts - targetCycleStarts) * 2) /
-        (effectiveCycleStarts + targetCycleStarts) >
-        10 / 100
-    ) {
-      console.log(
-        `${effectiveCycleStarts} cycles starts per minutes deviated from target of ${targetCycleStarts}`,
-      );
-      updateConfigs();
-      return;
-    }
-
-    const candidates = connectedClientIds.size;
-
-    // console.log({ requestedClients, candidates });
-    if (
-      Math.abs((requestedClients - candidates) * 2) /
-        (requestedClients + candidates) >
-      10 / 100
-    ) {
-      console.log(
-        `${requestedClients} enrolled clients deviated from ${candidates} candidates`,
-      );
-      updateConfigs();
-    }
-  }
-
-  onChildAdded(connectedClients, (snap) => {
-    connectedClientIds.add(snap.key);
-    console.log(`found ${connectedClientIds.size} connected loadgen clients`);
-    checkTargets();
-  });
-  onChildRemoved(connectedClients, (snap) => {
-    connectedClientIds.delete(snap.key);
-    console.log(`found ${connectedClientIds.size} connected loadgen clients`);
-    checkTargets();
-  });
-
-  onValue(requestedConfigs, (snap) => {
-    requestedClients = snap.size;
-    console.log(`found ${snap.size} enrolled loadgen clients`);
-    checkTargets();
-  });
-
-  onValue(activeCycles, (snap) => {
-    console.log(`found ${snap.size} active cycles`);
-  });
-
-  onValue(child(admin, 'cycleStartsPerMinute'), (snap) => {
-    targetCycleStarts = snap.val();
-    console.log(`target cycle starts changed to ${targetCycleStarts}`);
-    checkTargets();
+    return loadgenRoot.child('admin/computed/enrolledClients').set(count);
   });
 
   const connect = async (newUser) => {
     if (user === newUser) return;
 
     if (user) {
-      goOffline(db);
+      console.log('disconnecting');
+      db.goOffline();
     }
 
     user = newUser;
 
     if (user) {
-      goOnline(db);
+      db.goOnline();
       console.log('connecting');
     }
   };
