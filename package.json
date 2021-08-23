@@ -23,7 +23,8 @@
     "typescript": "^4.2.3"
   },
   "resolutions": {
-    "@protobufjs/inquire": "./protobufjs-inquire"
+    "@protobufjs/inquire": "./protobufjs-inquire",
+    "esm": "agoric-labs/esm#Agoric-built"
   },
   "scripts": {
     "preinstall": "node -e \"process.env.AGORIC_INSTALL && process.exit(0); console.warn('please use: agoric install . For details, see https://agoric.com/documentation/'); process.exit(1)\"",

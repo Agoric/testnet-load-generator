@@ -34,7 +34,7 @@
     "@agoric/store": "*",
     "@agoric/ui-components": "*",
     "@agoric/zoe": "*",
-    "esm": "^3.2.5",
+    "esm": "agoric-labs/esm#Agoric-built",
     "firebase": "^9.0.0-beta.8"
   },
   "ava": {
