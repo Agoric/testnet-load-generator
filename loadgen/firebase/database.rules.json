@@ -19,6 +19,9 @@
       }
     },
     "loadgen": {
+      "admin": {
+        ".write": "root.child('users').child(auth.uid).child('admin').val() === true"
+      },
       "clients": {
         ".indexOn": ["connected", "userId"],
         "$clientId": {

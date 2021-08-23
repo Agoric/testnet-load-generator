@@ -17,7 +17,10 @@ export const getCredentials = async (auth, newToken) => {
   return newCredentials;
 };
 
-export const makeAuthBroker = (connectionHandlerFactory) => {
+export const makeAuthBroker = (
+  connectionHandlerFactory,
+  makeApp = initializeApp,
+) => {
   const objectsForAuthDomain = new Map();
 
   return async (customToken) => {
@@ -45,7 +48,7 @@ export const makeAuthBroker = (connectionHandlerFactory) => {
         throw new Error('new token is for a different config');
       }
     } else {
-      const app = initializeApp(firebaseConfig, firebaseConfig.projectId);
+      const app = makeApp(firebaseConfig, firebaseConfig.projectId);
       const auth = getAuth(app);
       const { connectFacet, configFacet } = connectionHandlerFactory(app);
       authDomainObjects = {
