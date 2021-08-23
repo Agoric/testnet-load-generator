@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import sys, json
+import sys, json, time
 from collections import defaultdict
+import subprocess
 
 # run like this:
 #   tail -n 10000 -F chain.slog | python3 monitor-slog-block-time.py
@@ -40,9 +41,25 @@ def abbrev1(t):
 def perc(n):
     return "%3d%%" % (n * 100)
 
+def wait_for_block(height):
+    while True:
+        out = subprocess.check_output(["ag-cosmos-helper", "status"]).decode()
+        now = int(json.loads(out)["SyncInfo"]["latest_block_height"])
+        if now >= height:
+            return
+        time.sleep(1)
 
-head = "- block  blockTime   lag  -> cranks(avg) computrons swingset(avg)   +  cosmos = proc% (avg)"
-fmt  = "  %5d   %2d(%1.1f)  %6s -> %4s(%5s)  %9d %6s(%6s)  +  %6s = %4s (%4s)"
+def count_signatures(height):
+    wait_for_block(height)
+    out = subprocess.check_output(["ag-cosmos-helper", "query", "block", str(height)]).decode()
+    sigs = json.loads(out)["block"]["last_commit"]["signatures"]
+    twos = len([s for s in sigs if s["block_id_flag"] == 2])
+    threes = len([s for s in sigs if s["block_id_flag"] == 3])
+    good = len([s for s in sigs if s["block_id_flag"] in [2,3]])
+    return (twos,threes)
+
+head = "- block  blockTime    lag  -> cranks(avg) computrons  swingset(avg)  +  cosmos = proc% (avg) [sigs2/3/tot]"
+fmt  = "  %5d   %2d(%4s)  %6s -> %4s(%5s)  %9d %6s(%6s)  +  %6s = %4s (%4s) [%3d/%3d/%3d]"
 
 class Summary:
     headline_counter = 0
@@ -54,7 +71,7 @@ class Summary:
         ( height, cranks,
           block_time, proc_frac, cosmos_time, chain_block_time,
           swingset_time, swingset_percentage,
-          lag, computrons ) = recent_blocks[-1]
+          lag, computrons, sigs ) = recent_blocks[-1]
         cranks_s = "%3d" % cranks if cranks is not None else " "*4
         # 2 minutes is nominally 120/6= 20 blocks
         recent = recent_blocks[-20:]
@@ -67,13 +84,14 @@ class Summary:
         avg_swingset_percentage = sum(b[7] for b in recent) / len(recent)
 
         print(fmt % (height,
-                     chain_block_time, avg_chain_block_time,
+                     chain_block_time, "%2.1f" % avg_chain_block_time,
                      abbrev(lag),
                      cranks_s, avg_cranks_s,
                      computrons,
                      abbrev(swingset_time), abbrev(avg_swingset_time),
                      abbrev(cosmos_time),
                      perc(proc_frac), abbrev1(100.0 * avg_proc_frac),
+                     sigs[0], sigs[1], sigs[0]+sigs[1],
               ))
 
 s = Summary()
@@ -118,9 +136,10 @@ for line in sys.stdin:
                 if "last-crank" in blocks[height-1]:
                     cranks = blocks[height]["last-crank"] - blocks[height-1]["last-crank"]
                 chain_block_time = blocks[height]["blockTime"] - blocks[height-1]["blockTime"]
+            sigs = count_signatures(height)
             recent_blocks.append([ height, cranks,
                                    block_time, proc_frac, cosmos_time, chain_block_time,
                                    swingset_time, swingset_percentage,
-                                   lag, computrons])
+                                   lag, computrons, sigs])
             s.summarize()
 
