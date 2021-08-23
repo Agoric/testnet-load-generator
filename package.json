@@ -7,7 +7,8 @@
   "workspaces": [
     "loadgen",
     "_agstate/agoric-servers",
-    "runner"
+    "runner",
+    "loadgen/firebase/admin"
   ],
   "devDependencies": {
     "@typescript-eslint/parser": "^4.18.0",
