@@ -298,17 +298,24 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 
+        /** @type {Buffer[]} */
         const chunks = [];
         for await (const chunk of statusCp.stdout) {
           chunks.push(chunk);
         }
         if (
           (await childProcessDone(statusCp, {
-            ignoreExitCode: retries < 3,
+            ignoreExitCode: retries < 10,
+          }).catch((err) => {
+            console.error(
+              'Failed to query chain status.\n',
+              Buffer.concat(chunks).toString('utf-8'),
+            );
+            throw err;
           })) !== 0
         ) {
           retries += 1;
-          await sleep(1 * 1000);
+          await sleep(retries * 1000);
           continue; // eslint-disable-line no-continue
         } else {
           retries = 0;
