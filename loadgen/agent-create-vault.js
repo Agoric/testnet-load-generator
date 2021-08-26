@@ -103,6 +103,7 @@ export default async function startAgent([key, home]) {
     await Promise.all([
       E(runPurse).deposit(runPayout),
       E(bldPurse).deposit(bldPayout),
+      E(seatP).getOfferResult(),
     ]);
     console.error(`create-vault: vault closed`);
   }

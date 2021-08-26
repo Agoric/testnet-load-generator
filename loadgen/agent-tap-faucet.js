@@ -27,7 +27,10 @@ export default async function startAgent([key, home, faucetBundle]) {
       const seatP = E(zoe).offer(invitationP); // pipeline stall: bug #2846
       const paymentP = E(seatP).getPayout('Token');
       const payment = await paymentP;
-      await E(bobPurse).deposit(payment);
+      await Promise.all([
+        E(bobPurse).deposit(payment),
+        E(seatP).getOfferResult(),
+      ]);
       return E(bobPurse).getCurrentAmount();
     },
   });
