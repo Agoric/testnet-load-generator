@@ -1,3 +1,5 @@
+/* global Buffer */
+
 import chalk from 'chalk';
 
 // TODO: pass an "httpRequest" as power instead of importing
@@ -13,9 +15,11 @@ const protocolModules = {
   'https:': https,
 };
 
+/** @typedef {http.RequestOptions & {body?: Buffer}} HTTPRequestOptions */
+
 /**
  * @param {string | URL} urlOrString
- * @param {http.RequestOptions & {body?: Buffer}} [options]
+ * @param {HTTPRequestOptions} [options]
  * @returns {Promise<http.IncomingMessage>}
  */
 export const httpRequest = (urlOrString, options = {}) => {
@@ -52,6 +56,26 @@ export const httpRequest = (urlOrString, options = {}) => {
     }
     req.end();
   });
+};
+
+/**
+ * @param {string} url
+ * @param {HTTPRequestOptions} [options]
+ * @returns {Promise<unknown>}
+ */
+export const fetchAsJSON = async (url, options) => {
+  const res = await httpRequest(url, options);
+  const chunks = [];
+  for await (const chunk of res) {
+    chunks.push(chunk);
+  }
+
+  if (!res.statusCode || res.statusCode >= 400) {
+    throw new Error(`HTTP request error: ${res.statusCode}`);
+  }
+
+  // TODO: Check `res.headers['content-type']` for type and charset
+  return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
 };
 
 /** @typedef {(argv: string[]) => boolean} ArgvMatcher */
