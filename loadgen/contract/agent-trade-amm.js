@@ -92,6 +92,7 @@ export default async function startAgent([key, home]) {
     await Promise.all([
       E(bldPurse).deposit(refundPayout),
       E(runPurse).deposit(payout),
+      E(seatP).getOfferResult(),
     ]);
   }
 
@@ -113,6 +114,7 @@ export default async function startAgent([key, home]) {
     await Promise.all([
       E(runPurse).deposit(refundPayout),
       E(bldPurse).deposit(payout),
+      E(seatP).getOfferResult(),
     ]);
   }
 
