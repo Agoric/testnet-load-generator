@@ -1,8 +1,10 @@
 import functions from 'firebase-functions';
 import admin from 'firebase-admin';
+import { Logging } from '@google-cloud/logging';
 
 import { debounce } from './helpers.js';
 import { updateConfigs, updateNeeded } from './config.js';
+import { computeUserConnectionsSpans } from './user-connections.js';
 
 admin.initializeApp();
 
@@ -127,3 +129,45 @@ export const adminShapeChange = functions.database
       return null;
     }, after),
   );
+
+export const userConnectedSpans = functions.https.onRequest(
+  async (req, res) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.status(403).send('Forbidden!');
+      return;
+    }
+
+    const clients = (
+      await admin.database().ref('/loadgen/clients').once('value')
+    ).val();
+
+    let logData;
+
+    if (req.query.includeLogs) {
+      const startDate = new Date(
+        Math.min(
+          ...[...Object.values(clients)].map(({ connectedAt }) =>
+            new Date(connectedAt).valueOf(),
+          ),
+        ),
+      );
+
+      const logging = new Logging();
+
+      const [entries] = await logging.getEntries({
+        log: 'cloudfunctions.googleapis.com%2Fcloud-functions',
+        filter: `timestamp > "${startDate.toISOString()}" resource.labels.function_name="connectedClientsCount" severity=INFO`,
+        pageSize: 1000,
+        orderBy: 'timestamp asc',
+      });
+
+      logData = entries.map(({ metadata }) => metadata);
+    }
+
+    const userConnectionsData = computeUserConnectionsSpans(clients, logData);
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(JSON.stringify(userConnectionsData, null, 2));
+  },
+);
