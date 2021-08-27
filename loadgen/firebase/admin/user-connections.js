@@ -1,13 +1,23 @@
-export const computeUserConnectionsSpans = (clients, logData = []) => {
-  const connectLogEntries = logData.map(({ timestamp, textPayload }) => {
-    const [delta, clientId] = textPayload.split(' ').slice(-2);
+export const computeUserConnectionsSpans = (
+  clients,
+  clientConnections = {},
+  logData = [],
+) => {
+  const clientIdsWithConnectionData = new Set(
+    Object.values(clientConnections).map(({ clientId }) => clientId),
+  );
 
-    return {
-      timestamp: new Date(timestamp),
-      clientId,
-      delta: Number.parseInt(delta, 10),
-    };
-  });
+  const connectLogEntries = logData
+    .map(({ timestamp, textPayload }) => {
+      const [delta, clientId] = textPayload.split(' ').slice(-2);
+
+      return {
+        timestamp: new Date(timestamp),
+        clientId,
+        delta: Number.parseInt(delta, 10),
+      };
+    })
+    .filter(({ clientId }) => !clientIdsWithConnectionData.has(clientId));
 
   const clientLogConnectionsMap = new Map(
     connectLogEntries.map(({ clientId }) => [clientId, []]),
@@ -15,12 +25,10 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
 
   const userConnectionsMap = new Map();
 
-  for (const {
-    userId,
-    connectedAt,
-    disconnectedAt,
-    connected,
-  } of Object.values(clients)) {
+  for (const [
+    clientId,
+    { userId, connectedAt, disconnectedAt, connected },
+  ] of Object.entries(clients)) {
     let connections = userConnectionsMap.get(userId);
 
     if (!connections) {
@@ -28,14 +36,34 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
       userConnectionsMap.set(userId, connections);
     }
 
-    connections.push({
-      connectedAt: new Date(connectedAt),
-      disconnectedAt: connected ? undefined : new Date(disconnectedAt),
-    });
+    if (!clientIdsWithConnectionData.has(clientId)) {
+      connections.push({
+        connectedAt: new Date(connectedAt),
+        disconnectedAt: connected ? undefined : new Date(disconnectedAt),
+        source: `clients:${clientId}`,
+      });
+    }
+  }
+
+  for (const [
+    clientConnectionId,
+    { clientId, connectedAt, lastSeenAt },
+  ] of Object.entries(clientConnections)) {
+    const { userId } = clients[clientId];
+    const connections = userConnectionsMap.get(userId);
+
+    if (connectedAt) {
+      connections.push({
+        connectedAt: new Date(connectedAt),
+        disconnectedAt: new Date(lastSeenAt),
+        source: `clientId:${clientId}:clientConnections:${clientConnectionId}`,
+      });
+    }
   }
 
   for (const { clientId, timestamp, delta } of connectLogEntries.values()) {
     const connections = clientLogConnectionsMap.get(clientId);
+    const source = `connectedClientsCount:${clientId}`;
 
     if (delta === -1) {
       if (!connections.length) {
@@ -43,6 +71,7 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
           connectedAt: new Date(
             Math.min(clients[clientId].connectedAt, timestamp),
           ),
+          source,
         });
       }
 
@@ -68,9 +97,9 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
       const lastConnection = connections.slice(-1)[0];
 
       if (lastConnection && !lastConnection.disconnectedAt) {
-        connections.push({ connectedAt: timestamp, unexpected: true });
+        connections.push({ connectedAt: timestamp, source, unexpected: true });
       } else {
-        connections.push({ connectedAt: timestamp });
+        connections.push({ connectedAt: timestamp, source });
       }
     } else {
       throw new Error('Unexpected delta value');
@@ -79,13 +108,13 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
 
   for (const [
     clientId,
-    clientConnections,
+    clientLogConnections,
   ] of clientLogConnectionsMap.entries()) {
-    clientConnections.forEach((connection, idx) => {
+    clientLogConnections.forEach((connection, idx) => {
       if (connection.unexpected) {
         console.warn('Found unexpected connect log', {
           clientId,
-          previousConnection: clientConnections[idx - 1],
+          previousConnection: clientLogConnections[idx - 1],
           connection,
         });
       }
@@ -93,11 +122,11 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
 
     const { userId } = clients[clientId];
 
-    const userConnections = userConnectionsMap.get(clients[clientId].userId);
+    const userConnections = userConnectionsMap.get(userId);
     if (!userConnections) {
       console.warn('Unknown user', { userId, clientId });
     } else {
-      userConnections.push(...clientConnections);
+      userConnections.push(...clientLogConnections);
     }
   }
 
@@ -110,6 +139,7 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
     for (const connection of userConnections) {
       if (activeConnection && !activeConnection.disconnectedAt) {
         // other connection is still going, ignore this one
+        activeConnection.source += `+${connection.source}`;
       } else if (
         activeConnection &&
         // Gloss over short transient disconnect
@@ -120,6 +150,7 @@ export const computeUserConnectionsSpans = (clients, logData = []) => {
           activeConnection.disconnectedAt < connection.disconnectedAt
         ) {
           activeConnection.disconnectedAt = connection.disconnectedAt;
+          activeConnection.source += `+${connection.source}`;
         }
       } else {
         activeConnection = { ...connection };

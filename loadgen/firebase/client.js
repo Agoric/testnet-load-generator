@@ -29,12 +29,14 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   const clientId = client.key;
   const cycles = child(loadgenRoot, 'cycles');
   const configs = child(loadgenRoot, 'configs');
+  const clientConnections = child(loadgenRoot, 'clientConnections');
   const requestedConfig = child(loadgenRoot, `requestedConfigs/${clientId}`);
 
   const pendingCycles = new Map();
 
   let user;
   let userActiveClient;
+  let userActiveClientPath;
   let userActiveIntervalHandle;
   let connectedUnsubscribe;
 
@@ -60,6 +62,7 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
         connectedUnsubscribe = null;
       }
       userActiveClient = null;
+      userActiveClientPath = '';
       if (configHandler) {
         configHandler(null);
       }
@@ -72,10 +75,8 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
       let firstConnection = makePromiseKit();
 
       const userId = user.uid;
-      userActiveClient = ref(
-        db,
-        `users/${userId}/activeLoadgenClients/${clientId}`,
-      );
+      userActiveClientPath = `users/${userId}/activeLoadgenClients/${clientId}`;
+      userActiveClient = ref(db, userActiveClientPath);
 
       await Promise.all([
         set(client, {
@@ -88,21 +89,56 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
         set(requestedConfig, null),
       ]);
 
+      let clientConnection;
+
       connectedUnsubscribe = onValue(connectedRef, (snap) => {
         if (snap.val() === true) {
           console.log('Firebase connected');
-          const updateActive = () => set(userActiveClient, serverTimestamp());
+          const previousConnectionUpdated = clientConnection
+            ? update(clientConnection, { connected: false })
+            : Promise.resolve();
+          clientConnection = push(clientConnections, {
+            userId,
+            clientId,
+            connected: false,
+          });
+          const clientConnectionId = clientConnection.key;
+          const clientConnectionLastSeenPath = `loadgen/clientConnections/${clientConnectionId}/lastSeenAt`;
+          const updateActive = () =>
+            update(ref(db), {
+              [userActiveClientPath]: serverTimestamp(),
+              [clientConnectionLastSeenPath]: serverTimestamp(),
+            });
+
+          const loadgenRootUpdateData = {
+            [`clients/${clientId}/connected`]: true,
+            [`clients/${clientId}/activeConnection`]: clientConnectionId,
+            [`clients/${clientId}/disconnectedAt`]: null,
+            [`clientConnections/${clientConnectionId}/connected`]: true,
+            [`clientConnections/${clientConnectionId}/connectedAt`]: serverTimestamp(),
+          };
+
+          if (firstConnection) {
+            loadgenRootUpdateData[
+              `clients/${clientId}/connectedAt`
+            ] = serverTimestamp();
+          }
+
           const done = Promise.all([
+            onDisconnect(clientConnection).update({
+              lastSeenAt: serverTimestamp(),
+              connected: false,
+            }),
             onDisconnect(client).update({
               disconnectedAt: serverTimestamp(),
+              activeConnection: null,
               connected: false,
             }),
             onDisconnect(userActiveClient).set(null),
             onDisconnect(requestedConfig).set(null),
-            update(client, {
-              connectedAt: serverTimestamp(),
-              connected: true,
-            }),
+            previousConnectionUpdated,
+            clientConnection,
+            update(loadgenRoot, loadgenRootUpdateData),
             updateActive(),
           ]).then(() => {});
           userActiveIntervalHandle = setInterval(updateActive, 60 * 1000);

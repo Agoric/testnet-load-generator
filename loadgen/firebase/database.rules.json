@@ -28,6 +28,9 @@
         "$clientId": {
           ".write": "newData.child('userId').val() === auth.uid",
           ".validate": "newData.hasChildren(['connected', 'userId', 'walletAddress'])",
+          "activeConnection": {
+            ".validate": "root.child('loadgen/clientConnections').child(newData.val()).child('clientId').val() === $clientId"
+          },
           "connected": {
             ".validate": "newData.isBoolean()"
           },
@@ -42,6 +45,31 @@
           },
           "walletAddress": {
             ".validate": "(!data.exists() || newData.val() === data.val()) && newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "clientConnections": {
+        ".indexOn": ["clientId", "userId"],
+        "$connectionId": {
+          ".write": "newData.child('userId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['userId', 'clientId', 'connected'])",
+          "clientId": {
+            ".validate": "(!data.exists() || newData.val() === data.val()) && root.child('loadgen/clients').child(newData.val()).child('userId').val() === auth.uid"
+          },
+          "userId": {
+            ".validate": "(!data.exists() || newData.val() === data.val()) && newData.val() === auth.uid"
+          },
+          "connected": {
+            ".validate": "newData.val() === false || (newData.val() === true && !data.parent().child('connectedAt').exists() && newData.parent().child('connectedAt').exists())"
+          },
+          "connectedAt": {
+            ".validate": "(!data.exists() || newData.val() === data.val()) && newData.val() == now"
+          },
+          "lastSeenAt": {
+            ".validate": "newData.val() == now && (data.parent().child('connected').val() === true || !data.parent().child('connectedAt').exists())"
           },
           "$other": {
             ".validate": false

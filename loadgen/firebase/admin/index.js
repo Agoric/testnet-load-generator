@@ -137,9 +137,10 @@ export const userConnectedSpans = functions.https.onRequest(
       return;
     }
 
-    const clients = (
-      await admin.database().ref('/loadgen/clients').once('value')
-    ).val();
+    const [clients, clientConnections] = await Promise.all([
+      admin.database().ref('/loadgen/clients').once('value'),
+      admin.database().ref('/loadgen/clientConnections').once('value'),
+    ]).then((snaps) => snaps.map((snap) => (snap.exists() ? snap.val() : {})));
 
     let logData;
 
@@ -164,7 +165,11 @@ export const userConnectedSpans = functions.https.onRequest(
       logData = entries.map(({ metadata }) => metadata);
     }
 
-    const userConnectionsData = computeUserConnectionsSpans(clients, logData);
+    const userConnectionsData = computeUserConnectionsSpans(
+      clients,
+      clientConnections,
+      logData,
+    );
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Access-Control-Allow-Origin', '*');
