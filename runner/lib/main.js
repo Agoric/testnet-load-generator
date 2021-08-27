@@ -43,7 +43,6 @@ const defaultStageDurationMinutes = 6 * 60;
 const defaultNumberStages = 4 + 2;
 
 const vatIdentifierRE = /^(v\d+):(.*)$/;
-const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
 
 /**
  * @typedef { |
@@ -82,6 +81,7 @@ const knownVatsNamesWithoutProcess = ['comms', 'vattp'];
  *   vatID: string,
  *   name?: string,
  *   dynamic: boolean,
+ *   managerType: "local" | "xs-worker" | string,
  * } & Record<string, unknown>} SlogCreateVatEvent
  */
 
@@ -337,6 +337,7 @@ const main = async (progName, rawArgs, powers) => {
      * @typedef {{
      *    processInfo: import("./helpers/procsfs.js").ProcessInfo | null | undefined,
      *    vatName: string | undefined,
+     *    local: boolean,
      *    started: boolean,
      *  }} VatInfo
      */
@@ -351,7 +352,7 @@ const main = async (progName, rawArgs, powers) => {
       );
       for (const info of childrenInfos) {
         const vatArgv = await info.getArgv(); // eslint-disable-line no-await-in-loop
-        if (!vatArgv || basename(vatArgv[0]) !== 'xsnap') continue;
+        if (!vatArgv || basename(vatArgv[0]).slice(0, 2) !== 'xs') continue;
         const vatIdentifierMatches = vatIdentifierRE.exec(vatArgv[1]);
         if (!vatIdentifierMatches) continue;
         const vatID = vatIdentifierMatches[1];
@@ -395,12 +396,7 @@ const main = async (progName, rawArgs, powers) => {
           vatInfo.processInfo = null;
         }
 
-        if (
-          vatInfo.started &&
-          !vatInfo.processInfo &&
-          vatInfo.vatName &&
-          !knownVatsNamesWithoutProcess.includes(vatInfo.vatName)
-        ) {
+        if (vatInfo.started && !vatInfo.local && !vatInfo.processInfo) {
           // Either the vat started but the process doesn't exist yet (undefined)
           // or the vat process exited but the vat didn't stop yet (null)
           monitorConsole.warn(
@@ -424,6 +420,7 @@ const main = async (progName, rawArgs, powers) => {
           monitorConsole,
           'Failed to update vat process infos',
         );
+        await vatUpdated;
       }
     };
 
@@ -436,16 +433,21 @@ const main = async (progName, rawArgs, powers) => {
             },
             processInfo: kernelProcessInfo,
           },
-          ...[...vatInfos].map(([vatID, { processInfo, vatName }]) => ({
-            eventData: {
-              processType: 'vat',
-              vatID,
-              name: vatName,
-            },
-            processInfo,
-          })),
+          ...[...vatInfos]
+            .filter(([, { local }]) => !local)
+            .map(([vatID, { processInfo, vatName }]) => ({
+              eventData: {
+                processType: 'vat',
+                vatID,
+                name: vatName,
+              },
+              processInfo,
+            })),
         ].map(async ({ eventData, processInfo }) => {
-          if (!processInfo) return;
+          if (!processInfo) {
+            console.warn('missing process', eventData);
+            return false;
+          }
           const { times, memory } = await processInfo.getUsageSnapshot();
           logPerfEvent('chain-process-usage', {
             ...eventData,
@@ -457,8 +459,13 @@ const main = async (progName, rawArgs, powers) => {
             ...times,
             ...memory,
           });
+          return true;
         }),
-      ).then(() => {});
+      ).then((results) => {
+        if (results.some((result) => result === false)) {
+          throw new Error('Missing vat processes.');
+        }
+      });
 
     const logStorageUsage = async () => {
       logPerfEvent('chain-storage-usage', {
@@ -539,11 +546,13 @@ const main = async (progName, rawArgs, powers) => {
           const {
             vatID,
             name: vatName,
+            managerType,
           } = /** @type {SlogCreateVatEvent} */ (event);
           if (!vatInfos.has(vatID)) {
             vatInfos.set(vatID, {
               vatName,
               processInfo: undefined,
+              local: managerType === 'local',
               started: false,
             });
           } else {
@@ -616,11 +625,13 @@ const main = async (progName, rawArgs, powers) => {
         case 'cosmic-swingset-begin-block': {
           if (!slogBlocksSeen) {
             logPerfEvent('stage-first-block', { block: event.blockHeight });
-            warnOnRejection(
-              logProcessUsage(),
-              monitorConsole,
-              'Failed to get initial process usage',
-            );
+            await vatUpdated;
+            await logProcessUsage().catch((usageErr) => {
+              // Abuse first empty block as it will be awaited before monitorChain
+              // And won't abruptly end our monitor
+              // @ts-ignore resolving with a rejected promise is still "void" ;)
+              resolveFirstEmptyBlock(Promise.reject(usageErr));
+            });
           }
           slogBlocksSeen += 1;
           monitorConsole.log('begin-block', event.blockHeight);
