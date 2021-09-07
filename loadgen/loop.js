@@ -26,6 +26,7 @@ let currentConfig = {
 };
 
 let pushHandler = null;
+let pushBroker = null;
 
 const tasks = {
   // faucet: [prepareFaucet],
@@ -203,17 +204,26 @@ async function startServer() {
         res,
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
-          const newPushHandler = newConfig.trim()
+          const newPushBroker = newConfig.trim()
             ? await pushHandlerBroker(newConfig)
             : null;
-          if (pushHandler === newPushHandler) return;
-
-          if (pushHandler) {
-            pushHandler.disconnect();
-            pushHandler.setRequestedConfigHandler(null);
+          if (pushBroker === newPushBroker) {
+            if (pushBroker) {
+              // Make sure connection is updated with new token
+              await pushBroker.connect();
+            }
+            return;
           }
-          pushHandler = newPushHandler;
-          if (pushHandler) {
+
+          if (pushBroker) {
+            await pushBroker.disconnect();
+            pushHandler.setRequestedConfigHandler(null);
+            pushHandler = null;
+          }
+          pushBroker = newPushBroker;
+          if (pushBroker) {
+            await pushBroker.connect();
+            pushHandler = pushBroker.configFacet;
             pushHandler.setRequestedConfigHandler(checkAndUpdateConfig);
             pushHandler.configUpdated(currentConfig);
           }

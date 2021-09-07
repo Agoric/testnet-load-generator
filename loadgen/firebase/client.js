@@ -41,7 +41,7 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   let configHandler;
   let requestedConfigUnsubscribe;
 
-  const connect = async (newUser) => {
+  const updateUser = async (newUser) => {
     const connectedRef = ref(db, '.info/connected');
     const clearActive = () => {
       if (userActiveIntervalHandle) {
@@ -194,11 +194,10 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
   };
 
   return harden({
-    connectFacet: {
-      connect,
+    authFacet: {
+      updateUser,
     },
     configFacet: {
-      disconnect: async () => connect(null),
       getId,
       configUpdated,
       setRequestedConfigHandler,
