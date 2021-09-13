@@ -8,24 +8,35 @@ import { E } from '@agoric/eventual-send';
 
 import { makeAuthBroker } from './firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from './firebase/client.js';
+import { deepEquals } from './firebase/admin/helpers.js';
 
 // import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
 
+const sortAndFilterNullish = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj)
+      .filter(([, value]) => value != null)
+      .sort(([aKey], [bKey]) => aKey - bKey)
+      .map(([key, value]) => [
+        key,
+        typeof value === 'object' ? sortAndFilterNullish(value) : value,
+      ]),
+  );
+
 let pushHandlerBroker;
 
 // we want mostly AMM tasks, and only occasional vault tasks
 
-let currentConfig = {
-  // faucet: null, // or { interval=60, limit=1, wait=0 }
-  amm: null,
-  vault: null,
-  // amm: { interval: 120},
-  // vault: { interval: 120, wait: 60 },
-};
+let currentConfig = sortAndFilterNullish({
+  faucet: null, // e.g. { interval=60, limit=1, wait=0 }
+  amm: null, // e.g. { interval: 120}
+  vault: null, // e.g. { interval: 120, wait: 60 }
+});
 
 let pushHandler = null;
+let pushBroker = null;
 
 const tasks = {
   // faucet: [prepareFaucet],
@@ -148,15 +159,15 @@ function updateConfig(config) {
 }
 
 const checkAndUpdateConfig = (newConfigOrNull) => {
-  const newConfig = newConfigOrNull || {};
-  if (checkConfig(newConfig)) {
+  const newConfig = sortAndFilterNullish(newConfigOrNull || {});
+  if (checkConfig(newConfig) && !deepEquals(newConfig, currentConfig)) {
     console.log(`updating config:`);
     console.log(`from: ${JSON.stringify(currentConfig)}`);
     console.log(`  to: ${JSON.stringify(newConfig)}`);
     currentConfig = newConfig;
     updateConfig(currentConfig);
     if (pushHandler) {
-      pushHandler.configUpdated(newConfig);
+      pushHandler.configUpdated(currentConfig);
     }
   }
 };
@@ -203,17 +214,26 @@ async function startServer() {
         res,
         () => (pushHandler ? pushHandler.getId() : ''),
         async (newConfig) => {
-          const newPushHandler = newConfig.trim()
+          const newPushBroker = newConfig.trim()
             ? await pushHandlerBroker(newConfig)
             : null;
-          if (pushHandler === newPushHandler) return;
-
-          if (pushHandler) {
-            pushHandler.disconnect();
-            pushHandler.setRequestedConfigHandler(null);
+          if (pushBroker === newPushBroker) {
+            if (pushBroker) {
+              // Make sure connection is updated with new token
+              await pushBroker.connect();
+            }
+            return;
           }
-          pushHandler = newPushHandler;
-          if (pushHandler) {
+
+          if (pushBroker) {
+            await pushBroker.disconnect();
+            pushHandler.setRequestedConfigHandler(null);
+            pushHandler = null;
+          }
+          pushBroker = newPushBroker;
+          if (pushBroker) {
+            await pushBroker.connect();
+            pushHandler = pushBroker.configFacet;
             pushHandler.setRequestedConfigHandler(checkAndUpdateConfig);
             pushHandler.configUpdated(currentConfig);
           }

@@ -24,30 +24,11 @@ import {
   getChildMatchingArgv,
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
-  httpRequest,
+  fetchAsJSON,
 } from './helpers.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
-
-/**
- * @param {string} url
- * @returns {Promise<unknown>}
- */
-const fetchAsJSON = async (url) => {
-  const res = await httpRequest(url);
-  const chunks = [];
-  for await (const chunk of res) {
-    chunks.push(chunk);
-  }
-
-  if (!res.statusCode || res.statusCode >= 400) {
-    throw new Error(`HTTP request error: ${res.statusCode}`);
-  }
-
-  // TODO: Check `res.headers['content-type']` for type and charset
-  return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
-};
 
 const clientStateDir = '_agstate/agoric-servers/testnet-8000';
 

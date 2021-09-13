@@ -60,7 +60,7 @@ export const adminConnectionHandlerFactory = (app) => {
     return loadgenRoot.child('admin/computed/enrolledClients').set(count);
   });
 
-  const connect = async (newUser) => {
+  const updateUser = async (newUser) => {
     if (user === newUser) return;
 
     if (user) {
@@ -77,11 +77,9 @@ export const adminConnectionHandlerFactory = (app) => {
   };
 
   return {
-    connectFacet: {
-      connect,
+    authFacet: {
+      updateUser,
     },
-    configFacet: {
-      disconnect: async () => connect(null),
-    },
+    configFacet: {},
   };
 };
