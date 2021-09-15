@@ -10,8 +10,9 @@ import { makeAuthBroker } from './firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from './firebase/client.js';
 
 // import { prepareFaucet } from './task-tap-faucet';
-import { prepareAMMTrade } from './task-trade-amm';
-import { prepareVaultCycle } from './task-create-vault';
+// import { prepareAMMTrade } from './task-trade-amm';
+// import { prepareVaultCycle } from './task-create-vault';
+import { preparePoll } from './task-collect-votes';
 
 let pushHandlerBroker;
 
@@ -19,10 +20,11 @@ let pushHandlerBroker;
 
 let currentConfig = {
   // faucet: null, // or { interval=60, limit=1, wait=0 }
-  amm: null,
-  vault: null,
+  // amm: null,
+  // vault: null,
   // amm: { interval: 120},
   // vault: { interval: 120, wait: 60 },
+  poll: { interval: 3 },
 };
 
 let pushHandler = null;
@@ -31,8 +33,9 @@ const tasks = {
   // faucet: [prepareFaucet],
   // we must start the AMM task before Vault: AMM exchanges some RUN for BLD,
   // and Vault measures the balances
-  amm: [prepareAMMTrade],
-  vault: [prepareVaultCycle],
+  // amm: [prepareAMMTrade],
+  // vault: [prepareVaultCycle],
+  poll: [preparePoll],
 };
 
 const runners = {}; // name -> { cycle, stop?, limit }

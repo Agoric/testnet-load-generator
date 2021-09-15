@@ -11,6 +11,7 @@
     "loadgen/firebase/admin"
   ],
   "devDependencies": {
+    "@agoric/governance": "*",
     "@typescript-eslint/parser": "^4.18.0",
     "eslint": "^7.23.0",
     "eslint-config-airbnb-base": "^14.0.0",
