@@ -94,6 +94,11 @@ export const makeAuthBroker = (
           if (user.uid !== authObjects.uid) {
             console.warn('Firebase authenticated unexpected user');
           }
+          // Workaround for https://github.com/firebase/firebase-js-sdk/issues/5498
+          // eslint-disable-next-line no-underscore-dangle
+          if (user._startProactiveRefresh) {
+            user._startProactiveRefresh(); // eslint-disable-line no-underscore-dangle
+          }
         }
         authFacet.updateUser(user);
       });
