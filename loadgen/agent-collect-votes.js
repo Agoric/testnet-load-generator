@@ -123,9 +123,7 @@ export default async function startAgent([
     );
 
     yield [` +++ agent getting time`];
-    // @ts-ignore ISSUE: Zoe API incomplete?
-    const t0 = await E(timer).getCurrentTimestamp();
-    const closingRule = { deadline: t0 + 20n * 1000n, timer };
+    const closingRule = { deadline: 20n, timer };
     /** @type { QuestionSpec } */
     const q1 = {
       issue: { text: 'What time should we meet?' },
@@ -138,14 +136,13 @@ export default async function startAgent([
       tieOutcome: { text: 'Tue 9am' },
     };
     yield [` +++ agent adding question ${q(q1)}`];
-    console.error(`@@@q1 ${q(q1)}`);
     const { instance: counterInstance } = await memo('q1', async () =>
       E(creatorFacet).addQuestion(counterInstallation, q1),
     );
 
     yield [` +++ agent getting voter invitations, votingRights`];
-    /** @type { Promise<CommitteeVoter>[] } */
-    const [larry, _moe, _curly] = await memo('votingRights', async () =>
+    /* TODO: @type { Promise<CommitteeVoter>[] } */
+    const [larry, moe, curly] = await memo('votingRights', async () =>
       E(creatorFacet)
         .getVoterInvitations()
         .then((invs) =>
@@ -161,7 +158,11 @@ export default async function startAgent([
         updateState: async (details) => {
           const [name, choice] = ['larry', { text: 'Tue 9am' }];
           console.log(`${name} voted for ${q(choice)}`);
-          await E(larry).castBallotFor(details.questionHandle, [choice]);
+          await Promise.all([
+            E(larry).castBallotFor(details.questionHandle, [choice]),
+            E(moe).castBallotFor(details.questionHandle, [choice]),
+            E(curly).castBallotFor(details.questionHandle, [choice]),
+          ]);
           voted.resolve(undefined);
         },
       }),
