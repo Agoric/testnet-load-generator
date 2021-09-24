@@ -20,7 +20,8 @@ import { pursePetnames } from './petnames';
 
 const { quote: q } = assert;
 
-const { entries } = Object;
+const { entries, fromEntries } = Object;
+const zip = (xs, ys) => xs.map((x, i) => [x, ys[i]]);
 
 /**
  * @typedef { import('./task-collect-votes').Home } Home
@@ -78,15 +79,22 @@ export default async function startAgent([
   const { zoe, scratch, chainTimerService: timer } = home;
 
   /** @param { Record<string, unknown> } stuff */
-  function saveToRepl(stuff) {
-    entries(stuff).map(
-      ([prop, val]) => E(home.scratch).set(prop, val), // send-only
+  const saveToRepl = (stuff) =>
+    Promise.all(
+      entries(stuff).map(([prop, val]) => E(home.scratch).set(prop, val)),
     );
-  }
+
+  const loadScratch = async () => {
+    const keys = await E(home.scratch).keys();
+    const values = await Promise.all(keys.map((k) => E(home.scratch).get(k)));
+    return fromEntries(zip(keys, values));
+  };
 
   async function* play() {
     yield ['allocating fees'];
     await allocateFees(home);
+
+    // await saveToRepl({ loadScratch });
 
     yield [` +++ agent installing contracts`];
     /** @type { Record<string, Installation> } */
@@ -96,7 +104,7 @@ export default async function startAgent([
         counter: E(zoe).install(counterBundle),
       }),
     );
-    saveToRepl({ inst });
+    await saveToRepl({ inst });
 
     yield [
       ` +++ When a question is posed,
@@ -115,7 +123,7 @@ export default async function startAgent([
       {},
       committeeTerms,
     );
-    saveToRepl({ stoogesReg });
+    await saveToRepl({ stoogesReg });
 
     /** @type { QuestionSpec } */
     const q1 = {
@@ -128,7 +136,7 @@ export default async function startAgent([
       quorumRule: QuorumRule.MAJORITY,
       tieOutcome: { text: 'Tue 9am' },
     };
-    saveToRepl({ q1 });
+    await saveToRepl({ q1 });
 
     yield [` +++ reg.addQuestion(${q(inst.counter)}, ${q(q1)})`];
     const q1rP = E(E.get(stoogesReg).creatorFacet).addQuestion(
@@ -163,7 +171,7 @@ export default async function startAgent([
     yield [
       `They can subscribe with the registrar to get a list of new questions.`,
     ];
-    saveToRepl({ observeIteration });
+    // await saveToRepl({ observeIteration, fulfillToStructure });
     const detailsP = new Promise((resolve) =>
       observeIteration(
         E(E.get(stoogesReg).publicFacet).getQuestionSubscription(),
