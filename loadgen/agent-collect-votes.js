@@ -1,12 +1,15 @@
 // @ts-check
-import { makePromiseKit } from '@agoric/promise-kit';
 import { E } from '@agoric/eventual-send';
-import { Far } from '@agoric/marshal';
+import { Far, fulfillToStructure } from '@agoric/marshal';
 import { observeIteration } from '@agoric/notifier';
 import { AmountMath } from '@agoric/ertp';
 import { stringifyNat } from '@agoric/ui-components/src/display/natValue/stringifyNat';
 // eslint-disable-next-line import/no-extraneous-dependencies
-import { QuorumRule, ElectionType } from '@agoric/governance/src/question.js';
+import {
+  QuorumRule,
+  ElectionType,
+  ChoiceMethod,
+} from '@agoric/governance/src/question.js';
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/governance/exported.js';
@@ -17,7 +20,7 @@ import { pursePetnames } from './petnames';
 
 const { quote: q } = assert;
 
-const { entries, keys } = Object;
+const { entries } = Object;
 
 /**
  * @typedef { import('./task-collect-votes').Home } Home
@@ -74,108 +77,131 @@ export default async function startAgent([
 ]) {
   const { zoe, scratch, chainTimerService: timer } = home;
 
-  /**
-   * @param {string} slot
-   * @param {() => Promise<T> } build
-   * @returns { Promise<T> }
-   *
-   * @template T
-   */
-  const memo = async (slot, build) => {
-    const found = await E(scratch).get(slot);
-    if (found) {
-      console.error(' == cache hit:', slot);
-      return found;
-    }
-    console.error(' == cache miss:', slot);
-    const it = await build();
-    await E(scratch).set(slot, it);
-    console.error(' == cached:', slot);
-    return it;
-  };
+  /** @param { Record<string, unknown> } stuff */
+  function saveToRepl(stuff) {
+    entries(stuff).map(
+      ([prop, val]) => E(home.scratch).set(prop, val), // send-only
+    );
+  }
 
   async function* play() {
-    const todo = {
-      registrarInstallation: registrarBundle,
-      counterInstallation: counterBundle,
-    };
     yield ['allocating fees'];
-    await memo('workingFees', () => allocateFees(home));
+    await allocateFees(home);
 
-    yield [` +++ agent installing`, ...keys(todo)];
-    const [registrarInstallation, counterInstallation] = await Promise.all(
-      entries(todo).map(([prop, bundle]) =>
-        memo(prop, async () => E(zoe).install(bundle)),
-      ),
+    yield [` +++ agent installing contracts`];
+    /** @type { Record<string, Installation> } */
+    const inst = await fulfillToStructure(
+      harden({
+        committeeRegistrar: E(zoe).install(registrarBundle),
+        counter: E(zoe).install(counterBundle),
+      }),
     );
+    saveToRepl({ inst });
 
+    yield [
+      ` +++ When a question is posed,
+       it is only with respect to a particular Registrar,
+       (which identifies a collection of eligible voters)
+       and a particular vote counting contract.`,
+    ];
     /** @type { CommitteeRegistrarTerms } */
-    const terms = {
+    const committeeTerms = {
       committeeName: 'The Three Stooges',
       committeeSize: 3,
     };
-
-    yield [` +++ agent starting registrar`];
-    /** @type {{ creatorFacet: ERef<RegistrarCreatorFacet>, publicFacet: ERef<RegistrarPublic> }} */
-    const { creatorFacet, publicFacet } = await memo(
-      'stoogesRegistrar',
-      async () => E(home.zoe).startInstance(registrarInstallation, {}, terms),
+    /** @type {Promise<{ creatorFacet: ERef<RegistrarCreatorFacet>, publicFacet: ERef<RegistrarPublic> }>} */
+    const stoogesReg = E(zoe).startInstance(
+      inst.committeeRegistrar,
+      {},
+      committeeTerms,
     );
+    saveToRepl({ stoogesReg });
 
-    yield [` +++ agent getting time`];
-    const closingRule = { deadline: 20n, timer };
     /** @type { QuestionSpec } */
     const q1 = {
+      method: ChoiceMethod.UNRANKED,
       issue: { text: 'What time should we meet?' },
       positions: [{ text: 'Tue 9am' }, { text: 'Wed 10am' }],
-      method: 'unranked',
-      closingRule,
       electionType: ElectionType.SURVEY,
       maxChoices: 1,
+      closingRule: { deadline: 20n, timer },
       quorumRule: QuorumRule.MAJORITY,
       tieOutcome: { text: 'Tue 9am' },
     };
-    yield [` +++ agent adding question ${q(q1)}`];
-    const { instance: counterInstance } = await memo('q1', async () =>
-      E(creatorFacet).addQuestion(counterInstallation, q1),
+    saveToRepl({ q1 });
+
+    yield [` +++ reg.addQuestion(${q(inst.counter)}, ${q(q1)})`];
+    const q1rP = E(E.get(stoogesReg).creatorFacet).addQuestion(
+      inst.counter,
+      q1,
     );
 
-    yield [` +++ agent getting voter invitations, votingRights`];
-    /* TODO: @type { Promise<CommitteeVoter>[] } */
-    const [larry, moe, curly] = await memo('votingRights', async () =>
-      E(creatorFacet)
-        .getVoterInvitations()
-        .then((invs) =>
-          invs.map((inv) => E(E(zoe).offer(inv)).getOfferResult()),
+    yield [
+      ` +++ Voters get a voting facet via an invitation,
+        so they're sure they're connected to
+        the Registrar that's responsible for this vote.`,
+    ];
+    /** @param { ERef<Invitation> } inv */
+    const getResult = (inv) => E(E(zoe).offer(inv)).getOfferResult();
+    /**
+     * @typedef { any } CommitteeVoter // TODO
+     * @type { ERef<Record<string, CommitteeVoter>> }
+     */
+    const rightsP = E(E.get(stoogesReg).creatorFacet)
+      .getVoterInvitations()
+      .then(([iLarry, iMoe, iCurly]) =>
+        fulfillToStructure(
+          harden({
+            Larry: getResult(iLarry),
+            Moe: getResult(iMoe),
+            Curly: getResult(iCurly),
+          }),
         ),
+      );
+    rightsP.then((rights) => saveToRepl({ rights }));
+
+    yield [
+      `They can subscribe with the registrar to get a list of new questions.`,
+    ];
+    saveToRepl({ observeIteration });
+    const detailsP = new Promise((resolve) =>
+      observeIteration(
+        E(E.get(stoogesReg).publicFacet).getQuestionSubscription(),
+        Far('voting observer', {
+          /** @param { QuestionDetails } details */
+          updateState: async (details) => resolve(details),
+        }),
+      ),
+    );
+    detailsP.then((details) => saveToRepl({ details }));
+
+    yield [
+      ` +++ Voters cast their vote by sending their selected list of positions
+       to their registrar, which they know and trust.`,
+    ];
+    await Promise.all([
+      rightsP,
+      detailsP,
+    ]).then(([rights, { questionHandle }]) =>
+      Promise.all([
+        E(rights.Larry).castBallotFor(questionHandle, [{ text: 'Tue 9am' }]),
+        E(rights.Moe).castBallotFor(questionHandle, [{ text: 'Tue 9am' }]),
+        E(rights.Curly).castBallotFor(questionHandle, [{ text: 'Wed 10am' }]),
+      ]),
     );
 
-    const voted = makePromiseKit();
-    observeIteration(
-      E(publicFacet).getQuestionSubscription(),
-      Far('voting observer', {
-        /** @param { QuestionDetails } details */
-        updateState: async (details) => {
-          const [name, choice] = ['larry', { text: 'Tue 9am' }];
-          console.log(`${name} voted for ${q(choice)}`);
-          await Promise.all([
-            E(larry).castBallotFor(details.questionHandle, [choice]),
-            E(moe).castBallotFor(details.questionHandle, [choice]),
-            E(curly).castBallotFor(details.questionHandle, [choice]),
-          ]);
-          voted.resolve(undefined);
-        },
-      }),
+    yield [
+      `+++ The only vote counter currently is the BinaryVoteCounter,
+       At the end, it looks for a majority winner and announces that.`,
+    ];
+    const result = await q1rP.then((q1r) =>
+      E(E(zoe).getPublicFacet(q1r.instance))
+        .getOutcome()
+        .then((outcome) => [`vote outcome: ${q(outcome)}`])
+        .catch((e) => [`vote failed ${e}`]),
     );
-    yield [` +++ agent casting ballot: ${larry}`];
-    await voted.promise;
-    // await memo('larry cast ballot', () => E(larry).castBallotFor(qh, [pos]));
+    yield result;
 
-    const counterPublicFacet = E(zoe).getPublicFacet(counterInstance);
-    yield await E(counterPublicFacet)
-      .getOutcome()
-      .then((outcome) => [`vote outcome: ${q(outcome)}`])
-      .catch((e) => [`vote failed ${e}`]);
     return ['agent done.'];
   }
 
