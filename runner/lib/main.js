@@ -45,36 +45,6 @@ const defaultNumberStages = 4 + 2;
 const vatIdentifierRE = /^(v\d+):(.*)$/;
 
 /**
- * @typedef { |
- *    'cosmic-swingset-bootstrap-block-start' |
- *    'cosmic-swingset-bootstrap-block-finish' |
- *    'cosmic-swingset-end-block-start' |
- *    'cosmic-swingset-end-block-finish' |
- *    'cosmic-swingset-begin-block'
- * } SlogCosmicSwingsetEventTypes
- */
-
-/**
- * @typedef { |
- *    'create-vat' |
- *    'vat-startup-finish' |
- *    'replay-transcript-start' |
- *    SlogCosmicSwingsetEventTypes
- * } SlogSupportedEventTypes
- */
-
-/**
- * @typedef {{
- *   time: number,
- *   type: SlogSupportedEventTypes
- * }} SlogEventBase
- */
-
-/**
- * @typedef {SlogEventBase & Record<string, unknown>} SlogEvent
- */
-
-/**
  * @typedef {{
  *   time: number,
  *   type: 'create-vat',
@@ -82,41 +52,85 @@ const vatIdentifierRE = /^(v\d+):(.*)$/;
  *   name?: string,
  *   dynamic: boolean,
  *   managerType: "local" | "xs-worker" | string,
- * } & Record<string, unknown>} SlogCreateVatEvent
+ * }} SlogCreateVatEvent
  */
 
 /**
- * @typedef {{
+ * @typedef {({
  *   time: number,
- *   type: 'vat-startup-finish' | 'replay-transcript-start',
+ *   type: |
+ *     'vat-startup-finish' |
+ *     'replay-transcript-start' | // Renamed to 'start-replay'
+ *     'start-replay',
  *   vatID: string
- * } & Record<string, unknown>} SlogVatEvent
+ * }) | SlogCreateVatEvent} SlogVatEvent
+ */
+
+/** @typedef {SlogVatEvent["type"]} SlogVatEventTypes */
+
+/**
+ * @typedef { |
+ *   'cosmic-swingset-bootstrap-block-start' |
+ *   'cosmic-swingset-bootstrap-block-finish' |
+ *   'cosmic-swingset-end-block-start' |
+ *   'cosmic-swingset-end-block-finish' |
+ *   'cosmic-swingset-begin-block'
+ * } SlogCosmicSwingsetBlockEventTypes
  */
 
 /**
  * @typedef {{
  *   time: number,
- *   type: SlogCosmicSwingsetEventTypes,
+ *   type: SlogCosmicSwingsetBlockEventTypes,
  *   blockHeight?: number,
  *   blockTime: number
- * } & Record<string, unknown>} SlogCosmicSwingsetEvent
+ * }} SlogCosmicSwingsetBlockEvent
  */
 
-/** @type {SlogSupportedEventTypes[]} */
-const supportedSlogEventTypes = [
+/**
+ * @typedef { |
+ *   SlogVatEventTypes |
+ *   SlogCosmicSwingsetBlockEventTypes
+ * } SlogSupportedEventTypes
+ */
+
+/**
+ * @typedef { |
+ *   SlogVatEvent |
+ *   SlogCosmicSwingsetBlockEvent
+ * } SlogSupportedEvent
+ */
+
+/** @type {SlogVatEventTypes[]} */
+const vatSlogEventTypes = [
   'create-vat',
   'vat-startup-finish',
   'replay-transcript-start',
-  'cosmic-swingset-bootstrap-block-start',
-  'cosmic-swingset-bootstrap-block-finish',
-  'cosmic-swingset-end-block-start',
-  'cosmic-swingset-end-block-finish',
-  'cosmic-swingset-begin-block',
+  'start-replay',
 ];
 
-const slogEventRE = new RegExp(
-  `^{"time":\\d+(?:\\.\\d+),"type":"(?:${supportedSlogEventTypes.join('|')})"`,
-);
+/** @type {SlogCosmicSwingsetBlockEventTypes[]} */
+const swingsetRegularBlockSlogEventTypes = [
+  'cosmic-swingset-begin-block',
+  'cosmic-swingset-end-block-start',
+  'cosmic-swingset-end-block-finish',
+];
+
+/** @type {SlogCosmicSwingsetBlockEventTypes[]} */
+const swingsetStartupBlockSlogEventTypes = [
+  'cosmic-swingset-bootstrap-block-start',
+  'cosmic-swingset-bootstrap-block-finish',
+];
+
+/** @param {SlogSupportedEventTypes[]} eventTypes */
+const filterSlogEvent = (eventTypes) =>
+  new RegExp(`^{"time":\\d+(?:\\.\\d+),"type":"(?:${eventTypes.join('|')})"`);
+
+const slogEventRE = filterSlogEvent([
+  ...vatSlogEventTypes,
+  ...swingsetRegularBlockSlogEventTypes,
+  ...swingsetStartupBlockSlogEventTypes,
+]);
 
 /**
  * @param {unknown} maybeObj
@@ -323,15 +337,14 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /**
-   * @param {import("./tasks/types.js").RunChainInfo} chainInfo
+   * @param {Pick<import("./tasks/types.js").RunChainInfo, 'storageLocation' | 'processInfo'>} chainInfo
    * @param {Object} param1
-   * @param {() => void} param1.resolveFirstEmptyBlock
    * @param {import("stream").Writable} param1.out
    * @param {import("stream").Writable} param1.err
    */
-  const monitorChain = async (
-    { slogLines, storageLocation, processInfo: kernelProcessInfo },
-    { resolveFirstEmptyBlock, out, err },
+  const makeChainMonitor = (
+    { storageLocation, processInfo: kernelProcessInfo },
+    { out, err },
   ) => {
     const { console: monitorConsole } = makeConsole('monitor-chain', out, err);
 
@@ -426,8 +439,9 @@ const main = async (progName, rawArgs, powers) => {
       }
     };
 
-    const logProcessUsage = async () =>
-      PromiseAllOrErrors(
+    const logProcessUsage = async () => {
+      await vatUpdated;
+      const results = await PromiseAllOrErrors(
         [
           {
             eventData: {
@@ -463,11 +477,12 @@ const main = async (progName, rawArgs, powers) => {
           });
           return true;
         }),
-      ).then((results) => {
-        if (results.some((result) => result === false)) {
-          throw new Error('Missing vat processes.');
-        }
-      });
+      );
+      if (results.some((result) => result === false)) {
+        throw new Error('Missing vat processes.');
+      }
+      return results;
+    };
 
     const logStorageUsage = async () => {
       logPerfEvent('chain-storage-usage', {
@@ -475,15 +490,85 @@ const main = async (progName, rawArgs, powers) => {
       });
     };
 
-    const monitorIntervalId = setInterval(
-      () =>
-        warnOnRejection(
-          PromiseAllOrErrors([logStorageUsage(), logProcessUsage()]),
-          monitorConsole,
-          'Failure during usage monitoring',
-        ),
-      monitorInterval,
-    );
+    /** @type {NodeJS.Timer | null} */
+    let monitorIntervalId = null;
+
+    const stop = () => {
+      if (monitorIntervalId) {
+        clearInterval(monitorIntervalId);
+        monitorIntervalId = null;
+      }
+    };
+
+    /** @param {number} interval */
+    const start = (interval) => {
+      stop();
+      monitorIntervalId = setInterval(
+        () =>
+          warnOnRejection(
+            PromiseAllOrErrors([logStorageUsage(), logProcessUsage()]),
+            monitorConsole,
+            'Failure during usage monitoring',
+          ),
+        interval,
+      );
+    };
+
+    /**
+     *
+     * @param {string} vatID
+     * @param {string | undefined} vatName
+     * @param {string} vatType
+     */
+    const createVat = (vatID, vatName, vatType) => {
+      if (!vatInfos.has(vatID)) {
+        vatInfos.set(vatID, {
+          vatName,
+          processInfo: undefined,
+          local: vatType === 'local',
+          started: false,
+        });
+      } else {
+        // TODO: warn already created vat before
+      }
+    };
+
+    /**
+     *
+     * @param {string} vatID
+     */
+    const updateVat = (vatID) => {
+      const vatInfo = vatInfos.get(vatID);
+      if (!vatInfo) {
+        // TODO: warn unknown vat
+      } else if (!vatInfo.processInfo) {
+        ensureVatInfoUpdated();
+      }
+    };
+
+    return harden({
+      start,
+      stop,
+      logProcessUsage,
+      logStorageUsage,
+      createVat,
+      updateVat,
+    });
+  };
+
+  /**
+   * @param {Pick<import("./tasks/types.js").RunChainInfo, 'slogLines'>} chainInfo
+   * @param {Object} param1
+   * @param {() => void} param1.resolveFirstEmptyBlock
+   * @param {ReturnType<makeChainMonitor>} [param1.chainMonitor]
+   * @param {import("stream").Writable} param1.out
+   * @param {import("stream").Writable} param1.err
+   */
+  const monitorSlog = async (
+    { slogLines },
+    { resolveFirstEmptyBlock, chainMonitor, out, err },
+  ) => {
+    const { console: monitorConsole } = makeConsole('monitor-slog', out, err);
 
     const slogOutput = zlib.createGzip({
       level: zlib.constants.Z_BEST_COMPRESSION,
@@ -506,14 +591,14 @@ const main = async (progName, rawArgs, powers) => {
     for await (const line of slogLines) {
       slogOutput.write(line);
 
-      if (slogStart == null) {
+      if (slogStart == null && chainMonitor) {
         // TODO: figure out a better way
         // There is a risk we could be late to the party here, with the chain
         // having started some time before us but in reality we usually find
         // the process before it starts the kernel
         slogStart = performance.now() / 1000;
         warnOnRejection(
-          logStorageUsage(),
+          chainMonitor.logStorageUsage(),
           monitorConsole,
           'Failed to get first storage usage',
         );
@@ -528,7 +613,7 @@ const main = async (progName, rawArgs, powers) => {
 
       const localEventTime = performance.timeOrigin + performance.now();
 
-      /** @type {SlogEvent} */
+      /** @type {SlogSupportedEvent} */
       let event;
       try {
         event = JSON.parse(line.toString('utf8'));
@@ -545,41 +630,18 @@ const main = async (progName, rawArgs, powers) => {
 
       switch (event.type) {
         case 'create-vat': {
-          const {
-            vatID,
-            name: vatName,
-            managerType,
-          } = /** @type {SlogCreateVatEvent} */ (event);
-          if (!vatInfos.has(vatID)) {
-            vatInfos.set(vatID, {
-              vatName,
-              processInfo: undefined,
-              local: managerType === 'local',
-              started: false,
-            });
-          } else {
-            // TODO: warn already created vat before
+          if (chainMonitor) {
+            const { vatID, name: vatName, managerType } = event;
+            chainMonitor.createVat(vatID, vatName, managerType);
           }
           break;
         }
-        case 'vat-startup-finish': {
-          const { vatID } = /** @type {SlogVatEvent} */ (event);
-          const vatInfo = vatInfos.get(vatID);
-          if (!vatInfo) {
-            // TODO: warn unknown vat
-          } else {
-            vatInfo.started = true;
-            ensureVatInfoUpdated();
-          }
-          break;
-        }
-        case 'replay-transcript-start': {
-          const { vatID } = /** @type {SlogVatEvent} */ (event);
-          const vatInfo = vatInfos.get(vatID);
-          if (!vatInfo) {
-            // TODO: warn unknown vat
-          } else if (!vatInfo.processInfo) {
-            ensureVatInfoUpdated();
+        case 'vat-startup-finish':
+        case 'replay-transcript-start':
+        case 'start-replay': {
+          if (chainMonitor) {
+            const { vatID } = event;
+            chainMonitor.updateVat(vatID);
           }
           break;
         }
@@ -591,59 +653,69 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-first-init-finish');
           break;
         }
+        case 'cosmic-swingset-begin-block': {
+          const { blockHeight = 0 } = event;
+          if (!slogBlocksSeen) {
+            logPerfEvent('stage-first-block', { block: blockHeight });
+            if (chainMonitor) {
+              await chainMonitor.logProcessUsage().catch((usageErr) => {
+                // Abuse first empty block as it will be awaited before monitorChain
+                // And won't abruptly end our monitor
+                // @ts-ignore resolving with a rejected promise is still "void" ;)
+                resolveFirstEmptyBlock(Promise.reject(usageErr));
+              });
+            }
+          }
+          monitorConsole.log('begin-block', blockHeight);
+          slogBlocksSeen += 1;
+          break;
+        }
         case 'cosmic-swingset-end-block-start': {
           if (event.blockHeight === 0) {
             // Before https://github.com/Agoric/agoric-sdk/pull/3491
             // bootstrap didn't have it's own slog entry
             logPerfEvent('chain-first-init-start');
+          } else {
+            slogLinesInBlock = 0;
           }
-          slogLinesInBlock = 0;
           break;
         }
         case 'cosmic-swingset-end-block-finish': {
           if (event.blockHeight === 0) {
             // TODO: measure duration from start to finish
             logPerfEvent('chain-first-init-finish');
-          }
-          // Finish line doesn't count
-          slogLinesInBlock -= 1;
-          if (slogLinesInBlock === 0) {
-            if (!slogEmptyBlocksSeen) {
-              logPerfEvent('stage-first-empty-block', {
-                block: event.blockHeight,
-              });
-              resolveFirstEmptyBlock();
+          } else {
+            const { blockHeight = 0 } = event;
+            // Finish line itself doesn't count
+            slogLinesInBlock -= 1;
+            if (slogLinesInBlock === 0) {
+              if (!slogEmptyBlocksSeen) {
+                logPerfEvent('stage-first-empty-block', {
+                  block: blockHeight,
+                });
+                resolveFirstEmptyBlock();
+              }
+              slogEmptyBlocksSeen += 1;
             }
-            slogEmptyBlocksSeen += 1;
+
+            monitorConsole.log(
+              'end-block',
+              blockHeight,
+              'linesInBlock=',
+              slogLinesInBlock,
+            );
           }
-          monitorConsole.log(
-            'end-block',
-            event.blockHeight,
-            'linesInBlock=',
-            slogLinesInBlock,
+          break;
+        }
+        default: {
+          console.warn(
+            'Parsed an unexpected slog event:',
+            // @ts-expect-error
+            event.type,
           );
-          break;
         }
-        case 'cosmic-swingset-begin-block': {
-          if (!slogBlocksSeen) {
-            logPerfEvent('stage-first-block', { block: event.blockHeight });
-            await vatUpdated;
-            await logProcessUsage().catch((usageErr) => {
-              // Abuse first empty block as it will be awaited before monitorChain
-              // And won't abruptly end our monitor
-              // @ts-ignore resolving with a rejected promise is still "void" ;)
-              resolveFirstEmptyBlock(Promise.reject(usageErr));
-            });
-          }
-          slogBlocksSeen += 1;
-          monitorConsole.log('begin-block', event.blockHeight);
-          break;
-        }
-        default:
       }
     }
-
-    clearInterval(monitorIntervalId);
 
     slogOutput.end();
     await slogOutputPipeResult;
@@ -702,8 +774,13 @@ const main = async (progName, rawArgs, powers) => {
         promise: chainFirstEmptyBlock,
         resolve: resolveFirstEmptyBlock,
       } = makePromiseKit();
-      const monitorChainDone = monitorChain(runChainResult, {
+
+      const chainMonitor = makeChainMonitor(runChainResult, { out, err });
+      chainMonitor.start(monitorInterval);
+
+      const slogMonitorDone = monitorSlog(runChainResult, {
         resolveFirstEmptyBlock,
+        chainMonitor,
         out,
         err,
       });
@@ -719,6 +796,8 @@ const main = async (progName, rawArgs, powers) => {
           await nextStep(done);
         },
         async () => {
+          chainMonitor.stop();
+
           if (!chainExited) {
             stageConsole.log('Stopping chain');
 
@@ -726,7 +805,7 @@ const main = async (progName, rawArgs, powers) => {
             await done;
           }
 
-          await monitorChainDone;
+          await slogMonitorDone;
         },
       );
     };
