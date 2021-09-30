@@ -1,3 +1,5 @@
+/* global console */
+
 import chalk from 'chalk';
 
 // TODO: pass an "httpRequest" as power instead of importing

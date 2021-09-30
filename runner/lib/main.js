@@ -1,4 +1,4 @@
-/* global process setInterval clearInterval */
+/* global process setInterval clearInterval console:off */
 /* eslint-disable no-continue */
 
 import { resolve as resolvePath, join as joinPath, basename } from 'path';
@@ -184,7 +184,11 @@ const coerceBooleanOption = (
   }
 };
 
-const makeInterrupterKit = () => {
+/**
+ * @param {Object} param0
+ * @param {Console} param0.console
+ */
+const makeInterrupterKit = ({ console }) => {
   const signal = makePromiseKit();
   /** @type {Error | null} */
   let rejection = null;
@@ -264,10 +268,10 @@ const main = async (progName, rawArgs, powers) => {
       errPrefix: prefix && `${chalk.bold.red(prefix)}: `,
     });
 
-  let { console } = makeConsole();
+  const { console: topConsole } = makeConsole();
 
   const outputDir = String(argv.outputDir || `results/run-${Date.now()}`);
-  console.log(`Outputting to ${resolvePath(outputDir)}`);
+  topConsole.log(`Outputting to ${resolvePath(outputDir)}`);
   await fs.mkdir(outputDir, { recursive: true });
 
   /** @type {typeof makeLocalChainTasks | typeof makeTestnetTasks} */
@@ -339,15 +343,12 @@ const main = async (progName, rawArgs, powers) => {
   /**
    * @param {Pick<import("./tasks/types.js").RunChainInfo, 'storageLocation' | 'processInfo'>} chainInfo
    * @param {Object} param1
-   * @param {import("stream").Writable} param1.out
-   * @param {import("stream").Writable} param1.err
+   * @param {Console} param1.console
    */
   const makeChainMonitor = (
     { storageLocation, processInfo: kernelProcessInfo },
-    { out, err },
+    { console },
   ) => {
-    const { console: monitorConsole } = makeConsole('monitor-chain', out, err);
-
     /**
      * @typedef {{
      *    processInfo: import("./helpers/procsfs.js").ProcessInfo | null | undefined,
@@ -361,7 +362,7 @@ const main = async (progName, rawArgs, powers) => {
     let vatUpdated = Promise.resolve();
 
     const updateVatInfos = async () => {
-      monitorConsole.log('Updating vat infos');
+      console.log('Updating vat infos');
       const childrenInfos = new Set(
         await kernelProcessInfo.getChildren().catch(() => []),
       );
@@ -378,7 +379,7 @@ const main = async (progName, rawArgs, powers) => {
           let vatName = vatIdentifierMatches[2];
           if (!vatName || vatName === 'undefined') vatName = undefined;
           // TODO: warn found vat process without create event
-          monitorConsole.warn(
+          console.warn(
             `found vat ${vatID}${
               vatName ? ` ${vatName}` : ''
             } process before create event`,
@@ -414,7 +415,7 @@ const main = async (progName, rawArgs, powers) => {
         if (vatInfo.started && !vatInfo.local && !vatInfo.processInfo) {
           // Either the vat started but the process doesn't exist yet (undefined)
           // or the vat process exited but the vat didn't stop yet (null)
-          monitorConsole.warn(
+          console.warn(
             `Vat ${vatID} started but process ${
               vatInfo.processInfo === null
                 ? 'exited early'
@@ -432,7 +433,7 @@ const main = async (progName, rawArgs, powers) => {
         vatUpdated = updateVatInfos();
         warnOnRejection(
           vatUpdated,
-          monitorConsole,
+          console,
           'Failed to update vat process infos',
         );
         await vatUpdated;
@@ -507,7 +508,7 @@ const main = async (progName, rawArgs, powers) => {
         () =>
           warnOnRejection(
             PromiseAllOrErrors([logStorageUsage(), logProcessUsage()]),
-            monitorConsole,
+            console,
             'Failure during usage monitoring',
           ),
         interval,
@@ -561,15 +562,12 @@ const main = async (progName, rawArgs, powers) => {
    * @param {Object} param1
    * @param {() => void} param1.resolveFirstEmptyBlock
    * @param {ReturnType<makeChainMonitor>} [param1.chainMonitor]
-   * @param {import("stream").Writable} param1.out
-   * @param {import("stream").Writable} param1.err
+   * @param {Console} param1.console
    */
   const monitorSlog = async (
     { slogLines },
-    { resolveFirstEmptyBlock, chainMonitor, out, err },
+    { resolveFirstEmptyBlock, chainMonitor, console },
   ) => {
-    const { console: monitorConsole } = makeConsole('monitor-slog', out, err);
-
     const slogOutput = zlib.createGzip({
       level: zlib.constants.Z_BEST_COMPRESSION,
     });
@@ -599,7 +597,7 @@ const main = async (progName, rawArgs, powers) => {
         slogStart = performance.now() / 1000;
         warnOnRejection(
           chainMonitor.logStorageUsage(),
-          monitorConsole,
+          console,
           'Failed to get first storage usage',
         );
       }
@@ -618,14 +616,14 @@ const main = async (progName, rawArgs, powers) => {
       try {
         event = JSON.parse(line.toString('utf8'));
       } catch (error) {
-        monitorConsole.warn('Failed to parse slog line', line, error);
+        console.warn('Failed to parse slog line', line, error);
         continue;
       }
 
       const delay = Math.round(localEventTime - event.time * 1000);
 
       if (delay > 100) {
-        monitorConsole.log('slog event', event.type, 'delay', delay, 'ms');
+        console.log('slog event', event.type, 'delay', delay, 'ms');
       }
 
       switch (event.type) {
@@ -666,7 +664,7 @@ const main = async (progName, rawArgs, powers) => {
               });
             }
           }
-          monitorConsole.log('begin-block', blockHeight);
+          console.log('begin-block', blockHeight);
           slogBlocksSeen += 1;
           break;
         }
@@ -698,7 +696,7 @@ const main = async (progName, rawArgs, powers) => {
               slogEmptyBlocksSeen += 1;
             }
 
-            monitorConsole.log(
+            console.log(
               'end-block',
               blockHeight,
               'linesInBlock=',
@@ -736,19 +734,16 @@ const main = async (progName, rawArgs, powers) => {
     withMonitor,
     saveStorage,
   }) => {
-    /** @type {import("stream").Writable} */
-    let out;
-    /** @type {import("stream").Writable} */
-    let err;
-
     /** @type {string | void} */
     let chainStorageLocation;
     currentStageElapsedOffsetNs = performance.now() * 1000;
-    ({ console, out, err } = makeConsole(`stage-${currentStage}`));
 
+    const { out, err } = makeConsole(`stage-${currentStage}`);
     const { console: stageConsole } = makeConsole('runner', out, err);
 
-    const { orInterrupt, releaseInterrupt } = makeInterrupterKit();
+    const { orInterrupt, releaseInterrupt } = makeInterrupterKit({
+      console: stageConsole,
+    });
 
     logPerfEvent('stage-start');
     const stageStart = performance.now();
@@ -775,14 +770,15 @@ const main = async (progName, rawArgs, powers) => {
         resolve: resolveFirstEmptyBlock,
       } = makePromiseKit();
 
-      const chainMonitor = makeChainMonitor(runChainResult, { out, err });
+      const chainMonitor = makeChainMonitor(runChainResult, {
+        ...makeConsole('monitor-chain', out, err),
+      });
       chainMonitor.start(monitorInterval);
 
       const slogMonitorDone = monitorSlog(runChainResult, {
+        ...makeConsole('monitor-slog', out, err),
         resolveFirstEmptyBlock,
         chainMonitor,
-        out,
-        err,
       });
 
       await aggregateTryFinally(
@@ -971,11 +967,7 @@ const main = async (progName, rawArgs, powers) => {
 
   await aggregateTryFinally(
     async () => {
-      /** @type {import("stream").Writable} */
-      let out;
-      /** @type {import("stream").Writable} */
-      let err;
-      ({ console, out, err } = makeConsole('init'));
+      const { console: initConsole, out, err } = makeConsole('init');
       logPerfEvent('start', {
         cpuTimeOffset: await getCPUTimeOffset(),
         timeOrigin: performance.timeOrigin / 1000,
@@ -985,7 +977,9 @@ const main = async (progName, rawArgs, powers) => {
       const withMonitor = coerceBooleanOption(argv.monitor, true);
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       {
-        const { releaseInterrupt } = makeInterrupterKit();
+        const { releaseInterrupt } = makeInterrupterKit({
+          console: initConsole,
+        });
 
         const reset = coerceBooleanOption(argv.reset, true);
         const setupConfig = {

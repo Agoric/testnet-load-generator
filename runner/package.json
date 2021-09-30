@@ -47,6 +47,9 @@
     ],
     "rules": {
       "prettier/prettier": "off"
+    },
+    "globals": {
+      "console": "off"
     }
   },
   "prettier": {

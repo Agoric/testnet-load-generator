@@ -1,4 +1,4 @@
-/* global LOCKDOWN_OPTIONS process */
+/* global LOCKDOWN_OPTIONS process console */
 // 'lockdown' appears on the global as a side-effect of importing 'ses'
 import 'ses';
 
