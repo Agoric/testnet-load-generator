@@ -133,6 +133,12 @@ const slogEventRE = filterSlogEvent([
 ]);
 
 /**
+ * @callback LogPerfEvent
+ * @param {string} eventType
+ * @param {Record<string, unknown>} [data]
+ */
+
+/**
  * @param {unknown} maybeObj
  * @param {Record<string, unknown>} [defaultValue]
  */
@@ -317,11 +323,7 @@ const main = async (progName, rawArgs, powers) => {
   );
   await fsStreamReady(outputStream);
 
-  /**
-   *
-   * @param {string} eventType
-   * @param {Record<string, unknown>} [data]
-   */
+  /** @type {LogPerfEvent} */
   const logPerfEvent = (eventType, data = {}) => {
     const perfNowNs = performance.now() * 1000;
     outputStream.write(
@@ -344,10 +346,14 @@ const main = async (progName, rawArgs, powers) => {
    * @param {Pick<import("./tasks/types.js").RunChainInfo, 'storageLocation' | 'processInfo'>} chainInfo
    * @param {Object} param1
    * @param {Console} param1.console
+   * @param {LogPerfEvent} param1.logPerfEvent
+   * @param {number} param1.cpuTimeOffset
+   * @param {import('./helpers/fs.js').DirDiskUsage} param1.dirDiskUsage
    */
   const makeChainMonitor = (
     { storageLocation, processInfo: kernelProcessInfo },
-    { console },
+    // eslint-disable-next-line no-shadow
+    { console, logPerfEvent, cpuTimeOffset, dirDiskUsage },
   ) => {
     /**
      * @typedef {{
@@ -562,23 +568,15 @@ const main = async (progName, rawArgs, powers) => {
    * @param {Object} param1
    * @param {() => void} param1.resolveFirstEmptyBlock
    * @param {ReturnType<makeChainMonitor>} [param1.chainMonitor]
+   * @param {LogPerfEvent} param1.logPerfEvent
+   * @param {import("stream").Writable} [param1.slogOutput]
    * @param {Console} param1.console
    */
   const monitorSlog = async (
     { slogLines },
-    { resolveFirstEmptyBlock, chainMonitor, console },
+    // eslint-disable-next-line no-shadow
+    { resolveFirstEmptyBlock, chainMonitor, logPerfEvent, slogOutput, console },
   ) => {
-    const slogOutput = zlib.createGzip({
-      level: zlib.constants.Z_BEST_COMPRESSION,
-    });
-    const slogOutputWriteStream = fsStream.createWriteStream(
-      joinPath(outputDir, `chain-stage-${currentStage}.slog.gz`),
-    );
-    await fsStreamReady(slogOutputWriteStream);
-    // const slogOutput = slogOutputWriteStream;
-    // const slogOutputPipeResult = finished(slogOutput);
-    const slogOutputPipeResult = pipeline(slogOutput, slogOutputWriteStream);
-
     /** @type {number | null}  */
     let slogStart = null;
 
@@ -587,7 +585,9 @@ const main = async (progName, rawArgs, powers) => {
     let slogLinesInBlock = 0;
 
     for await (const line of slogLines) {
-      slogOutput.write(line);
+      if (slogOutput) {
+        slogOutput.write(line);
+      }
 
       if (slogStart == null && chainMonitor) {
         // TODO: figure out a better way
@@ -714,9 +714,6 @@ const main = async (progName, rawArgs, powers) => {
         }
       }
     }
-
-    slogOutput.end();
-    await slogOutputPipeResult;
   };
 
   /**
@@ -764,6 +761,18 @@ const main = async (progName, rawArgs, powers) => {
       currentStageElapsedOffsetNs =
         (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
       chainStorageLocation = runChainResult.storageLocation;
+
+      const slogOutput = zlib.createGzip({
+        level: zlib.constants.Z_BEST_COMPRESSION,
+      });
+      const slogOutputWriteStream = fsStream.createWriteStream(
+        joinPath(outputDir, `chain-stage-${currentStage}.slog.gz`),
+      );
+      await fsStreamReady(slogOutputWriteStream);
+      // const slogOutput = slogOutputWriteStream;
+      // const slogOutputPipeResult = finished(slogOutput);
+      const slogOutputPipeResult = pipeline(slogOutput, slogOutputWriteStream);
+
       /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
       const {
         promise: chainFirstEmptyBlock,
@@ -772,6 +781,9 @@ const main = async (progName, rawArgs, powers) => {
 
       const chainMonitor = makeChainMonitor(runChainResult, {
         ...makeConsole('monitor-chain', out, err),
+        logPerfEvent,
+        cpuTimeOffset,
+        dirDiskUsage,
       });
       chainMonitor.start(monitorInterval);
 
@@ -779,6 +791,8 @@ const main = async (progName, rawArgs, powers) => {
         ...makeConsole('monitor-slog', out, err),
         resolveFirstEmptyBlock,
         chainMonitor,
+        logPerfEvent,
+        slogOutput,
       });
 
       await aggregateTryFinally(
@@ -791,18 +805,25 @@ const main = async (progName, rawArgs, powers) => {
 
           await nextStep(done);
         },
-        async () => {
-          chainMonitor.stop();
+        async () =>
+          aggregateTryFinally(
+            async () => {
+              chainMonitor.stop();
 
-          if (!chainExited) {
-            stageConsole.log('Stopping chain');
+              if (!chainExited) {
+                stageConsole.log('Stopping chain');
 
-            runChainResult.stop();
-            await done;
-          }
+                runChainResult.stop();
+                await done;
+              }
 
-          await slogMonitorDone;
-        },
+              await slogMonitorDone;
+            },
+            async () => {
+              slogOutput.end();
+              await slogOutputPipeResult;
+            },
+          ),
       );
     };
 
@@ -969,7 +990,7 @@ const main = async (progName, rawArgs, powers) => {
     async () => {
       const { console: initConsole, out, err } = makeConsole('init');
       logPerfEvent('start', {
-        cpuTimeOffset: await getCPUTimeOffset(),
+        cpuTimeOffset,
         timeOrigin: performance.timeOrigin / 1000,
         // TODO: add other interesting info here
       });
