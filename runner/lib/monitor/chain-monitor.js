@@ -2,7 +2,6 @@
 /* eslint-disable no-continue */
 
 import { basename } from 'path';
-import { performance } from 'perf_hooks';
 
 import { PromiseAllOrErrors, warnOnRejection } from '../helpers/async.js';
 
@@ -13,12 +12,12 @@ const vatIdentifierRE = /^(v\d+):(.*)$/;
  * @param {Object} param1
  * @param {Console} param1.console
  * @param {import('../stats/types.js').LogPerfEvent} param1.logPerfEvent
- * @param {number} param1.cpuTimeOffset
+ * @param {import('../helpers/time.js').TimeSource} param1.cpuTimeSource
  * @param {import('../helpers/fs.js').DirDiskUsage} param1.dirDiskUsage
  */
 export const makeChainMonitor = (
   { storageLocation, processInfo: kernelProcessInfo },
-  { console, logPerfEvent, cpuTimeOffset, dirDiskUsage },
+  { console, logPerfEvent, cpuTimeSource, dirDiskUsage },
 ) => {
   /**
    * @typedef {{
@@ -137,11 +136,7 @@ export const makeChainMonitor = (
         const { times, memory } = await processInfo.getUsageSnapshot();
         logPerfEvent('chain-process-usage', {
           ...eventData,
-          real:
-            Math.round(
-              performance.now() * 1000 -
-                (processInfo.startTimestamp - cpuTimeOffset) * 1e6,
-            ) / 1e6,
+          real: cpuTimeSource.shift(processInfo.startTimestamp).now(),
           ...times,
           ...memory,
         });

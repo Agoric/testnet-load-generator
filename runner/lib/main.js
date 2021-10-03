@@ -24,6 +24,7 @@ import { makeTasks as makeTestnetTasks } from './tasks/testnet.js';
 
 import { makeChainMonitor } from './monitor/chain-monitor.js';
 import { monitorSlog } from './monitor/slog-monitor.js';
+import { makeTimeSource } from './helpers/time.js';
 
 /** @typedef {import('./helpers/async.js').Task} Task */
 
@@ -214,8 +215,10 @@ const main = async (progName, rawArgs, powers) => {
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
-  let currentStageElapsedOffsetNs = 0;
+  const timeSource = makeTimeSource({ performance });
   const cpuTimeOffset = await getCPUTimeOffset();
+  const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
+  let currentStageTimeSource = timeSource;
 
   const outputStream = fsStream.createWriteStream(
     joinPath(outputDir, 'perf.jsonl'),
@@ -225,13 +228,12 @@ const main = async (progName, rawArgs, powers) => {
 
   /** @type {import('./stats/types.js').LogPerfEvent} */
   const logPerfEvent = (eventType, data = {}) => {
-    const perfNowNs = performance.now() * 1000;
     outputStream.write(
       JSON.stringify(
         {
-          timestamp: Math.round(perfNowNs) / 1e6,
+          timestamp: timeSource.now(),
           stage: currentStage,
-          elapsed: Math.round(perfNowNs - currentStageElapsedOffsetNs) / 1e6,
+          elapsed: currentStageTimeSource.now(),
           time: undefined, // Placeholder to put data.time before type if it exists
           type: `perf-${eventType}`,
           ...data,
@@ -245,21 +247,21 @@ const main = async (progName, rawArgs, powers) => {
   /**
    * @param {Object} param0
    * @param {boolean} param0.chainOnly
-   * @param {number} param0.duration
+   * @param {number} param0.durationConfig
    * @param {unknown} param0.loadgenConfig
    * @param {boolean} param0.withMonitor
    * @param {boolean} param0.saveStorage
    */
   const runStage = async ({
     chainOnly,
-    duration,
+    durationConfig,
     loadgenConfig,
     withMonitor,
     saveStorage,
   }) => {
     /** @type {string | void} */
     let chainStorageLocation;
-    currentStageElapsedOffsetNs = performance.now() * 1000;
+    currentStageTimeSource = timeSource.shift();
 
     const { out, err } = makeConsole(`stage-${currentStage}`);
     const { console: stageConsole } = makeConsole('runner', out, err);
@@ -269,11 +271,15 @@ const main = async (progName, rawArgs, powers) => {
     });
 
     logPerfEvent('stage-start');
-    const stageStart = performance.now();
+    const stageStart = timeSource.shift();
 
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
-      stageConsole.log('Running chain', { chainOnly, duration, loadgenConfig });
+      stageConsole.log('Running chain', {
+        chainOnly,
+        durationConfig,
+        loadgenConfig,
+      });
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
@@ -284,8 +290,9 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('chain-stopped');
       });
 
-      currentStageElapsedOffsetNs =
-        (runChainResult.processInfo.startTimestamp - cpuTimeOffset) * 1e6;
+      currentStageTimeSource = cpuTimeSource.shift(
+        runChainResult.processInfo.startTimestamp,
+      );
       chainStorageLocation = runChainResult.storageLocation;
 
       const slogOutput = zlib.createGzip({
@@ -308,7 +315,7 @@ const main = async (progName, rawArgs, powers) => {
       const chainMonitor = makeChainMonitor(runChainResult, {
         ...makeConsole('monitor-chain', out, err),
         logPerfEvent,
-        cpuTimeOffset,
+        cpuTimeSource,
         dirDiskUsage,
       });
       chainMonitor.start(monitorInterval);
@@ -317,6 +324,7 @@ const main = async (progName, rawArgs, powers) => {
         ...makeConsole('monitor-slog', out, err),
         resolveFirstEmptyBlock,
         chainMonitor,
+        localTimeSource: timeSource,
         logPerfEvent,
         slogOutput,
       });
@@ -357,7 +365,7 @@ const main = async (progName, rawArgs, powers) => {
     const spawnClient = async (nextStep) => {
       stageConsole.log('Running client');
       logPerfEvent('run-client-start');
-      const runClientStart = performance.now();
+      const runClientStart = timeSource.shift();
       const runClientResult = await runClient({ stdout: out, stderr: err });
       logPerfEvent('run-client-finish');
 
@@ -371,8 +379,7 @@ const main = async (progName, rawArgs, powers) => {
         async () => {
           await orInterrupt(runClientResult.ready);
           logPerfEvent('client-ready', {
-            duration:
-              Math.round((performance.now() - runClientStart) * 1000) / 1e6,
+            duration: runClientStart.now(),
           });
 
           await nextStep(done);
@@ -429,20 +436,17 @@ const main = async (progName, rawArgs, powers) => {
       let sleeping;
       /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
       const sleepCancel = makePromiseKit();
-      if (duration < 0) {
+      if (durationConfig < 0) {
         // sleeping forever
         sleeping = new Promise(() => {});
         stageConsole.log('Stage ready, waiting for end of chain');
       } else {
-        const sleepTime = Math.max(
-          0,
-          duration - (performance.now() - stageStart),
-        );
+        const sleepTime = Math.max(0, durationConfig - stageStart.now());
         if (sleepTime) {
-          sleeping = sleep(sleepTime, sleepCancel.promise);
+          sleeping = sleep(sleepTime * 1000, sleepCancel.promise);
           stageConsole.log(
             'Stage ready, going to sleep for',
-            Math.round(sleepTime / (1000 * 60)),
+            Math.round(sleepTime / 60),
             'minutes',
           );
         } else {
@@ -504,7 +508,7 @@ const main = async (progName, rawArgs, powers) => {
             releaseInterrupt();
 
             logPerfEvent('stage-finish');
-            currentStageElapsedOffsetNs = 0;
+            currentStageTimeSource = timeSource;
           },
         ),
     );
@@ -517,7 +521,7 @@ const main = async (progName, rawArgs, powers) => {
       const { console: initConsole, out, err } = makeConsole('init');
       logPerfEvent('start', {
         cpuTimeOffset,
-        timeOrigin: performance.timeOrigin / 1000,
+        timeOrigin: timeSource.timeOrigin,
         // TODO: add other interesting info here
       });
 
@@ -604,14 +608,12 @@ const main = async (progName, rawArgs, powers) => {
             ? Number(stageConfig.duration)
             : (!(chainOnly && makeTasks === makeLocalChainTasks) &&
                 sharedStageDurationMinutes) ||
-              0) *
-          60 *
-          1000;
+              0) * 60;
 
         // eslint-disable-next-line no-await-in-loop
         await runStage({
           chainOnly,
-          duration,
+          durationConfig: duration,
           loadgenConfig,
           withMonitor,
           saveStorage,

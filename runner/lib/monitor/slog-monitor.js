@@ -1,8 +1,6 @@
 /* global console:off */
 /* eslint-disable no-continue */
 
-import { performance } from 'perf_hooks';
-
 import { warnOnRejection } from '../helpers/async.js';
 
 /**
@@ -99,12 +97,20 @@ const slogEventRE = filterSlogEvent([
  * @param {() => void} param1.resolveFirstEmptyBlock
  * @param {ReturnType<import("./chain-monitor").makeChainMonitor>} [param1.chainMonitor]
  * @param {import("../stats/types.js").LogPerfEvent} param1.logPerfEvent
+ * @param {import("../helpers/time.js").TimeSource} [param1.localTimeSource]
  * @param {import("stream").Writable} [param1.slogOutput]
  * @param {Console} param1.console
  */
 export const monitorSlog = async (
   { slogLines },
-  { resolveFirstEmptyBlock, chainMonitor, logPerfEvent, slogOutput, console },
+  {
+    resolveFirstEmptyBlock,
+    chainMonitor,
+    localTimeSource,
+    logPerfEvent,
+    slogOutput,
+    console,
+  },
 ) => {
   /** @type {number | null}  */
   let slogStart = null;
@@ -123,7 +129,7 @@ export const monitorSlog = async (
       // There is a risk we could be late to the party here, with the chain
       // having started some time before us but in reality we usually find
       // the process before it starts the kernel
-      slogStart = performance.now() / 1000;
+      slogStart = localTimeSource ? localTimeSource.now() : 0;
       warnOnRejection(
         chainMonitor.logStorageUsage(),
         console,
@@ -138,7 +144,7 @@ export const monitorSlog = async (
     // the time and type tested prefix is guaranteed to be single-byte.
     if (!slogEventRE.test(line.toString('ascii', 0, 100))) continue;
 
-    const localEventTime = performance.timeOrigin + performance.now();
+    const localEventTime = localTimeSource && localTimeSource.getTime();
 
     /** @type {SlogSupportedEvent} */
     let event;
@@ -149,7 +155,9 @@ export const monitorSlog = async (
       continue;
     }
 
-    const delay = Math.round(localEventTime - event.time * 1000);
+    const delay = localEventTime
+      ? Math.round((localEventTime - event.time) * 1000)
+      : 0;
 
     if (delay > 100) {
       console.log('slog event', event.type, 'delay', delay, 'ms');
