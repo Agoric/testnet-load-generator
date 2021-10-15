@@ -502,7 +502,6 @@ const main = async (progName, rawArgs, powers) => {
 
     for await (const line of slogLines) {
       slogOutput.write(line);
-      slogOutput.write('\n');
 
       if (slogStart == null) {
         // TODO: figure out a better way
@@ -519,15 +518,17 @@ const main = async (progName, rawArgs, powers) => {
 
       slogLinesInBlock += 1;
 
-      // Avoid JSON parsing lines we don't care about
-      if (!slogEventRE.test(line)) continue;
+      // Avoid JSON parsing or converting lines we don't care about
+      // Parse as ascii, in case the payload has multi-byte chars,
+      // the time and type tested prefix is guaranteed to be single-byte.
+      if (!slogEventRE.test(line.toString('ascii', 0, 100))) continue;
 
       const localEventTime = performance.timeOrigin + performance.now();
 
       /** @type {SlogEvent} */
       let event;
       try {
-        event = JSON.parse(line);
+        event = JSON.parse(line.toString('utf8'));
       } catch (error) {
         monitorConsole.warn('Failed to parse slog line', line, error);
         continue;

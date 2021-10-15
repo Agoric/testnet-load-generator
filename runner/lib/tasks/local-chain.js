@@ -8,7 +8,7 @@ import {
   childProcessDone,
   makeSpawnWithPrintAndPipeOutput,
 } from '../helpers/child-process.js';
-import LineStreamTransform from '../helpers/line-stream-transform.js';
+import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { whenStreamSteps } from '../helpers/stream-steps.js';
 import {
@@ -92,7 +92,7 @@ export const makeTasks = ({
     console.log('Starting chain');
 
     const slogFifo = await makeFIFO('chain.slog');
-    const slogLines = new LineStreamTransform();
+    const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
     const chainEnv = Object.create(process.env);

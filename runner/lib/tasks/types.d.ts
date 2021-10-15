@@ -1,3 +1,4 @@
+/* global Buffer */
 /* eslint-disable no-unused-vars,no-redeclare */
 
 export type TaskResult = {
@@ -7,7 +8,7 @@ export type TaskResult = {
 };
 
 export type RunChainInfo = {
-  readonly slogLines: AsyncIterable<string>;
+  readonly slogLines: AsyncIterable<Buffer>;
   readonly processInfo: import('../helpers/process-info.js').ProcessInfo;
   readonly storageLocation: string;
 };
