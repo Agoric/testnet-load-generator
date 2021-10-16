@@ -35,7 +35,7 @@
     "@agoric/ui-components": "*",
     "@agoric/zoe": "*",
     "esm": "agoric-labs/esm#Agoric-built",
-    "firebase": "^9.0.0-beta.8"
+    "firebase": "^9.0.2"
   },
   "ava": {
     "files": [
