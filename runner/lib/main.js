@@ -534,13 +534,11 @@ const main = async (progName, rawArgs, powers) => {
         continue;
       }
 
-      monitorConsole.log(
-        'slog event',
-        event.type,
-        'delay',
-        Math.round(localEventTime - event.time * 1000),
-        'ms',
-      );
+      const delay = Math.round(localEventTime - event.time * 1000);
+
+      if (delay > 100) {
+        monitorConsole.log('slog event', event.type, 'delay', delay, 'ms');
+      }
 
       switch (event.type) {
         case 'create-vat': {
