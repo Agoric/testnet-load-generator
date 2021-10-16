@@ -5,10 +5,11 @@
   "useWorkspaces": true,
   "main": "index.js",
   "workspaces": [
-    "loadgen",
     "_agstate/agoric-servers",
-    "runner",
-    "loadgen/firebase/admin"
+    "loadgen",
+    "loadgen/contract",
+    "loadgen/firebase/admin",
+    "runner"
   ],
   "devDependencies": {
     "@typescript-eslint/parser": "^4.18.0",

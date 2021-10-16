@@ -1,9 +1,9 @@
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 import { AmountMath, AssetKind } from '@agoric/ertp';
-import { pursePetnames, issuerPetnames } from './petnames';
-import { disp } from './display';
-import { allValues } from './allValues';
+import { pursePetnames, issuerPetnames } from './petnames.js';
+import { disp } from './display.js';
+import { allValues } from './allValues.js';
 
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
