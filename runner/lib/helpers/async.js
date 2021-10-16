@@ -1,9 +1,18 @@
-/* global setTimeout */
+/* global setTimeout,clearTimeout */
 
 import { makePromiseKit } from '../sdk/promise-kit.js';
 
 /** @type {import("./async.js").sleep} */
-export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms, cancel) =>
+  new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    if (cancel) {
+      cancel.then(() => {
+        clearTimeout(timeout);
+        reject(new Error('sleep cancelled'));
+      });
+    }
+  });
 
 /**
  * @param {Error[]} errors
@@ -85,9 +94,12 @@ export const aggregateTryFinally = async (trier, finalizer) =>
 
 /** @type {import("./async.js").tryTimeout} */
 export const tryTimeout = async (timeoutMs, trier, onError) => {
+  const tryResult = trier();
   const result = Promise.race([
-    sleep(timeoutMs).then(() => Promise.reject(new Error('Timeout'))),
-    trier(),
+    sleep(timeoutMs, tryResult).then(() =>
+      Promise.reject(new Error('Timeout')),
+    ),
+    tryResult,
   ]);
 
   return !onError

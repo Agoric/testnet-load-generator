@@ -804,6 +804,8 @@ const main = async (progName, rawArgs, powers) => {
     const stageReady = async (nextStep) => {
       /** @type {Promise<void>} */
       let sleeping;
+      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+      const sleepCancel = makePromiseKit();
       if (duration < 0) {
         // sleeping forever
         sleeping = new Promise(() => {});
@@ -814,7 +816,7 @@ const main = async (progName, rawArgs, powers) => {
           duration - (performance.now() - stageStart),
         );
         if (sleepTime) {
-          sleeping = sleep(sleepTime);
+          sleeping = sleep(sleepTime, sleepCancel.promise);
           stageConsole.log(
             'Stage ready, going to sleep for',
             Math.round(sleepTime / (1000 * 60)),
@@ -826,7 +828,7 @@ const main = async (progName, rawArgs, powers) => {
         }
       }
       logPerfEvent('stage-ready');
-      await nextStep(sleeping);
+      await nextStep(sleeping).finally(sleepCancel.resolve);
       logPerfEvent('stage-shutdown');
     };
 
