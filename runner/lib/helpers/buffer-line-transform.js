@@ -45,6 +45,13 @@ export default class BufferLineTransform extends Transform {
           ? chunk
           : Buffer.from(chunk, encoding);
 
+      // In case the break value is more than a single byte, it may span
+      // multiple chunks. Since Node doesn't provide a way to get partial
+      // search result, fallback to a less optimal early concatenation
+      if (this._breakLength > 1 && this._chunks.length) {
+        buf = Buffer.concat([/** @type {Buffer} */ (this._chunks.pop()), buf]);
+      }
+
       while (buf.length) {
         const offset = buf.indexOf(this._breakValue, 0, this._breakEncoding);
 
