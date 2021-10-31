@@ -2,10 +2,13 @@ import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 import { AmountMath } from '@agoric/ertp';
 // import { allComparable } from '@agoric/same-structure';
-import { multiplyBy, makeRatio } from '@agoric/zoe/src/contractSupport';
-import { pursePetnames, issuerPetnames } from './petnames';
-import { disp } from './display';
-import { allValues } from './allValues';
+import {
+  multiplyBy,
+  makeRatio,
+} from '@agoric/zoe/src/contractSupport/index.js';
+import { pursePetnames, issuerPetnames } from './petnames.js';
+import { disp } from './display.js';
+import { allValues } from './allValues.js';
 
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.

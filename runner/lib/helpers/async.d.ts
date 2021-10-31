@@ -1,7 +1,7 @@
 /* global Console */
 /* eslint-disable no-unused-vars,no-redeclare */
 
-export declare function sleep(ms: number): Promise<void>;
+export declare function sleep(ms: number, cancel?: Promise<any>): Promise<void>;
 
 export interface AggregateError extends Error {
   readonly errors: Error[];

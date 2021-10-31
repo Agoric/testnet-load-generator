@@ -10,9 +10,9 @@ import { makeAuthBroker } from './firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from './firebase/client.js';
 import { deepEquals } from './firebase/admin/helpers.js';
 
-// import { prepareFaucet } from './task-tap-faucet';
 import { prepareAMMTrade } from './task-trade-amm';
 import { prepareVaultCycle } from './task-create-vault';
+import { prepareFaucet } from './task-tap-faucet';
 
 const sortAndFilterNullish = (obj) =>
   Object.fromEntries(
@@ -39,11 +39,12 @@ let pushHandler = null;
 let pushBroker = null;
 
 const tasks = {
-  // faucet: [prepareFaucet],
-  // we must start the AMM task before Vault: AMM exchanges some RUN for BLD,
-  // and Vault measures the balances
+  // we must start the AMM task before other tasks:
+  // - AMM sets up Zoe fee purse
+  // - AMM exchanges some RUN for BLD, and Vault measures the balances
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
+  faucet: [prepareFaucet],
 };
 
 const runners = {}; // name -> { cycle, stop?, limit }

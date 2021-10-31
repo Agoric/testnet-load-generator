@@ -7,7 +7,7 @@
   resolved "https://registry.yarnpkg.com/@agoric/acorn-eventual-send/-/acorn-eventual-send-2.1.6.tgz#f870157639235b2ff4652ed5d2faad46a57fa466"
   integrity sha512-9uaLuAWKwZsno+6e/5+CZ1ePluNZEYmows+QBmqnC89CqtHmpa2b75G5XU+guUGmgExm0jKaP2zYhpdqM8dhGQ==
 
-"@agoric/assert@*", "@agoric/assert@^0.2.6":
+"@agoric/assert@^0.2.6":
   version "0.2.6"
   resolved "https://registry.yarnpkg.com/@agoric/assert/-/assert-0.2.6.tgz#d76827aa891838fb9d8fd075b1130dc2320bbf59"
   integrity sha512-oGktC9/1U+LDfEUuzByP/Ehsu4wHMh+TH+9GwbgB3H1cB1ARIuLKYP3Se6JrKV0XaeEPMCNZ0BA3EcuUSeSjCQ==
@@ -316,16 +316,6 @@
   resolved "https://registry.yarnpkg.com/@agoric/nat/-/nat-4.1.0.tgz#102794e033ffc183a20b0f86031a2e76d204b9f6"
   integrity sha512-2oMoh3DMn0Fx8HChPPiH8irBNdT/33ttxAZJohhd3nU3gyBRQ1u+eEoOQWfSkrE6M02iMkQM7GE9MzGmjQ6bHg==
 
-"@agoric/notifier@*", "@agoric/notifier@^0.3.7":
-  version "0.3.7"
-  resolved "https://registry.yarnpkg.com/@agoric/notifier/-/notifier-0.3.7.tgz#5bb8d1f0181422298bf04135f18b19f28612d696"
-  integrity sha512-NMoPxDNjRbBM8MACjGkl4XZ+sX9oTOvv6d0ir7514CJMorBHxjCBhFHZcU8ThOUjIqKKgX4USZRQXb4UF9EeyA==
-  dependencies:
-    "@agoric/assert" "^0.2.6"
-    "@agoric/eventual-send" "^0.13.7"
-    "@agoric/marshal" "^0.4.4"
-    "@agoric/promise-kit" "^0.2.6"
-
 "@agoric/notifier@^0.3.23":
   version "0.3.23"
   resolved "https://registry.yarnpkg.com/@agoric/notifier/-/notifier-0.3.23.tgz#a6c67bf404cb58cd2be089ae950f9486d782acd4"
@@ -335,6 +325,16 @@
     "@agoric/eventual-send" "^0.13.23"
     "@agoric/marshal" "^0.4.20"
     "@agoric/promise-kit" "^0.2.21"
+
+"@agoric/notifier@^0.3.7":
+  version "0.3.7"
+  resolved "https://registry.yarnpkg.com/@agoric/notifier/-/notifier-0.3.7.tgz#5bb8d1f0181422298bf04135f18b19f28612d696"
+  integrity sha512-NMoPxDNjRbBM8MACjGkl4XZ+sX9oTOvv6d0ir7514CJMorBHxjCBhFHZcU8ThOUjIqKKgX4USZRQXb4UF9EeyA==
+  dependencies:
+    "@agoric/assert" "^0.2.6"
+    "@agoric/eventual-send" "^0.13.7"
+    "@agoric/marshal" "^0.4.4"
+    "@agoric/promise-kit" "^0.2.6"
 
 "@agoric/pegasus@^0.2.0":
   version "0.2.0"
@@ -423,14 +423,6 @@
     "@agoric/store" "^0.4.7"
     "@agoric/transform-metering" "^1.4.6"
 
-"@agoric/store@*", "@agoric/store@^0.4.7":
-  version "0.4.7"
-  resolved "https://registry.yarnpkg.com/@agoric/store/-/store-0.4.7.tgz#d95fb1fee739d46b5c872c3591cd173900bcd56a"
-  integrity sha512-d1wSPGLLIc/N5V6ZIVCIZZDAEw2RJj/LQAEgzehIdQ5FabkdCfwbyANI7+dwCYDD+2nrlEFlVUo1Vt54Og423w==
-  dependencies:
-    "@agoric/assert" "^0.2.6"
-    "@agoric/marshal" "^0.4.4"
-
 "@agoric/store@^0.4.23":
   version "0.4.23"
   resolved "https://registry.yarnpkg.com/@agoric/store/-/store-0.4.23.tgz#2db7c85b1ba636a1d0277bd0207b0b522042e37c"
@@ -438,6 +430,14 @@
   dependencies:
     "@agoric/assert" "^0.3.7"
     "@agoric/marshal" "^0.4.20"
+
+"@agoric/store@^0.4.7":
+  version "0.4.7"
+  resolved "https://registry.yarnpkg.com/@agoric/store/-/store-0.4.7.tgz#d95fb1fee739d46b5c872c3591cd173900bcd56a"
+  integrity sha512-d1wSPGLLIc/N5V6ZIVCIZZDAEw2RJj/LQAEgzehIdQ5FabkdCfwbyANI7+dwCYDD+2nrlEFlVUo1Vt54Og423w==
+  dependencies:
+    "@agoric/assert" "^0.2.6"
+    "@agoric/marshal" "^0.4.4"
 
 "@agoric/swing-store-lmdb@^0.4.6":
   version "0.4.6"

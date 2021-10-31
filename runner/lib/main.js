@@ -502,7 +502,6 @@ const main = async (progName, rawArgs, powers) => {
 
     for await (const line of slogLines) {
       slogOutput.write(line);
-      slogOutput.write('\n');
 
       if (slogStart == null) {
         // TODO: figure out a better way
@@ -519,27 +518,27 @@ const main = async (progName, rawArgs, powers) => {
 
       slogLinesInBlock += 1;
 
-      // Avoid JSON parsing lines we don't care about
-      if (!slogEventRE.test(line)) continue;
+      // Avoid JSON parsing or converting lines we don't care about
+      // Parse as ascii, in case the payload has multi-byte chars,
+      // the time and type tested prefix is guaranteed to be single-byte.
+      if (!slogEventRE.test(line.toString('ascii', 0, 100))) continue;
 
       const localEventTime = performance.timeOrigin + performance.now();
 
       /** @type {SlogEvent} */
       let event;
       try {
-        event = JSON.parse(line);
+        event = JSON.parse(line.toString('utf8'));
       } catch (error) {
         monitorConsole.warn('Failed to parse slog line', line, error);
         continue;
       }
 
-      monitorConsole.log(
-        'slog event',
-        event.type,
-        'delay',
-        Math.round(localEventTime - event.time * 1000),
-        'ms',
-      );
+      const delay = Math.round(localEventTime - event.time * 1000);
+
+      if (delay > 100) {
+        monitorConsole.log('slog event', event.type, 'delay', delay, 'ms');
+      }
 
       switch (event.type) {
         case 'create-vat': {
@@ -803,6 +802,8 @@ const main = async (progName, rawArgs, powers) => {
     const stageReady = async (nextStep) => {
       /** @type {Promise<void>} */
       let sleeping;
+      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+      const sleepCancel = makePromiseKit();
       if (duration < 0) {
         // sleeping forever
         sleeping = new Promise(() => {});
@@ -813,7 +814,7 @@ const main = async (progName, rawArgs, powers) => {
           duration - (performance.now() - stageStart),
         );
         if (sleepTime) {
-          sleeping = sleep(sleepTime);
+          sleeping = sleep(sleepTime, sleepCancel.promise);
           stageConsole.log(
             'Stage ready, going to sleep for',
             Math.round(sleepTime / (1000 * 60)),
@@ -825,7 +826,7 @@ const main = async (progName, rawArgs, powers) => {
         }
       }
       logPerfEvent('stage-ready');
-      await nextStep(sleeping);
+      await nextStep(sleeping).finally(sleepCancel.resolve);
       logPerfEvent('stage-shutdown');
     };
 

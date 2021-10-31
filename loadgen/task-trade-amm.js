@@ -10,7 +10,7 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
   let agent = await E(scratch).get(key);
   if (!agent) {
     const { bundleSource } = deployPowers;
-    const agentFn = path.join(__dirname, 'agent-trade-amm.js');
+    const agentFn = path.join(__dirname, 'contract', 'agent-trade-amm.js');
     const agentBundle = await bundleSource(agentFn);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);

@@ -1,7 +1,7 @@
 /* global __dirname */
 import path from 'path';
 import { E } from '@agoric/eventual-send';
-import { disp } from './display';
+import { disp } from './contract/display.js';
 
 // Prepare to create and close a vault on each cycle. We measure our
 // available BLD at startup. On each cycle, we deposit 1% of that value as
@@ -22,7 +22,7 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
   let agent = await E(scratch).get(key);
   if (!agent) {
     const { bundleSource } = deployPowers;
-    const agentFn = path.join(__dirname, 'agent-create-vault.js');
+    const agentFn = path.join(__dirname, 'contract', 'agent-create-vault.js');
     const agentBundle = await bundleSource(agentFn);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);

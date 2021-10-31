@@ -12,7 +12,7 @@ export async function prepareFaucet(homePromise, deployPowers) {
     const { bundleSource } = deployPowers;
     const faucetFn = require.resolve(`@agoric/zoe/src/contracts/mintPayments`);
     const faucetBundleP = bundleSource(faucetFn);
-    const agentFn = path.join(__dirname, 'agent-tap-faucet.js');
+    const agentFn = path.join(__dirname, 'contract', 'agent-tap-faucet.js');
     const agentBundleP = bundleSource(agentFn);
     const faucetBundle = await faucetBundleP;
     const agentBundle = await agentBundleP;

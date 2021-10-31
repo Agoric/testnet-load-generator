@@ -1,8 +1,9 @@
 {
-  "name": "loadgen-server",
+  "name": "loadgen-contract",
   "version": "0.1.0",
   "private": true,
-  "description": "Server / Deploy script for the Loadgen Dapp",
+  "description": "Contract for the Loadgen Dapp",
+  "type": "module",
   "scripts": {
     "build": "exit 0",
     "test": "exit 0",
@@ -22,12 +23,13 @@
     "prettier": "^2.1.2"
   },
   "dependencies": {
+    "@agoric/ertp": "*",
     "@agoric/eventual-send": "*",
-    "@agoric/install-ses": "*",
-    "@agoric/promise-kit": "*",
-    "esm": "agoric-labs/esm#Agoric-built",
-    "firebase": "^9.0.2"
+    "@agoric/marshal": "*",
+    "@agoric/ui-components": "*",
+    "@agoric/zoe": "*"
   },
+  "keywords": [],
   "author": "Agoric",
   "license": "Apache-2.0",
   "eslintConfig": {
