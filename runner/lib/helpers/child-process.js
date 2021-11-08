@@ -65,29 +65,26 @@ export const makeSpawnWithPipedStream = ({ spawn, end }) => {
       [stdin, stdout, stderr] = internalStdio;
     }
 
-    const childProcess = spawn(command, args, {
-      ...spawnOptions,
-      stdio,
-    });
+    const childProcess = /** @type {import("child_process").ChildProcessWithoutNullStreams} */ (spawn(
+      command,
+      args,
+      {
+        ...spawnOptions,
+        // @ts-ignore stdio can be undefined
+        stdio,
+      },
+    ));
+
+    const endOption = end !== undefined ? { end } : {};
 
     if (stdin) {
-      stdin.pipe(/** @type {NodeJS.WritableStream} */ (childProcess.stdin), {
-        end,
-      });
+      stdin.pipe(childProcess.stdin, endOption);
     }
     if (stdout) {
-      /** @type {NodeJS.ReadableStream} */ (childProcess.stdout).pipe(
-        /** @type {*} */ (stdout),
-        {
-          end,
-        },
-      );
+      childProcess.stdout.pipe(/** @type {*} */ (stdout), endOption);
     }
     if (stderr) {
-      /** @type {NodeJS.ReadableStream} */ (childProcess.stderr).pipe(
-        /** @type {*} */ (stderr),
-        { end },
-      );
+      childProcess.stderr.pipe(/** @type {*} */ (stderr), endOption);
     }
 
     return /** @type {any} */ (childProcess);

@@ -33,6 +33,7 @@ export default class BufferLineTransform extends Transform {
   }
 
   /**
+   * @override
    * @param {any} chunk
    * @param {BufferEncoding | 'buffer'} encoding
    * @param {import('stream').TransformCallback} cb
@@ -85,7 +86,10 @@ export default class BufferLineTransform extends Transform {
     }
   }
 
-  /** @param {import('stream').TransformCallback} cb */
+  /**
+   * @override
+   * @param {import('stream').TransformCallback} cb
+   * */
   _flush(cb) {
     if (this._chunks.length) {
       this._writeItem(
