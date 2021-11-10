@@ -10,6 +10,7 @@ import {
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
+import { fsStreamReady } from '../helpers/fs.js';
 import { whenStreamSteps } from '../helpers/stream-steps.js';
 import {
   getArgvMatcher,
@@ -92,6 +93,7 @@ export const makeTasks = ({
     console.log('Starting chain');
 
     const slogFifo = await makeFIFO('chain.slog');
+    const slogReady = fsStreamReady(slogFifo);
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
@@ -140,6 +142,8 @@ export const makeTasks = ({
       chainDone,
     ]).then(() => {});
 
+    const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(() => {});
+
     return tryTimeout(
       timeout * 1000,
       async () => {
@@ -160,6 +164,7 @@ export const makeTasks = ({
           stopped = true;
           process.kill(processInfo.pid);
           if (slogFifo.pending) {
+            slogLines.end();
             slogFifo.close();
           }
         };
@@ -167,7 +172,7 @@ export const makeTasks = ({
         return harden({
           stop,
           done,
-          ready: firstBlock,
+          ready,
           slogLines: {
             [Symbol.asyncIterator]: () => slogLines[Symbol.asyncIterator](),
           },
@@ -177,7 +182,7 @@ export const makeTasks = ({
       },
       async () => {
         // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, firstBlock]);
+        Promise.allSettled([done, ready]);
         launcherCp.kill();
         slogFifo.close();
       },

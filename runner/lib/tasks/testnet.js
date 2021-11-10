@@ -18,6 +18,7 @@ import {
   sleep,
   aggregateTryFinally,
 } from '../helpers/async.js';
+import { fsStreamReady } from '../helpers/fs.js';
 import { whenStreamSteps } from '../helpers/stream-steps.js';
 import {
   getArgvMatcher,
@@ -222,6 +223,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     console.log('Starting chain monitor');
 
     const slogFifo = await makeFIFO('chain.slog');
+    const slogReady = fsStreamReady(slogFifo);
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
@@ -271,7 +273,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       chainDone,
     ]).then(() => {});
 
-    const ready = firstBlock.then(async () => {
+    const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
         // Don't pipe output to console, it's too noisy
@@ -322,6 +324,10 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
         const stop = () => {
           stopped = true;
           launcherCp.kill();
+          if (slogFifo.pending) {
+            slogLines.end();
+            slogFifo.close();
+          }
         };
 
         const processInfo = await getProcessInfo(
@@ -341,7 +347,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       },
       async () => {
         // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, firstBlock]);
+        Promise.allSettled([done, ready]);
         launcherCp.kill();
         slogFifo.close();
       },

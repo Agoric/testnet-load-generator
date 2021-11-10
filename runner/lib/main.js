@@ -22,7 +22,7 @@ import {
   sequential,
 } from './helpers/async.js';
 import { childProcessDone } from './helpers/child-process.js';
-import { makeFsHelper } from './helpers/fs.js';
+import { fsStreamReady, makeFsHelper } from './helpers/fs.js';
 import { makeProcfsHelper } from './helpers/procsfs.js';
 import { makeOutputter } from './helpers/outputter.js';
 
@@ -286,16 +286,18 @@ const main = async (progName, rawArgs, powers) => {
     getProcessInfo,
   });
 
-  const outputStream = fsStream.createWriteStream(
-    joinPath(outputDir, 'perf.jsonl'),
-  );
-
   const monitorInterval =
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
   let currentStageElapsedOffsetNs = 0;
   const cpuTimeOffset = await getCPUTimeOffset();
+
+  const outputStream = fsStream.createWriteStream(
+    joinPath(outputDir, 'perf.jsonl'),
+    { flags: 'wx' },
+  );
+  await fsStreamReady(outputStream);
 
   /**
    *
@@ -489,6 +491,7 @@ const main = async (progName, rawArgs, powers) => {
     const slogOutputWriteStream = fsStream.createWriteStream(
       joinPath(outputDir, `chain-stage-${currentStage}.slog.gz`),
     );
+    await fsStreamReady(slogOutputWriteStream);
     // const slogOutput = slogOutputWriteStream;
     // const slogOutputPipeResult = finished(slogOutput);
     const slogOutputPipeResult = pipeline(slogOutput, slogOutputWriteStream);
