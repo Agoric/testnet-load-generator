@@ -1,5 +1,3 @@
-/* global Buffer */
-
 import chalk from 'chalk';
 
 // TODO: pass an "httpRequest" as power instead of importing
@@ -10,6 +8,7 @@ import fs from 'fs';
 import { sleep } from '../helpers/async.js';
 import { makeOutputter } from '../helpers/outputter.js';
 import { fsStreamReady } from '../helpers/fs.js';
+import { asJSON } from '../helpers/stream.js';
 
 const protocolModules = {
   'http:': http,
@@ -66,17 +65,13 @@ export const httpRequest = (urlOrString, options = {}) => {
  */
 export const fetchAsJSON = async (url, options) => {
   const res = await httpRequest(url, options);
-  const chunks = [];
-  for await (const chunk of res) {
-    chunks.push(chunk);
-  }
 
   if (!res.statusCode || res.statusCode >= 400) {
     throw new Error(`HTTP request error: ${res.statusCode}`);
   }
 
   // TODO: Check `res.headers['content-type']` for type and charset
-  return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+  return asJSON(res);
 };
 
 /** @typedef {(argv: string[]) => boolean} ArgvMatcher */

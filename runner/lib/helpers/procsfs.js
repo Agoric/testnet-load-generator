@@ -1,4 +1,4 @@
-/* global process Buffer */
+/* global process */
 
 /**
  * Helper module to read, parse and interpret procfs
@@ -9,7 +9,7 @@
 
 import { performance } from 'perf_hooks';
 
-import { childProcessDone } from './child-process.js';
+import { childProcessOutput } from './child-process.js';
 
 const statusLineFormat = /^([^:]+):[\s]+(.+)$/;
 
@@ -44,16 +44,11 @@ export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
   // A lot of kernel times are in jiffies/ticks, which frequency can be changed
   // through a kernel compilation time configuration
   const userHertzP = (async () => {
-    const childProcess = spawn('getconf', ['CLK_TCK'], { stdio: 'pipe' });
-    const spawnResult = childProcessDone(childProcess);
+    const res = await childProcessOutput(
+      spawn('getconf', ['CLK_TCK'], { stdio: 'pipe' }),
+    );
 
-    // The result will probably come in a single chunk, but let's be correct
-    const chunks = [];
-    for await (const chunk of childProcess.stdout) {
-      chunks.push(chunk);
-    }
-    await spawnResult;
-    return parseInt(Buffer.concat(chunks).toString(bufferOptions.encoding), 10);
+    return parseInt(res.toString(bufferOptions.encoding), 10);
   })();
 
   /** @typedef {string[]} ProcStat */

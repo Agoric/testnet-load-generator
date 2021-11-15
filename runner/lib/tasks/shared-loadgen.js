@@ -2,10 +2,13 @@
 
 import { PassThrough } from 'stream';
 
-import { childProcessDone } from '../helpers/child-process.js';
+import {
+  childProcessDone,
+  makePrinterSpawn,
+} from '../helpers/child-process.js';
 import LineStreamTransform from '../helpers/line-stream-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
-import { whenStreamSteps } from '../helpers/stream-steps.js';
+import { whenStreamSteps } from '../helpers/stream.js';
 import { httpRequest, getConsoleAndStdio } from './helpers.js';
 
 const loadgenStartRE = /deploy.*loadgen\/loop\.js/;
@@ -14,21 +17,25 @@ const loadgenReadyRE = /server running/;
 /**
  *
  * @param {Object} powers
- * @param {import("../helpers/child-process.js").PipedSpawn} powers.pipedSpawn Spawn with piped output
+ * @param {import("child_process").spawn} powers.spawn spawn
  * @returns {import("./types.js").OrchestratorTasks['runLoadgen']}
  *
  */
-export const makeLoadgenTask = ({ pipedSpawn }) => {
+export const makeLoadgenTask = ({ spawn }) => {
   return harden(async ({ stdout, stderr, timeout = 30, config = {} }) => {
     const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting loadgen');
 
     const loadgenEnv = Object.create(process.env);
     // loadgenEnv.DEBUG = 'agoric';
 
-    const launcherCp = pipedSpawn('agoric', ['deploy', 'loadgen/loop.js'], {
-      stdio,
+    const launcherCp = printerSpawn('agoric', ['deploy', 'loadgen/loop.js'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: loadgenEnv,
       detached: true,
     });
@@ -55,7 +62,9 @@ export const makeLoadgenTask = ({ pipedSpawn }) => {
     const combinedOutput = new PassThrough();
     const outLines = new LineStreamTransform({ lineEndings: true });
     const errLines = new LineStreamTransform({ lineEndings: true });
+    launcherCp.stdout.pipe(stdio[1], { end: false });
     launcherCp.stdout.pipe(outLines).pipe(combinedOutput);
+    launcherCp.stderr.pipe(stdio[2], { end: false });
     launcherCp.stderr.pipe(errLines).pipe(combinedOutput);
 
     const [deploying, tasksReady, outputParsed] = whenStreamSteps(
