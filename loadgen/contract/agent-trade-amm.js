@@ -13,11 +13,12 @@ export default async function startAgent([key, home]) {
 
   console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-  const { runBrand, bldBrand, amm, runPurse, bldPurse } = await allValues({
+  const { runBrand, bldBrand, amm, autoswap, runPurse, bldPurse } = await allValues({
     runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
     // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
     bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
-    autoswap: E(agoricNames).lookup('instance', 'amm'),
+    amm: E(agoricNames).lookup('instance', 'amm'),
+    autoswap: E(agoricNames).lookup('instance', 'autoswap'),
     runPurse: E(wallet).getPurse(pursePetnames.RUN),
     bldPurse: E(wallet).getPurse(pursePetnames.BLD),
   });
@@ -41,7 +42,10 @@ export default async function startAgent([key, home]) {
     await E(feePurse).deposit(feePayment);
   }
 
-  const publicFacet = await E(zoe).getPublicFacet(amm);
+  const publicFacet = await Promise.any([
+    E(zoe).getPublicFacet(amm),
+    E(zoe).getPublicFacet(autoswap),
+  ]);
 
   console.error(`trade-amm: tools installed`);
 
