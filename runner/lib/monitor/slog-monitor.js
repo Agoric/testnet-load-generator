@@ -94,36 +94,23 @@ const slogEventRE = filterSlogEvent([
 /**
  * @param {Pick<import("../tasks/types.js").RunChainInfo, 'slogLines'>} chainInfo
  * @param {Object} param1
- * @param {() => void} param1.resolveFirstEmptyBlock
+ * @param {{blockDone(stats: {blockHeight: number, slogLines: number}): void}} [param1.notifier]
  * @param {ReturnType<import("./chain-monitor").makeChainMonitor>} [param1.chainMonitor]
  * @param {import("../stats/types.js").LogPerfEvent} param1.logPerfEvent
  * @param {import("../helpers/time.js").TimeSource} [param1.localTimeSource]
- * @param {import("stream").Writable} [param1.slogOutput]
  * @param {Console} param1.console
  */
 export const monitorSlog = async (
   { slogLines },
-  {
-    resolveFirstEmptyBlock,
-    chainMonitor,
-    localTimeSource,
-    logPerfEvent,
-    slogOutput,
-    console,
-  },
+  { notifier, chainMonitor, localTimeSource, logPerfEvent, console },
 ) => {
   /** @type {number | null}  */
   let slogStart = null;
 
   let slogBlocksSeen = 0;
-  let slogEmptyBlocksSeen = 0;
   let slogLinesInBlock = 0;
 
   for await (const line of slogLines) {
-    if (slogOutput) {
-      slogOutput.write(line);
-    }
-
     if (slogStart == null && chainMonitor) {
       // TODO: figure out a better way
       // There is a risk we could be late to the party here, with the chain
@@ -193,12 +180,8 @@ export const monitorSlog = async (
         if (!slogBlocksSeen) {
           logPerfEvent('stage-first-block', { block: blockHeight });
           if (chainMonitor) {
-            await chainMonitor.logProcessUsage().catch((usageErr) => {
-              // Abuse first empty block as it will be awaited before monitorChain
-              // And won't abruptly end our monitor
-              // @ts-ignore resolving with a rejected promise is still "void" ;)
-              resolveFirstEmptyBlock(Promise.reject(usageErr));
-            });
+            // This will abruptly end the monitor if there is an error
+            await chainMonitor.logProcessUsage();
           }
         }
         console.log('begin-block', blockHeight);
@@ -223,15 +206,8 @@ export const monitorSlog = async (
           const { blockHeight = 0 } = event;
           // Finish line itself doesn't count
           slogLinesInBlock -= 1;
-          if (slogLinesInBlock === 0) {
-            if (!slogEmptyBlocksSeen) {
-              logPerfEvent('stage-first-empty-block', {
-                block: blockHeight,
-              });
-              resolveFirstEmptyBlock();
-            }
-            slogEmptyBlocksSeen += 1;
-          }
+          notifier &&
+            notifier.blockDone({ blockHeight, slogLines: slogLinesInBlock });
 
           console.log(
             'end-block',

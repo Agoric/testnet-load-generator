@@ -7,6 +7,8 @@ import { promisify } from 'util';
 import {
   pipeline as pipelineCallback,
   finished as finishedCallback,
+  Readable,
+  PassThrough,
 } from 'stream';
 
 import yargsParser from 'yargs-parser';
@@ -295,6 +297,9 @@ const main = async (progName, rawArgs, powers) => {
       );
       chainStorageLocation = runChainResult.storageLocation;
 
+      const slogLinesStream = Readable.from(runChainResult.slogLines);
+      const slogLines = new PassThrough({ objectMode: true });
+
       const slogOutput = zlib.createGzip({
         level: zlib.constants.Z_BEST_COMPRESSION,
       });
@@ -304,13 +309,48 @@ const main = async (progName, rawArgs, powers) => {
       await fsStreamReady(slogOutputWriteStream);
       // const slogOutput = slogOutputWriteStream;
       // const slogOutputPipeResult = finished(slogOutput);
-      const slogOutputPipeResult = pipeline(slogOutput, slogOutputWriteStream);
+      slogLinesStream.pipe(slogLines);
+      const slogOutputPipeResult = pipeline(
+        slogLinesStream,
+        slogOutput,
+        slogOutputWriteStream,
+      );
 
       /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
-      const {
-        promise: chainFirstEmptyBlock,
-        resolve: resolveFirstEmptyBlock,
-      } = makePromiseKit();
+      const firstBlockDoneKit = makePromiseKit();
+      /** @type {(() => void) | null} */
+      let resolveFirstBlockDone = firstBlockDoneKit.resolve;
+
+      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+      const firstEmptyBlockKit = makePromiseKit();
+      /** @type {(() => void) | null} */
+      let resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
+
+      let blockCount = 0;
+
+      const notifier = {
+        /** @param {{blockHeight: number, slogLines: number}} block */
+        blockDone(block) {
+          blockCount += 1;
+
+          if (resolveFirstBlockDone) {
+            resolveFirstBlockDone();
+            resolveFirstBlockDone = null;
+          }
+
+          if (resolveFirstEmptyBlock) {
+            if (block.slogLines === 0 || blockCount > 10) {
+              if (block.slogLines === 0) {
+                logPerfEvent('stage-first-empty-block', {
+                  block: block.blockHeight,
+                });
+              }
+              resolveFirstEmptyBlock();
+              resolveFirstEmptyBlock = null;
+            }
+          }
+        },
+      };
 
       const chainMonitor = makeChainMonitor(runChainResult, {
         ...makeConsole('monitor-chain', out, err),
@@ -320,14 +360,16 @@ const main = async (progName, rawArgs, powers) => {
       });
       chainMonitor.start(monitorInterval);
 
-      const slogMonitorDone = monitorSlog(runChainResult, {
-        ...makeConsole('monitor-slog', out, err),
-        resolveFirstEmptyBlock,
-        chainMonitor,
-        localTimeSource: timeSource,
-        logPerfEvent,
-        slogOutput,
-      });
+      const slogMonitorDone = monitorSlog(
+        { slogLines },
+        {
+          ...makeConsole('monitor-slog', out, err),
+          notifier,
+          chainMonitor,
+          localTimeSource: timeSource,
+          logPerfEvent,
+        },
+      );
 
       await aggregateTryFinally(
         async () => {
@@ -335,7 +377,11 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
-          await orInterrupt(chainFirstEmptyBlock);
+          await Promise.race([
+            slogMonitorDone,
+            orInterrupt(firstBlockDoneKit.promise),
+          ]);
+          await orInterrupt(firstEmptyBlockKit.promise);
 
           await nextStep(done);
         },
