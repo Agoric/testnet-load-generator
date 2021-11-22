@@ -47,7 +47,7 @@ const tasks = {
   faucet: [prepareFaucet],
 };
 
-const runners = {}; // name -> { cycle, stop?, limit }
+const runners = {}; // name -> { cycle, stop?, limit, pending }
 const status = {}; // name -> { active, succeeded, failed, next } // JSON-serializable
 
 function logdata(data) {
@@ -63,11 +63,15 @@ function maybeStartOneCycle(name) {
   const r = runners[name];
   if (s.active >= r.limit) {
     console.log(
-      `not starting ${name}, ${s.active} active reached dynamic limit ${r.limit}`,
+      `not starting ${name}, ${s.active} active reached limit ${r.limit}`,
     );
     return;
   }
-  r.limit = Math.max(0, r.limit - 1);
+  if (!r.pending) {
+    console.log(`not starting ${name}, no pending (${s.active} active)`);
+    return;
+  }
+  r.pending -= 1;
   const seq = s.next;
   s.next += 1;
   s.active += 1;
@@ -134,19 +138,20 @@ function updateConfig(config) {
     if (r.stop) {
       r.stop();
       r.stop = undefined;
-      const { limit = 1 } = config[name] || { limit: 0 };
-      r.limit = Math.min(r.limit, limit);
     }
+    const { limit = 1 } = config[name] || { limit: 0 };
+    r.limit = Math.max(0, Math.round(limit));
+    r.pending = Math.min(r.pending, r.limit);
   }
   for (const [name, data] of Object.entries(config)) {
     if (!data) {
       // eslint-disable-next-line no-continue
       continue;
     }
-    const { interval = 60, limit = 1, wait = 0 } = data;
+    const { interval = 60, wait = 0 } = data;
     function bump() {
       const r = runners[name];
-      r.limit = Math.min(r.limit + 1, limit);
+      r.pending = Math.min(r.pending + 1, r.limit);
       maybeStartOneCycle(name);
     }
     function start() {
@@ -266,7 +271,7 @@ export default async function runCycles(homePromise, deployPowers) {
   for (const [name, [prepare]] of Object.entries(tasks)) {
     // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
-    runners[name] = { cycle, limit: 0, stop: undefined };
+    runners[name] = { cycle, limit: 0, pending: 0, stop: undefined };
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
   const { myAddressNameAdmin } = await homePromise;
