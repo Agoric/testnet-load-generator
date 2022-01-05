@@ -23,16 +23,24 @@ export default async function startAgent([key, home]) {
     runPurse,
     bldPurse,
     treasuryInstance,
+    vaultFactoryInstance,
   } = await allValues({
     runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
     // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
     bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
     runPurse: E(wallet).getPurse(pursePetnames.RUN),
     bldPurse: E(wallet).getPurse(pursePetnames.BLD),
-    treasuryInstance: E(home.agoricNames).lookup('instance', 'Treasury'),
+    treasuryInstance: E(agoricNames)
+      .lookup('instance', 'Treasury')
+      .catch(() => {}),
+    vaultFactoryInstance: E(agoricNames)
+      .lookup('instance', 'VaultFactory')
+      .catch(() => {}),
   });
 
-  const treasuryPublicFacet = E(zoe).getPublicFacet(treasuryInstance);
+  const treasuryPublicFacet = E(zoe).getPublicFacet(
+    vaultFactoryInstance || treasuryInstance,
+  );
 
   const bldBalance = await E(bldPurse).getCurrentAmount();
   if (AmountMath.isEmpty(bldBalance)) {
