@@ -6,12 +6,13 @@ import { pipeline as pipelineCallback } from 'stream';
 
 import {
   childProcessDone,
-  makeSpawnWithPrintAndPipeOutput,
+  makeSpawnWithPipedStream,
+  makePrinterSpawn,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import { whenStreamSteps } from '../helpers/stream-steps.js';
+import { whenStreamSteps } from '../helpers/stream.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
@@ -51,13 +52,13 @@ const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
  *
  */
 export const makeTasks = ({
-  spawn,
+  spawn: cpSpawn,
   findDirByPrefix,
   makeFIFO,
   getProcessInfo,
 }) => {
-  const pipedSpawn = makeSpawnWithPrintAndPipeOutput({
-    spawn,
+  const spawn = makeSpawnWithPipedStream({
+    spawn: cpSpawn,
     end: false,
   });
 
@@ -68,20 +69,24 @@ export const makeTasks = ({
       stdout,
       stderr,
     );
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting');
 
     if (reset) {
       console.log('Resetting chain node and client state');
       const stateDir = dirname(chainDirPrefix);
-      await childProcessDone(pipedSpawn('rm', ['-rf', stateDir], { stdio }));
+      await childProcessDone(printerSpawn('rm', ['-rf', stateDir], { stdio }));
       await childProcessDone(
-        pipedSpawn('git', ['checkout', '--', stateDir], {
+        printerSpawn('git', ['checkout', '--', stateDir], {
           stdio,
         }),
       );
     }
-    await childProcessDone(pipedSpawn('agoric', ['install'], { stdio }));
+    await childProcessDone(printerSpawn('agoric', ['install'], { stdio }));
 
     console.log('Done');
   };
@@ -89,6 +94,10 @@ export const makeTasks = ({
   /** @param {import("./types.js").TaskBaseOptions} options */
   const runChain = async ({ stdout, stderr, timeout = 120 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting chain');
 
@@ -100,10 +109,10 @@ export const makeTasks = ({
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
 
-    const launcherCp = pipedSpawn(
+    const launcherCp = printerSpawn(
       'agoric',
       ['start', 'local-chain', '--verbose'],
-      { stdio, env: chainEnv, detached: true },
+      { stdio: ['ignore', 'pipe', stdio[2]], env: chainEnv, detached: true },
     );
 
     let stopped = false;
@@ -125,6 +134,7 @@ export const makeTasks = ({
       (error) => console.error('Chain exited with error', error),
     );
 
+    launcherCp.stdout.pipe(stdio[1], { end: false });
     const [chainStarted, firstBlock, outputParsed] = whenStreamSteps(
       launcherCp.stdout,
       [
@@ -192,11 +202,15 @@ export const makeTasks = ({
   /** @param {import("./types.js").TaskBaseOptions} options */
   const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting client');
 
-    const launcherCp = pipedSpawn('agoric', ['start', 'local-solo'], {
-      stdio,
+    const launcherCp = printerSpawn('agoric', ['start', 'local-solo'], {
+      stdio: ['ignore', 'pipe', stdio[2]],
       detached: true,
     });
 
@@ -207,6 +221,7 @@ export const makeTasks = ({
       (error) => console.error('Client exited with error', error),
     );
 
+    launcherCp.stdout.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
       launcherCp.stdout,
       [
@@ -253,6 +268,6 @@ export const makeTasks = ({
     setupTasks,
     runChain,
     runClient,
-    runLoadgen: makeLoadgenTask({ pipedSpawn }),
+    runLoadgen: makeLoadgenTask({ spawn }),
   });
 };

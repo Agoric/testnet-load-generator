@@ -1,3 +1,4 @@
+/* global console */
 // import { openSync, closeSync } from 'fs';
 
 import { basename, dirname, join as joinPath } from 'path';

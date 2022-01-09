@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global process */
+/* global process console */
 // @ts-nocheck
 
 import './sdk/install-ses.js';

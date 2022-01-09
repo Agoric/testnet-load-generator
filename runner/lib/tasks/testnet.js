@@ -1,4 +1,4 @@
-/* global process Buffer */
+/* global process */
 /* eslint-disable no-await-in-loop */
 
 import { join as joinPath } from 'path';
@@ -9,7 +9,8 @@ import TOML from '@iarna/toml';
 
 import {
   childProcessDone,
-  makeSpawnWithPrintAndPipeOutput,
+  makeSpawnWithPipedStream,
+  makePrinterSpawn,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import {
@@ -19,7 +20,7 @@ import {
   aggregateTryFinally,
 } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import { whenStreamSteps } from '../helpers/stream-steps.js';
+import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
@@ -53,9 +54,9 @@ const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
  * @returns {import("./types.js").OrchestratorTasks}
  *
  */
-export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
-  const pipedSpawn = makeSpawnWithPrintAndPipeOutput({
-    spawn,
+export const makeTasks = ({ spawn: cpSpawn, fs, makeFIFO, getProcessInfo }) => {
+  const spawn = makeSpawnWithPipedStream({
+    spawn: cpSpawn,
     end: false,
   });
 
@@ -83,6 +84,10 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       stdout,
       stderr,
     );
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting');
 
@@ -103,7 +108,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       if (reset) {
         console.log('Resetting chain node');
         await childProcessDone(
-          pipedSpawn('rm', ['-rf', chainStateDir], { stdio }),
+          printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
         );
       }
 
@@ -117,7 +122,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
         const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
 
         await childProcessDone(
-          pipedSpawn(
+          printerSpawn(
             'ag-chain-cosmos',
             ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
             { stdio },
@@ -130,7 +135,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
         );
 
         await childProcessDone(
-          pipedSpawn('ag-chain-cosmos', ['unsafe-reset-all'], { stdio }),
+          printerSpawn('ag-chain-cosmos', ['unsafe-reset-all'], { stdio }),
         );
 
         const configPath = joinPath(chainStateDir, 'config', 'config.toml');
@@ -152,22 +157,23 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       if (reset) {
         console.log('Resetting client');
         await childProcessDone(
-          pipedSpawn('rm', ['-rf', clientStateDir], { stdio }),
+          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
         );
       }
 
       console.log('Provisioning client');
 
-      const launcherCp = pipedSpawn(
+      const launcherCp = printerSpawn(
         'agoric',
         ['start', 'testnet', '8000', `${testnetOrigin}/network-config`],
         {
-          stdio,
+          stdio: ['ignore', 'pipe', stdio[2]],
         },
       );
 
       const clientDone = childProcessDone(launcherCp);
 
+      launcherCp.stdout.pipe(stdio[1], { end: false });
       const [clientStarted, clientProvisioned, outputParsed] = whenStreamSteps(
         launcherCp.stdout,
         [
@@ -211,7 +217,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       );
     }
 
-    await childProcessDone(pipedSpawn('agoric', ['install'], { stdio }));
+    await childProcessDone(printerSpawn('agoric', ['install'], { stdio }));
 
     console.log('Done');
   };
@@ -219,6 +225,10 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
   /** @param {import("./types.js").TaskBaseOptions} options */
   const runChain = async ({ stdout, stderr, timeout = 30 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting chain monitor');
 
@@ -231,8 +241,8 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     chainEnv.SLOGFILE = slogFifo.path;
     // chainEnv.DEBUG = 'agoric';
 
-    const launcherCp = pipedSpawn('ag-chain-cosmos', ['start'], {
-      stdio,
+    const launcherCp = printerSpawn('ag-chain-cosmos', ['start'], {
+      stdio: ['ignore', 'pipe', stdio[2]],
       env: chainEnv,
       detached: true,
     });
@@ -256,6 +266,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       (error) => console.error('Chain exited with error', error),
     );
 
+    launcherCp.stdout.pipe(stdio[1], { end: false });
     const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
       launcherCp.stdout,
       [
@@ -281,18 +292,14 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
           stdio: ['ignore', 'pipe', 'pipe'],
         });
 
-        /** @type {Buffer[]} */
-        const chunks = [];
-        for await (const chunk of statusCp.stdout) {
-          chunks.push(chunk);
-        }
+        const pres = asBuffer(statusCp.stdout);
         if (
           (await childProcessDone(statusCp, {
             ignoreExitCode: retries < 10,
-          }).catch((err) => {
+          }).catch(async (err) => {
             console.error(
               'Failed to query chain status.\n',
-              Buffer.concat(chunks).toString('utf-8'),
+              (await pres).toString('utf-8'),
             );
             throw err;
           })) !== 0
@@ -304,7 +311,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
           retries = 0;
         }
 
-        const status = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        const status = JSON.parse((await pres).toString('utf-8'));
 
         if (status.SyncInfo.catching_up === false) {
           return;
@@ -357,14 +364,18 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
   /** @param {import("./types.js").TaskBaseOptions} options */
   const runClient = async ({ stdout, stderr, timeout = 20 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
 
     console.log('Starting client');
 
-    const launcherCp = pipedSpawn(
+    const launcherCp = printerSpawn(
       'agoric',
       ['start', 'testnet', '8000', `${testnetOrigin}/network-config`],
       {
-        stdio,
+        stdio: ['ignore', 'pipe', stdio[2]],
         detached: true,
       },
     );
@@ -376,6 +387,7 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
       (error) => console.error('Client exited with error', error),
     );
 
+    launcherCp.stdout.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
       launcherCp.stdout,
       [
@@ -422,6 +434,6 @@ export const makeTasks = ({ spawn, fs, makeFIFO, getProcessInfo }) => {
     setupTasks,
     runChain,
     runClient,
-    runLoadgen: makeLoadgenTask({ pipedSpawn }),
+    runLoadgen: makeLoadgenTask({ spawn }),
   });
 };

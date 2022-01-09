@@ -1,3 +1,5 @@
+/* global Buffer */
+
 import { promisify } from 'util';
 import { finished as finishedCallback } from 'stream';
 
@@ -57,4 +59,24 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
   })();
 
   return [...stepsAndKits.map(({ kit: { promise } }) => promise), parseResult];
+};
+
+/**
+ * @param {AsyncIterable<Buffer>} res
+ */
+export const asBuffer = async (res) => {
+  const chunks = [];
+  for await (const chunk of res) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks);
+};
+
+/**
+ * @param {AsyncIterable<Buffer>} res
+ */
+export const asJSON = async (res) => {
+  const buffer = await asBuffer(res);
+  return JSON.parse(buffer.toString('utf-8'));
 };

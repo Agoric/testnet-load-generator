@@ -2,6 +2,7 @@
 {
   "compilerOptions": {
     "target": "esnext",
+    "moduleResolution": "node",
     "noEmit": true,
     "checkJs": true,
     /*
@@ -13,10 +14,15 @@
     "strict": true,
     "strictNullChecks": true,
     "noImplicitAny": true,
-    "moduleResolution": "node",
+    "exactOptionalPropertyTypes": true,
+    "allowUnreachableCode": false,
+    "isolatedModules": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    // "noPropertyAccessFromIndexSignature": true,
+    // "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true
+    // "noUnusedParameters": true
   },
-  "include": [
-    "lib/**/*.js",
-    "lib/**/*.d.ts"
-  ],
+  "include": ["lib/**/*.js", "lib/**/*.d.ts"]
 }
