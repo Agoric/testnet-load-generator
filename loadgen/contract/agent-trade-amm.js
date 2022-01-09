@@ -36,21 +36,32 @@ export default async function startAgent([key, home]) {
   // const bldBrand = await E(bldPurse).getAllegedBrand();
 
   {
-    const run = await E(runPurse).getCurrentAmount();
-    const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
+    const feePurse = await E(faucet)
+      .getFeePurse()
+      .catch((err) => {
+        if (err.name !== 'TypeError') {
+          throw err;
+        } else {
+          return null;
+        }
+      });
 
-    if (AmountMath.isEmpty(run)) {
-      throw Error(`no RUN, trade-amm cannot proceed`);
+    if (feePurse) {
+      const run = await E(runPurse).getCurrentAmount();
+      const thirdRunAmount = AmountMath.make(runBrand, run.value / 3n);
+
+      if (AmountMath.isEmpty(run)) {
+        throw Error(`no RUN, trade-amm cannot proceed`);
+      }
+
+      // TODO: change to the appropriate amounts
+      // setup: transfer 33% of our initial RUN to the feePurse
+      console.error(
+        `trade-amm: depositing ${disp(thirdRunAmount)} into the fee purse`,
+      );
+      const feePayment = await E(runPurse).withdraw(thirdRunAmount);
+      await E(feePurse).deposit(feePayment);
     }
-
-    // TODO: change to the appropriate amounts
-    // setup: transfer 33% of our initial RUN to the feePurse
-    console.error(
-      `trade-amm: depositing ${disp(thirdRunAmount)} into the fee purse`,
-    );
-    const feePurse = E(faucet).getFeePurse();
-    const feePayment = await E(runPurse).withdraw(thirdRunAmount);
-    await E(feePurse).deposit(feePayment);
   }
 
   const publicFacet = await E(zoe).getPublicFacet(amm || autoswap);
@@ -92,6 +103,7 @@ export default async function startAgent([key, home]) {
     await Promise.all([
       E(bldPurse).deposit(refundPayout),
       E(runPurse).deposit(payout),
+      E(seatP).getOfferResult(),
     ]);
   }
 
@@ -113,6 +125,7 @@ export default async function startAgent([key, home]) {
     await Promise.all([
       E(runPurse).deposit(refundPayout),
       E(bldPurse).deposit(payout),
+      E(seatP).getOfferResult(),
     ]);
   }
 

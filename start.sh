@@ -41,7 +41,7 @@ mkdir -p ${AGORIC_BIN_DIR}
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/agoric-sdk-out-${SDK_REVISION}}"
 mkdir -p "${OUTPUT_DIR}"
 
-export PATH=$AGORIC_BIN_DIR:$PATH
+export PATH="$AGORIC_BIN_DIR:$PATH"
 
 cd "$SDK_SRC"
 if [ "x$SDK_BUILD" != "x0" ]; then

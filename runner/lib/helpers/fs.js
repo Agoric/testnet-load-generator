@@ -151,3 +151,42 @@ export const makeFsHelper = ({ fs, fsStream, spawn, tmpDir }) => {
 
   return harden({ dirDiskUsage, findByPrefix, makeFIFO });
 };
+
+/**
+ *
+ * @param {import("fs").ReadStream | import("fs").WriteStream} stream
+ * @returns {Promise<void>}
+ */
+export const fsStreamReady = (stream) =>
+  new Promise((resolve, reject) => {
+    if (stream.destroyed) {
+      reject(new Error('Stream already destroyed'));
+      return;
+    }
+
+    if (!stream.pending) {
+      resolve();
+      return;
+    }
+
+    stream.destroyed;
+
+    const onReady = () => {
+      cleanup(); // eslint-disable-line no-use-before-define
+      resolve();
+    };
+
+    /** @param {Error} err */
+    const onError = (err) => {
+      cleanup(); // eslint-disable-line no-use-before-define
+      reject(err);
+    };
+
+    const cleanup = () => {
+      stream.off('ready', onReady);
+      stream.off('error', onError);
+    };
+
+    stream.on('ready', onReady);
+    stream.on('error', onError);
+  });

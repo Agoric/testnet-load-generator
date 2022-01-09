@@ -9,6 +9,7 @@ import fs from 'fs';
 
 import { sleep } from '../helpers/async.js';
 import { makeOutputter } from '../helpers/outputter.js';
+import { fsStreamReady } from '../helpers/fs.js';
 
 const protocolModules = {
   'http:': http,
@@ -36,7 +37,7 @@ export const httpRequest = (urlOrString, options = {}) => {
           statusCode: 200,
         }),
       ));
-      resolve(res);
+      resolve(fsStreamReady(stream).then(() => res));
       return;
     }
 
