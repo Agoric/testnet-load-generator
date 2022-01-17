@@ -8,6 +8,7 @@ import { makeRawStats, cloneData, copyProperties } from './helpers.js';
 /**
  * @typedef {|
  *   'slogLines' |
+ *   'liveMode' |
  * never} RawBlockStatsProps
  */
 
@@ -17,13 +18,15 @@ const rawBlockStatsInit = {
     default: -Infinity,
     writeMulti: true,
   },
+  liveMode: null,
 };
 
 /**
  * @param {BlockStatsInitData} data
+ * @param {import("./types.js").StageStats} [stageStats]
  * @returns {BlockStats}
  */
-export const makeBlockStats = (data) => {
+export const makeBlockStats = (data, stageStats) => {
   const { publicProps, privateSetters } = makeRawStats(rawBlockStatsInit);
 
   /** @type {BlockStats['recordStart']} */
@@ -34,6 +37,9 @@ export const makeBlockStats = (data) => {
   /** @type {BlockStats['recordSwingsetStart']} */
   const recordSwingsetStart = () => {
     privateSetters.slogLines(0);
+    if (stageStats) {
+      privateSetters.liveMode(stageStats.chainReadyAt != null);
+    }
   };
 
   /** @type {BlockStats['recordSlogLine']} */

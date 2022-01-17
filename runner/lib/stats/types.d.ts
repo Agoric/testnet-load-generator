@@ -20,6 +20,7 @@ export interface BlockStats extends BlockStatsInitData {
   recordSwingsetStart(): void;
   recordSlogLine(): void;
   readonly slogLines: number;
+  readonly liveMode: boolean | undefined;
 }
 
 export interface CycleStatsInitData {

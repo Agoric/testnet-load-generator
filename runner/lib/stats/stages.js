@@ -83,7 +83,8 @@ export const makeStageStats = (data) => {
       privateSetters.firstBlockHeight(blockHeight);
     }
     privateSetters.lastBlockHeight(blockHeight);
-    const block = makeBlockStats(blockData);
+    // eslint-disable-next-line no-use-before-define
+    const block = makeBlockStats(blockData, stats);
     insertBlock(blockHeight, block);
     return block;
   };
