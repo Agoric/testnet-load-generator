@@ -26,6 +26,7 @@ import { makeTasks as makeTestnetTasks } from './tasks/testnet.js';
 
 import { makeChainMonitor } from './monitor/chain-monitor.js';
 import { monitorSlog } from './monitor/slog-monitor.js';
+import { makeRunStats } from './stats/run.js';
 import { makeTimeSource } from './helpers/time.js';
 
 /** @typedef {import('./helpers/async.js').Task} Task */
@@ -228,6 +229,8 @@ const main = async (progName, rawArgs, powers) => {
   );
   await fsStreamReady(outputStream);
 
+  const runStats = makeRunStats();
+
   /** @type {import('./stats/types.js').LogPerfEvent} */
   const logPerfEvent = (eventType, data = {}) => {
     outputStream.write(
@@ -247,20 +250,21 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /**
-   * @param {Object} param0
-   * @param {boolean} param0.chainOnly
-   * @param {number} param0.durationConfig
-   * @param {unknown} param0.loadgenConfig
-   * @param {boolean} param0.withMonitor
-   * @param {boolean} param0.saveStorage
+   * @param {Object} config
+   * @param {boolean} config.chainOnly
+   * @param {number} config.durationConfig
+   * @param {unknown} config.loadgenConfig
+   * @param {boolean} config.withMonitor
+   * @param {boolean} config.saveStorage
    */
-  const runStage = async ({
-    chainOnly,
-    durationConfig,
-    loadgenConfig,
-    withMonitor,
-    saveStorage,
-  }) => {
+  const runStage = async (config) => {
+    const {
+      chainOnly,
+      durationConfig,
+      loadgenConfig,
+      withMonitor,
+      saveStorage,
+    } = config;
     /** @type {string | void} */
     let chainStorageLocation;
     currentStageTimeSource = timeSource.shift();
@@ -275,13 +279,14 @@ const main = async (progName, rawArgs, powers) => {
     logPerfEvent('stage-start');
     const stageStart = timeSource.shift();
 
+    const stats = runStats.newStage({
+      stageIndex: currentStage,
+      stageConfig: config,
+    });
+
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
-      stageConsole.log('Running chain', {
-        chainOnly,
-        durationConfig,
-        loadgenConfig,
-      });
+      stageConsole.log('Running chain', config);
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
@@ -326,20 +331,16 @@ const main = async (progName, rawArgs, powers) => {
       /** @type {(() => void) | null} */
       let resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
 
-      let blockCount = 0;
-
       const notifier = {
-        /** @param {{blockHeight: number, slogLines: number}} block */
+        /** @param {import('./stats/types.js').BlockStats} block */
         blockDone(block) {
-          blockCount += 1;
-
           if (resolveFirstBlockDone) {
             resolveFirstBlockDone();
             resolveFirstBlockDone = null;
           }
 
           if (resolveFirstEmptyBlock) {
-            if (block.slogLines === 0 || blockCount > 10) {
+            if (block.slogLines === 0 || stats.blockCount > 10) {
               if (block.slogLines === 0) {
                 logPerfEvent('stage-first-empty-block', {
                   block: block.blockHeight,
@@ -364,6 +365,7 @@ const main = async (progName, rawArgs, powers) => {
         { slogLines },
         {
           ...makeConsole('monitor-slog', out, err),
+          stats,
           notifier,
           chainMonitor,
           localTimeSource: timeSource,
@@ -531,7 +533,9 @@ const main = async (progName, rawArgs, powers) => {
           tasks.push(stageReady);
         }
 
+        stats.recordStart();
         await sequential(...tasks)((stop) => stop);
+        stats.recordEnd();
       },
       async () =>
         aggregateTryFinally(
@@ -565,6 +569,7 @@ const main = async (progName, rawArgs, powers) => {
   await aggregateTryFinally(
     async () => {
       const { console: initConsole, out, err } = makeConsole('init');
+      runStats.recordStart();
       logPerfEvent('start', {
         cpuTimeOffset,
         timeOrigin: timeSource.timeOrigin,
@@ -665,8 +670,12 @@ const main = async (progName, rawArgs, powers) => {
           saveStorage,
         });
       }
+
+      runStats.recordEnd();
     },
     async () => {
+      logPerfEvent('finish', { stats: runStats });
+
       outputStream.end();
 
       await finished(outputStream);

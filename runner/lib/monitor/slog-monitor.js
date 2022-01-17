@@ -3,6 +3,8 @@
 
 import { warnOnRejection } from '../helpers/async.js';
 
+/** @typedef {import('../stats/types.js').StageStats} StageStats */
+/** @typedef {import('../stats/types.js').BlockStats} BlockStats */
 /** @typedef {import('../helpers/time.js').TimeValueS} TimeValueS */
 
 /**
@@ -140,7 +142,8 @@ const activeEventRE = filterSlogEvent([
 /**
  * @param {Pick<import("../tasks/types.js").RunChainInfo, 'slogLines'>} chainInfo
  * @param {Object} param1
- * @param {{blockDone(stats: {blockHeight: number, slogLines: number}): void}} [param1.notifier]
+ * @param {StageStats} param1.stats
+ * @param {{blockDone(block: BlockStats): void}} [param1.notifier]
  * @param {ReturnType<import("./chain-monitor").makeChainMonitor>} [param1.chainMonitor]
  * @param {import("../stats/types.js").LogPerfEvent} param1.logPerfEvent
  * @param {import("../helpers/time.js").TimeSource} [param1.localTimeSource]
@@ -148,13 +151,13 @@ const activeEventRE = filterSlogEvent([
  */
 export const monitorSlog = async (
   { slogLines },
-  { notifier, chainMonitor, localTimeSource, logPerfEvent, console },
+  { stats, notifier, chainMonitor, localTimeSource, logPerfEvent, console },
 ) => {
   /** @type {number | null}  */
   let slogStart = null;
 
-  let slogBlocksSeen = 0;
-  let slogLinesInBlock = 0;
+  /** @type {BlockStats | null} */
+  let block = null;
 
   let eventRE = startEventRE;
 
@@ -172,7 +175,9 @@ export const monitorSlog = async (
       );
     }
 
-    slogLinesInBlock += 1;
+    if (block) {
+      block.recordSlogLine();
+    }
 
     // Avoid JSON parsing or converting lines we don't care about
     // Parse as ascii, in case the payload has multi-byte chars,
@@ -226,7 +231,7 @@ export const monitorSlog = async (
       }
       case 'cosmic-swingset-begin-block': {
         const { blockHeight = 0 } = event;
-        if (!slogBlocksSeen) {
+        if (!stats.blockCount) {
           logPerfEvent('stage-first-block', { block: blockHeight });
           if (chainMonitor) {
             // This will abruptly end the monitor if there is an error
@@ -236,37 +241,42 @@ export const monitorSlog = async (
           eventRE = activeEventRE;
         }
         console.log('begin-block', blockHeight);
-        slogBlocksSeen += 1;
+        block = stats.newBlock({ blockHeight });
+        block.recordStart();
         break;
       }
       case 'cosmic-swingset-end-block-start': {
-        if (event.blockHeight === 0) {
+        if (!block) {
           // Before https://github.com/Agoric/agoric-sdk/pull/3491
           // bootstrap didn't have it's own slog entry
+          // However in that case there is no begin-block
           logPerfEvent('chain-first-init-start');
         } else {
-          slogLinesInBlock = 0;
+          const { blockHeight = 0 } = event;
+          assert(block.blockHeight === blockHeight);
+          block.recordSwingsetStart();
         }
         break;
       }
       case 'cosmic-swingset-end-block-finish': {
-        if (event.blockHeight === 0) {
+        if (!block) {
           // TODO: measure duration from start to finish
           logPerfEvent('chain-first-init-finish');
           eventRE = activeEventRE;
         } else {
           const { blockHeight = 0 } = event;
-          // Finish line itself doesn't count
-          slogLinesInBlock -= 1;
-          notifier &&
-            notifier.blockDone({ blockHeight, slogLines: slogLinesInBlock });
+
+          assert(block.blockHeight === blockHeight);
+          block.recordEnd();
+          notifier && notifier.blockDone(block);
 
           console.log(
             'end-block',
             blockHeight,
             'linesInBlock=',
-            slogLinesInBlock,
+            block.slogLines,
           );
+          block = null;
         }
         break;
       }
