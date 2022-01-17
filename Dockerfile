@@ -153,13 +153,16 @@ ENV IS_DOCKER=true
 ENV SDK_SRC=/src
 ENV OUTPUT_DIR=/out
 ENV SDK_REVISION=
+ENV SDK_REPO=
 ENV SDK_BUILD=0
 ENV NVM_RC_VERSION=
 
 WORKDIR /app
 COPY --chown=$USER_UID:$USER_GID . .
 
-RUN mkdir -p $SDK_SRC $OUTPUT_DIR && chown $USER_UID:$USER_GID $SDK_SRC $OUTPUT_DIR /app
+RUN mkdir -p $SDK_SRC $OUTPUT_DIR /home/node/.cache/yarn /go/pkg/mod && \
+	chown -R $USER_UID:$USER_GID $SDK_SRC $OUTPUT_DIR /home/node/.cache /go && \
+	chown $USER_UID:$USER_GID /app
 
 USER $USER_UID
 

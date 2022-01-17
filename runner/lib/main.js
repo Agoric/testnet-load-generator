@@ -42,8 +42,8 @@ const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
 
 const defaultLoadgenConfig = {
-  vault: { interval: 120 },
-  amm: { wait: 60, interval: 120 },
+  vault: { interval: 12, limit: 10 },
+  amm: { wait: 6, interval: 12, limit: 10 },
 };
 const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 6 * 60;

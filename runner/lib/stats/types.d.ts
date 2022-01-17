@@ -171,6 +171,9 @@ export interface RunStats extends RunStatsInitData {
   readonly startedAt: TimeValueS | undefined;
   readonly endedAt: TimeValueS | undefined;
   readonly duration: number | undefined;
+  readonly chainBootstrapStartedAt: TimeValueS | undefined;
+  readonly chainBootstrapEndedAt: TimeValueS | undefined;
+  readonly chainBootstrapDuration: number | undefined;
   readonly walletDeployStartedAt: TimeValueS | undefined;
   readonly walletDeployEndedAt: TimeValueS | undefined;
   readonly walletDeployDuration: number | undefined;
