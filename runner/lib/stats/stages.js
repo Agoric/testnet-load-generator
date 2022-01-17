@@ -61,10 +61,35 @@ const rawStageStatsInit = {
 };
 
 /** @param {BlockStats} blockStats */
-const blockSummerTransform = ({ blockHeight, liveMode }) => ({
+const blockSummerTransform = ({
+  blockHeight,
+  liveMode,
+  lag,
+  blockDuration,
+  chainBlockDuration,
+  idleTime,
+  cosmosTime,
+  swingsetTime,
+  processingTime,
+  swingsetPercentage,
+  processingPercentage,
+  deliveries,
+  computrons,
+}) => ({
   liveMode: liveMode !== undefined ? Number(liveMode) : undefined,
   startBlockHeight: blockHeight,
   endBlockHeight: blockHeight,
+  lag,
+  blockDuration,
+  chainBlockDuration,
+  idleTime,
+  cosmosTime,
+  swingsetTime,
+  processingTime,
+  swingsetPercentage,
+  processingPercentage,
+  deliveries,
+  computrons,
 });
 
 /** @param {CycleStats} cycleStats */

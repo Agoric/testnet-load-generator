@@ -1,24 +1,62 @@
 /* eslint-disable prefer-object-spread */
 
-import { makeRawStats, cloneData, copyProperties } from './helpers.js';
+import {
+  makeRawStats,
+  cloneData,
+  copyProperties,
+  rounder as timeRounder,
+  percentageRounder,
+} from './helpers.js';
 
 /** @typedef {import("./types.js").BlockStatsInitData} BlockStatsInitData */
 /** @typedef {import("./types.js").BlockStats} BlockStats */
 
 /**
  * @typedef {|
- *   'slogLines' |
  *   'liveMode' |
+ *   'beginAt' |
+ *   'endStartAt' |
+ *   'endFinishAt' |
+ *   'slogLines' |
+ *   'deliveries' |
+ *   'firstCrankNum' |
+ *   'lastCrankNum' |
+ *   'computrons' |
+ *   'lag' |
+ *   'blockDuration' |
+ *   'chainBlockDuration' |
+ *   'idleTime' |
+ *   'cosmosTime' |
+ *   'swingsetTime' |
+ *   'processingTime' |
+ *   'swingsetPercentage' |
+ *   'processingPercentage' |
  * never} RawBlockStatsProps
  */
 
 /** @type {import('./helpers.js').RawStatInit<BlockStats,RawBlockStatsProps>} */
 const rawBlockStatsInit = {
+  liveMode: null,
+  beginAt: null,
+  endStartAt: null,
+  endFinishAt: null,
   slogLines: {
     default: -Infinity,
     writeMulti: true,
   },
-  liveMode: null,
+  deliveries: { default: 0, writeMulti: true },
+  firstCrankNum: null,
+  lastCrankNum: { writeMulti: true },
+  computrons: { default: 0, writeMulti: true },
+  lag: null,
+  blockDuration: null,
+  chainBlockDuration: null,
+  idleTime: null,
+  cosmosTime: null,
+  swingsetTime: null,
+  processingTime: null,
+  swingsetPercentage: null,
+  processingPercentage: null,
 };
 
 /**
@@ -26,6 +64,17 @@ const rawBlockStatsInit = {
  *   'liveMode' |
  *   'startBlockHeight' |
  *   'endBlockHeight' |
+ *   'lag' |
+ *   'blockDuration' |
+ *   'chainBlockDuration' |
+ *   'idleTime' |
+ *   'cosmosTime' |
+ *   'swingsetTime' |
+ *   'processingTime' |
+ *   'swingsetPercentage' |
+ *   'processingPercentage' |
+ *   'deliveries' |
+ *   'computrons' |
  * never} BlockStatsSumKeys
  */
 
@@ -36,6 +85,7 @@ const rawBlockStatsInit = {
 export const makeBlockStatsSummary = ({
   values,
   weights: blockCount,
+  averages,
   totals,
   items,
   mins,
@@ -51,6 +101,21 @@ export const makeBlockStatsSummary = ({
             : undefined),
         startBlockHeight: mins.startBlockHeight,
         endBlockHeight: maxes.endBlockHeight,
+        avgLag: timeRounder(averages.lag),
+        avgBlockDuration: timeRounder(averages.blockDuration),
+        avgChainBlockDuration: timeRounder(averages.chainBlockDuration),
+        avgIdleTime: timeRounder(averages.idleTime),
+        avgCosmosTime: timeRounder(averages.cosmosTime),
+        avgSwingsetTime: timeRounder(averages.swingsetTime),
+        avgProcessingTime: timeRounder(averages.processingTime),
+        avgDeliveries: timeRounder(averages.deliveries),
+        avgComputrons: timeRounder(averages.computrons),
+        avgSwingsetPercentage: percentageRounder(
+          averages.swingsetPercentage / 100,
+        ),
+        avgProcessingPercentage: percentageRounder(
+          averages.processingPercentage / 100,
+        ),
       }
     : undefined;
 
@@ -62,13 +127,27 @@ export const makeBlockStatsSummary = ({
 export const makeBlockStats = (data, stageStats) => {
   const { publicProps, privateSetters } = makeRawStats(rawBlockStatsInit);
 
-  /** @type {BlockStats['recordStart']} */
-  const recordStart = () => {};
+  const prevBlock = stageStats && stageStats.blocks[data.blockHeight - 1];
 
-  let ended = false;
+  privateSetters.chainBlockDuration(
+    prevBlock && data.blockTime - prevBlock.blockTime,
+  );
+
+  /** @type {BlockStats['recordStart']} */
+  const recordStart = (time) => {
+    privateSetters.beginAt(time);
+    privateSetters.lag(timeRounder(time - data.blockTime));
+    const prevBlockEndFinishAt = prevBlock && prevBlock.endFinishAt;
+    privateSetters.idleTime(
+      prevBlockEndFinishAt && timeRounder(time - prevBlockEndFinishAt),
+    );
+  };
 
   /** @type {BlockStats['recordSwingsetStart']} */
-  const recordSwingsetStart = () => {
+  const recordSwingsetStart = (time) => {
+    privateSetters.endStartAt(time);
+    const { beginAt } = publicProps;
+    privateSetters.cosmosTime(beginAt && timeRounder(time - beginAt));
     privateSetters.slogLines(0);
     if (stageStats) {
       privateSetters.liveMode(stageStats.chainReadyAt != null);
@@ -77,16 +156,52 @@ export const makeBlockStats = (data, stageStats) => {
 
   /** @type {BlockStats['recordSlogLine']} */
   const recordSlogLine = () => {
-    if (!ended) {
+    if (publicProps.endFinishAt === undefined) {
       privateSetters.slogLines(publicProps.slogLines + 1);
     }
   };
 
+  /** @type {BlockStats['recordDelivery']} */
+  const recordDelivery = ({ crankNum, computrons }) => {
+    privateSetters.deliveries(publicProps.deliveries + 1);
+    if (publicProps.firstCrankNum === undefined) {
+      privateSetters.firstCrankNum(crankNum);
+    }
+    const { lastCrankNum } = publicProps;
+    if (lastCrankNum === undefined || lastCrankNum < crankNum) {
+      privateSetters.lastCrankNum(crankNum);
+    }
+    if (computrons !== undefined) {
+      privateSetters.computrons(publicProps.computrons + computrons);
+    }
+  };
+
   /** @type {BlockStats['recordEnd']} */
-  const recordEnd = () => {
+  const recordEnd = (time) => {
+    privateSetters.endFinishAt(time);
+    const { beginAt, endStartAt } = publicProps;
+    const swingsetTime = endStartAt && time - endStartAt;
+    const processingTime = beginAt && time - beginAt;
+    const prevBlockEndFinishAt = prevBlock && prevBlock.endFinishAt;
+    const blockDuration = prevBlockEndFinishAt && time - prevBlockEndFinishAt;
+    privateSetters.swingsetTime(swingsetTime && timeRounder(swingsetTime));
+    privateSetters.processingTime(
+      processingTime && timeRounder(processingTime),
+    );
+    privateSetters.blockDuration(blockDuration && timeRounder(blockDuration));
+    privateSetters.swingsetPercentage(
+      swingsetTime &&
+        blockDuration &&
+        percentageRounder(swingsetTime / blockDuration),
+    );
+    privateSetters.processingPercentage(
+      processingTime &&
+        blockDuration &&
+        percentageRounder(processingTime / blockDuration),
+    );
+
     // Finish line itself doesn't count
     privateSetters.slogLines(publicProps.slogLines - 1);
-    ended = true;
   };
 
   const stats = harden(
@@ -96,6 +211,7 @@ export const makeBlockStats = (data, stageStats) => {
         recordEnd,
         recordSwingsetStart,
         recordSlogLine,
+        recordDelivery,
       },
       cloneData(data),
       publicProps,

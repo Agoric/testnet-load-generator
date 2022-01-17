@@ -12,15 +12,40 @@ export type StatsCollection<K extends number | string, T> = {
 
 export interface BlockStatsInitData {
   readonly blockHeight: number;
+  readonly blockTime: TimeValueS;
+}
+
+export interface BlockDeliveryData {
+  readonly crankNum: number;
+  readonly vatID: string;
+  readonly deliveryNum: number;
+  readonly computrons?: number | undefined;
 }
 
 export interface BlockStats extends BlockStatsInitData {
-  recordStart(): void;
-  recordEnd(): void;
-  recordSwingsetStart(): void;
+  recordStart(time: TimeValueS): void;
+  recordEnd(time: TimeValueS): void;
+  recordSwingsetStart(time: TimeValueS): void;
   recordSlogLine(): void;
-  readonly slogLines: number;
+  recordDelivery(data: BlockDeliveryData): void;
   readonly liveMode: boolean | undefined;
+  readonly beginAt: TimeValueS | undefined;
+  readonly endStartAt: TimeValueS | undefined;
+  readonly endFinishAt: TimeValueS | undefined;
+  readonly lag: number | undefined; // blockTime -> begin
+  readonly blockDuration: number | undefined; // prev.endFinish -> endFinish
+  readonly chainBlockDuration: number | undefined; // prev.blockTime -> blockTime
+  readonly idleTime: number | undefined; // prev.endFinish -> begin
+  readonly cosmosTime: number | undefined; // begin -> endStart
+  readonly swingsetTime: number | undefined; // endStart -> endFinish
+  readonly processingTime: number | undefined; // cosmosTime + swingsetTime
+  readonly swingsetPercentage: number | undefined; // swingsetTime / blockDuration
+  readonly processingPercentage: number | undefined; // processingTime / blockDuration
+  readonly slogLines: number;
+  readonly deliveries: number;
+  readonly firstCrankNum: number | undefined;
+  readonly lastCrankNum: number | undefined;
+  readonly computrons: number;
 }
 
 export type BlockStatsSummary = {
@@ -28,6 +53,17 @@ export type BlockStatsSummary = {
   readonly startBlockHeight: number;
   readonly endBlockHeight: number;
   readonly blockCount: number;
+  readonly avgLag: number;
+  readonly avgBlockDuration: number;
+  readonly avgChainBlockDuration: number;
+  readonly avgIdleTime: number;
+  readonly avgCosmosTime: number;
+  readonly avgSwingsetTime: number;
+  readonly avgProcessingTime: number;
+  readonly avgSwingsetPercentage: number;
+  readonly avgProcessingPercentage: number;
+  readonly avgDeliveries: number;
+  readonly avgComputrons: number;
 };
 
 export interface CycleStatsInitData {

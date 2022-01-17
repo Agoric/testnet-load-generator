@@ -230,7 +230,7 @@ export const monitorSlog = async (
         break;
       }
       case 'cosmic-swingset-begin-block': {
-        const { blockHeight = 0 } = event;
+        const { time, blockHeight = 0, blockTime } = event;
         if (!stats.blockCount) {
           logPerfEvent('stage-first-block', { block: blockHeight });
           if (chainMonitor) {
@@ -241,8 +241,8 @@ export const monitorSlog = async (
           eventRE = activeEventRE;
         }
         console.log('begin-block', blockHeight);
-        block = stats.newBlock({ blockHeight });
-        block.recordStart();
+        block = stats.newBlock({ blockHeight, blockTime });
+        block.recordStart(time);
         break;
       }
       case 'cosmic-swingset-end-block-start': {
@@ -252,9 +252,9 @@ export const monitorSlog = async (
           // However in that case there is no begin-block
           logPerfEvent('chain-first-init-start');
         } else {
-          const { blockHeight = 0 } = event;
+          const { time, blockHeight = 0 } = event;
           assert(block.blockHeight === blockHeight);
-          block.recordSwingsetStart();
+          block.recordSwingsetStart(time);
         }
         break;
       }
@@ -264,10 +264,10 @@ export const monitorSlog = async (
           logPerfEvent('chain-first-init-finish');
           eventRE = activeEventRE;
         } else {
-          const { blockHeight = 0 } = event;
+          const { time, blockHeight = 0 } = event;
 
           assert(block.blockHeight === blockHeight);
-          block.recordEnd();
+          block.recordEnd(time);
           notifier && notifier.blockDone(block);
 
           console.log(
@@ -284,6 +284,19 @@ export const monitorSlog = async (
         break;
       }
       case 'deliver-result': {
+        if (block) {
+          let computrons;
+          const {
+            crankNum,
+            deliveryNum,
+            vatID,
+            dr: [, , usage],
+          } = event;
+          if (usage && typeof usage === 'object' && 'compute' in usage) {
+            computrons = usage.compute;
+          }
+          block.recordDelivery({ crankNum, deliveryNum, vatID, computrons });
+        }
         break;
       }
       default: {
