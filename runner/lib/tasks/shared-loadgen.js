@@ -10,7 +10,11 @@ import {
 import LineStreamTransform from '../helpers/line-stream-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { whenStreamSteps } from '../helpers/stream.js';
-import { httpRequest, getConsoleAndStdio } from './helpers.js';
+import {
+  httpRequest,
+  getConsoleAndStdio,
+  cleanAsyncIterable,
+} from './helpers.js';
 
 const pipeline = promisify(pipelineCallback);
 
@@ -153,9 +157,7 @@ export const makeLoadgenTask = ({ spawn }) => {
           done,
           ready,
           updateConfig,
-          taskEvents: {
-            [Symbol.asyncIterator]: () => taskEvents[Symbol.asyncIterator](),
-          },
+          taskEvents: cleanAsyncIterable(taskEvents),
         });
       },
       async () => {

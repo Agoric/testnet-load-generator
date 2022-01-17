@@ -3,6 +3,7 @@
     "rules": "database.rules.json"
   },
   "functions": {
+    "runtime": "nodejs14",
     "source": "admin/"
   }
 }

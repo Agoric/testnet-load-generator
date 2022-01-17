@@ -1,8 +1,8 @@
-# See here for image contents: https://github.com/microsoft/vscode-dev-containers/tree/v0.177.0/containers/typescript-node/.devcontainer/base.Dockerfile
+# See here for image contents: https://github.com/microsoft/vscode-dev-containers/blob/v0.209.3/containers/typescript-node/.devcontainer/Dockerfile
 
-# [Choice] Node.js version: 16, 14, 12
-ARG VARIANT="14-buster"
-FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:0-${VARIANT} as base
+# [Choice] Node.js version (use -bullseye variants on local arm64/Apple Silicon): 16, 14, 12, 16-bullseye, 14-bullseye, 12-bullseye, 16-buster, 14-buster, 12-buster
+ARG VARIANT=16-bullseye
+FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:${VARIANT} as dev-env
 
 # [Optional] Uncomment this section to install additional OS packages.
 # RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -16,69 +16,69 @@ FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:0-${VARIANT} as base
 # RUN su node -c "npm install -g <your-package-list -here>"
 
 ##############################
-# From https://github.com/docker-library/golang/blob/master/1.16/buster/Dockerfile
+# From https://github.com/docker-library/golang/blob/master/1.17/bullseye/Dockerfile
 
 ENV PATH /usr/local/go/bin:$PATH
 
-ENV GOLANG_VERSION 1.16.5
+ENV GOLANG_VERSION 1.17.4
 
 RUN set -eux; \
-	\
-	dpkgArch="$(dpkg --print-architecture)"; \
+	arch="$(dpkg --print-architecture)"; arch="${arch##*-}"; \
 	url=; \
-	case "${dpkgArch##*-}" in \
+	case "$arch" in \
 		'amd64') \
-			url='https://dl.google.com/go/go1.16.5.linux-amd64.tar.gz'; \
-			sha256='b12c23023b68de22f74c0524f10b753e7b08b1504cb7e417eccebdd3fae49061'; \
+			url='https://dl.google.com/go/go1.17.4.linux-amd64.tar.gz'; \
+			sha256='adab2483f644e2f8a10ae93122f0018cef525ca48d0b8764dae87cb5f4fd4206'; \
 			;; \
 		'armel') \
 			export GOARCH='arm' GOARM='5' GOOS='linux'; \
 			;; \
 		'armhf') \
-			url='https://dl.google.com/go/go1.16.5.linux-armv6l.tar.gz'; \
-			sha256='93cacacfbe87e3106b5bf5821de106f0f0a43c8bd1029826d44445c15df795a5'; \
+			url='https://dl.google.com/go/go1.17.4.linux-armv6l.tar.gz'; \
+			sha256='f34d25f818007345b716b316908115ba462f3f0dbd4343073020b544b4ae2320'; \
 			;; \
 		'arm64') \
-			url='https://dl.google.com/go/go1.16.5.linux-arm64.tar.gz'; \
-			sha256='d5446b46ef6f36fdffa852f73dfbbe78c1ddf010b99fa4964944b9ae8b4d6799'; \
+			url='https://dl.google.com/go/go1.17.4.linux-arm64.tar.gz'; \
+			sha256='617a46bd083e59877bb5680998571b3ddd4f6dcdaf9f8bf65ad4edc8f3eafb13'; \
 			;; \
 		'i386') \
-			url='https://dl.google.com/go/go1.16.5.linux-386.tar.gz'; \
-			sha256='a37c6b71d0b673fe8dfeb2a8b3de78824f05d680ad32b7ac6b58c573fa6695de'; \
+			url='https://dl.google.com/go/go1.17.4.linux-386.tar.gz'; \
+			sha256='276bda8e8efa59482b0be87394566e02ff7a860b65e8b6ccc90c026dbcab1f74'; \
 			;; \
 		'mips64el') \
 			export GOARCH='mips64le' GOOS='linux'; \
 			;; \
 		'ppc64el') \
-			url='https://dl.google.com/go/go1.16.5.linux-ppc64le.tar.gz'; \
-			sha256='fad2da6c86ede8448d2d0e66e1776e2f0ae9169714eade29b9ffbbdede7fc6cc'; \
+			url='https://dl.google.com/go/go1.17.4.linux-ppc64le.tar.gz'; \
+			sha256='d185567480d9e335d4d9274804ef9fa796b01e53c7290a744871d0c0fac2f248'; \
 			;; \
 		's390x') \
-			url='https://dl.google.com/go/go1.16.5.linux-s390x.tar.gz'; \
-			sha256='21085f6a3568fae639edf383cce78bcb00d8f415e5e3d7feb04b6124e8e9efc1'; \
+			url='https://dl.google.com/go/go1.17.4.linux-s390x.tar.gz'; \
+			sha256='63e4e2065aa3139b4d9a203fa7e39a810f67e9f4753492726d485c17c37cd817'; \
 			;; \
-		*) echo >&2 "error: unsupported architecture '$dpkgArch' (likely packaging update needed)"; exit 1 ;; \
+		*) echo >&2 "error: unsupported architecture '$arch' (likely packaging update needed)"; exit 1 ;; \
 	esac; \
 	build=; \
 	if [ -z "$url" ]; then \
 # https://github.com/golang/go/issues/38536#issuecomment-616897960
 		build=1; \
-		url='https://dl.google.com/go/go1.16.5.src.tar.gz'; \
-		sha256='7bfa7e5908c7cc9e75da5ddf3066d7cbcf3fd9fa51945851325eebc17f50ba80'; \
+		url='https://dl.google.com/go/go1.17.4.src.tar.gz'; \
+		sha256='4bef3699381ef09e075628504187416565d710660fec65b057edf1ceb187fc4b'; \
 		echo >&2; \
-		echo >&2 "warning: current architecture ($dpkgArch) does not have a corresponding Go binary release; will be building from source"; \
+		echo >&2 "warning: current architecture ($arch) does not have a compatible Go binary release; will be building from source"; \
 		echo >&2; \
 	fi; \
 	\
-	wget -O go.tgz.asc "$url.asc" --progress=dot:giga; \
+	wget -O go.tgz.asc "$url.asc"; \
 	wget -O go.tgz "$url" --progress=dot:giga; \
-	echo "$sha256 *go.tgz" | sha256sum --strict --check -; \
+	echo "$sha256 *go.tgz" | sha256sum -c -; \
 	\
 # https://github.com/golang/go/issues/14739#issuecomment-324767697
-	export GNUPGHOME="$(mktemp -d)"; \
+	GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
 # https://www.google.com/linuxrepositories/
-#	gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys 'EB4C 1BFD 4F04 2F6D DDCC EC91 7721 F63B D38B 4796'; \
-  curl 'https://dl.google.com/linux/linux_signing_key.pub' | gpg --batch --import; \
+	gpg --batch --keyserver keyserver.ubuntu.com --recv-keys 'EB4C 1BFD 4F04 2F6D DDCC  EC91 7721 F63B D38B 4796'; \
+# let's also fetch the specific subkey of that key explicitly that we expect "go.tgz.asc" to be signed by, just to make sure we definitely have it
+	gpg --batch --keyserver keyserver.ubuntu.com --recv-keys '2F52 8D36 D67B 69ED F998  D857 78BD 6547 3CB3 BD13'; \
 	gpg --batch --verify go.tgz.asc go.tgz; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME" go.tgz.asc; \
@@ -127,13 +127,16 @@ RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 #WORKDIR $GOPATH
 
 ##############################
-# From https://github.com/microsoft/vscode-dev-containers/blob/v0.163.1/containers/go/.devcontainer/base.Dockerfile
+# From https://github.com/microsoft/vscode-dev-containers/blob/v0.209.3/containers/go/.devcontainer/base.Dockerfile
+
+COPY library-scripts/go-debian.sh /tmp/library-scripts/
 
 # Install Go tools
 ENV GO111MODULE=auto
-COPY library-scripts/go-debian.sh /tmp/library-scripts/
 RUN bash /tmp/library-scripts/go-debian.sh "none" "/usr/local/go" "${GOPATH}" "node" "false" \
-    && apt-get clean -y && rm -rf /tmp/library-scripts
+    && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+RUN rm -rf /tmp/library-scripts
 
 # Add Tini
 ENV TINI_VERSION v0.19.0
@@ -141,7 +144,7 @@ ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 
 ##############################
-FROM base
+FROM dev-env
 
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
@@ -151,12 +154,13 @@ ENV SDK_SRC=/src
 ENV OUTPUT_DIR=/out
 ENV SDK_REVISION=
 ENV SDK_BUILD=0
+ENV NVM_RC_VERSION=
 
 WORKDIR /app
 COPY --chown=$USER_UID:$USER_GID . .
 
 RUN mkdir -p $SDK_SRC $OUTPUT_DIR && chown $USER_UID:$USER_GID $SDK_SRC $OUTPUT_DIR /app
 
-USER $USER_UID:$USER_GID
+USER $USER_UID
 
 ENTRYPOINT ["/tini", "--", "/app/start.sh", "--no-reset", "--test-data.docker"]

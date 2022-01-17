@@ -1,8 +1,7 @@
 #!/bin/sh
 set -e -x
 
-
-LOADGEN_DIR="$(pwd)"
+LOADGEN_DIR="$(dirname "$(readlink -f -- "$0")")"
 
 SDK_REPO="${SDK_REPO:-https://github.com/Agoric/agoric-sdk.git}"
 
@@ -44,9 +43,30 @@ mkdir -p "${OUTPUT_DIR}"
 
 export PATH="$AGORIC_BIN_DIR:$PATH"
 
+if [ ! -f "${OUTPUT_DIR}/.nvmrc" ] ; then
+    SDK_NODE16_REVISION=475d7ff1eb2371aa9e0c0dc7a50644089db351f6
+    if ! git -C "${SDK_SRC}" merge-base --is-ancestor $SDK_NODE16_REVISION $SDK_FULL_REVISION ; then
+        echo "lts/fermium" > "${OUTPUT_DIR}/.nvmrc"
+    fi
+    if [ -n "$NVM_RC_VERSION" ]; then 
+        echo "$NVM_RC_VERSION" > "${OUTPUT_DIR}/.nvmrc"
+    fi
+fi
+
+if [ -f "${OUTPUT_DIR}/.nvmrc" ] ; then
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+    export NVM_SYMLINK_CURRENT=false
+    cd "${OUTPUT_DIR}"
+    if [ "$(nvm version "$(cat ".nvmrc")")" = "N/A" ]; then
+        nvm install
+    fi
+    nvm use
+    cd -
+fi
+
 cd "$SDK_SRC"
 if [ "x$SDK_BUILD" != "x0" ]; then
-    yarn install
+    yarn install --frozen-lockfile
     yarn build
     make -C packages/cosmic-swingset
 fi

@@ -84,7 +84,7 @@ export const aggregateTryFinally = async (trier, finalizer) =>
   trier().then(
     async (result) => finalizer().then(() => result),
     async (tryError) =>
-      finalizer()
+      finalizer(tryError)
         .then(
           () => tryError,
           (finalizeError) => makeAggregateError([tryError, finalizeError]),

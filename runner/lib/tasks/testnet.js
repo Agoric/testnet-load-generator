@@ -11,39 +11,32 @@ import {
   childProcessDone,
   makeSpawnWithPipedStream,
   makePrinterSpawn,
+  childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
-import {
-  PromiseAllOrErrors,
-  tryTimeout,
-  sleep,
-  aggregateTryFinally,
-} from '../helpers/async.js';
+import ElidedBufferLineTransform from '../helpers/elided-buffer-line-transform.js';
+import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
 import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
 import {
-  getArgvMatcher,
-  getChildMatchingArgv,
-  wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
   fetchAsJSON,
+  cleanAsyncIterable,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
-const clientStateDir = '_agstate/agoric-servers/testnet-8000';
+const stateDir = '_agstate/agoric-servers';
+const profileName = 'testnet';
+const CLIENT_PORT = 8000;
+const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
-const clientStartRE = /\bsolo\b\S+entrypoint\.[cm]?js.* setup(?: .*)$/;
-const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 const clientSwingSetReadyRE = /start: swingset running$/;
-
-const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
-  getArgvMatcher([/node$/, /\bsolo\b\S+entrypoint\.[cm]?js/]),
-);
+const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 
 /**
  *
@@ -68,6 +61,49 @@ export const makeTasks = ({
     end: false,
   });
 
+  /** @param {string} name */
+  const fsExists = async (name) => {
+    try {
+      await fs.stat(name);
+      return true;
+    } catch (e) {
+      if (/** @type {NodeJS.ErrnoException} */ (e).code === 'ENOENT') {
+        return false;
+      }
+      throw e;
+    }
+  };
+
+  /** @param {string} [rpcAddr] */
+  const queryNodeStatus = async (rpcAddr) => {
+    const args = ['status'];
+
+    if (rpcAddr) {
+      args.push(`--node=tcp://${rpcAddr}`);
+    }
+
+    // Don't pipe output to console, it's too noisy
+    const statusCp = spawn(sdkBinaries.cosmosHelper, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const pres = asBuffer(statusCp.stdout);
+    const retCode = await childProcessDone(statusCp, {
+      ignoreExitCode: true,
+    });
+
+    const output = (await pres).toString('utf-8');
+
+    return retCode === 0
+      ? { type: 'success', status: JSON.parse(output) }
+      : {
+          type: 'error',
+          code: retCode,
+          output,
+          error: (await asBuffer(statusCp.stderr)).toString('utf-8'),
+        };
+  };
+
   const chainStateDir = String(
     process.env.AG_CHAIN_COSMOS_HOME ||
       joinPath(process.env.HOME || '~', '.ag-chain-cosmos'),
@@ -80,6 +116,7 @@ export const makeTasks = ({
     stdout,
     stderr,
     timeout = 10 * 60,
+    orInterrupt = async (job) => job,
     config: {
       reset = true,
       chainOnly,
@@ -105,9 +142,10 @@ export const makeTasks = ({
 
     console.log('Fetching network config');
     // eslint-disable-next-line jsdoc/check-alignment
-    const networkConfig = /** @type {{
+    const { chainName, peers, rpcAddrs, seeds } = /** @type {{
      *   chainName: string,
      *   peers: string[],
+     *   rpcAddrs: string[],
      *   seeds: string[]
      * } & Record<string, unknown>}
      */ (await fetchAsJSON(`${testnetOrigin}/network-config`));
@@ -120,18 +158,15 @@ export const makeTasks = ({
         );
       }
 
-      const chainDirStat = await fs
-        .stat(chainStateDir)
-        .catch((err) => (err.code === 'ENOENT' ? null : Promise.reject(err)));
+      const genesisPath = joinPath(chainStateDir, 'config', 'genesis.json');
 
-      if (!chainDirStat) {
-        const { chainName, peers, seeds } = networkConfig;
+      if (!(await fsExists(genesisPath))) {
         console.log('Fetching genesis');
         const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
 
         await childProcessDone(
           printerSpawn(
-            'ag-chain-cosmos',
+            sdkBinaries.cosmosChain,
             ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
             { stdio },
           ),
@@ -143,7 +178,9 @@ export const makeTasks = ({
         );
 
         await childProcessDone(
-          printerSpawn('ag-chain-cosmos', ['unsafe-reset-all'], { stdio }),
+          printerSpawn(sdkBinaries.cosmosChain, ['unsafe-reset-all'], {
+            stdio,
+          }),
         );
 
         const configPath = joinPath(chainStateDir, 'config', 'config.toml');
@@ -155,6 +192,7 @@ export const makeTasks = ({
         const configP2p = /** @type {TOML.JsonMap} */ (config.p2p);
         configP2p.persistent_peers = peers.join(',');
         configP2p.seeds = seeds.join(',');
+        configP2p.addr_book_strict = false;
         delete config.log_level;
         await fs.writeFile(configPath, TOML.stringify(config));
       }
@@ -171,61 +209,110 @@ export const makeTasks = ({
 
       console.log('Provisioning client');
 
-      const launcherCp = printerSpawn(
-        'agoric',
-        ['start', 'testnet', '8000', `${testnetOrigin}/network-config`],
-        {
-          stdio: ['ignore', 'pipe', stdio[2]],
-        },
-      );
+      const netConfig = `${testnetOrigin}/network-config`;
 
-      const clientDone = childProcessDone(launcherCp);
-
-      launcherCp.stdout.pipe(stdio[1], { end: false });
-      const [clientStarted, clientProvisioned, outputParsed] = whenStreamSteps(
-        launcherCp.stdout,
-        [
-          { matcher: clientStartRE, resultIndex: -1 },
-          { matcher: clientSwingSetReadyRE, resultIndex: -1 },
-        ],
-        {
-          waitEnd: false,
-        },
-      );
-
-      Promise.allSettled([clientProvisioned, outputParsed, clientDone]);
-
-      await aggregateTryFinally(
-        async () => {
-          await clientStarted;
-
-          const processInfo = await getProcessInfo(
-            /** @type {number} */ (launcherCp.pid),
-          ).then((launcherInfo) =>
-            getChildMatchingArgv(launcherInfo, clientArgvMatcher),
-          );
-
-          await aggregateTryFinally(
-            async () =>
-              tryTimeout(timeout * 1000, async () => clientProvisioned),
-            async () => {
-              try {
-                process.kill(processInfo.pid);
-              } catch (_) {
-                // Ignore kill errors
-              }
+      // Initialize the solo directory and key.
+      if (!(await fsExists(clientStateDir))) {
+        await childProcessDone(
+          printerSpawn(
+            sdkBinaries.agSolo,
+            [
+              'init',
+              clientStateDir,
+              `--webport=${CLIENT_PORT}`,
+              `--netconfig=${netConfig}`,
+            ],
+            {
+              stdio,
             },
-          );
+          ),
+        );
+      }
 
-          await PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
-        },
-        async () => {
-          launcherCp.kill();
-        },
+      await childProcessDone(
+        printerSpawn(sdkBinaries.agSolo, ['add-chain', netConfig], {
+          stdio,
+          cwd: clientStateDir,
+        }),
       );
-    }
 
-    await childProcessDone(printerSpawn('agoric', ['install'], { stdio }));
+      const soloAddr = (
+        await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
+      ).trimEnd();
+
+      const rpcAddrCandidates = [...rpcAddrs];
+      let rpcAddr;
+
+      while (!rpcAddr && rpcAddrCandidates.length) {
+        const pseudoRandom =
+          rpcAddrCandidates
+            .join('')
+            .split('')
+            .reduce((acc, val) => acc + val.charCodeAt(0), 0) %
+          rpcAddrCandidates.length;
+        const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
+
+        const result = await queryNodeStatus(rpcAddrCandidate);
+
+        if (
+          result.type === 'success' &&
+          result.status.SyncInfo.catching_up === false
+        ) {
+          rpcAddr = rpcAddrCandidate;
+        }
+      }
+
+      if (!rpcAddr) {
+        throw new Error('Found no suitable RPC node');
+      }
+
+      const keysSharedArgs = [
+        '--log_level=info',
+        `--chain-id=${chainName}`,
+        `--node=tcp://${rpcAddr}`,
+      ];
+
+      /**
+       * @param {number} [checks]
+       * @returns {Promise<void>}
+       */
+      const untilProvisioned = async (checks = 0) => {
+        const checkAddrStatus = await childProcessDone(
+          spawn(
+            sdkBinaries.cosmosHelper,
+            [
+              `--home=${joinPath(clientStateDir, 'ag-cosmos-helper-statedir')}`,
+              ...keysSharedArgs,
+              'query',
+              'swingset',
+              'egress',
+              '--',
+              soloAddr,
+            ],
+            { stdio: 'ignore' },
+          ),
+          { ignoreExitCode: true },
+        );
+
+        if (checkAddrStatus === 0) {
+          return undefined;
+        }
+
+        if (!checks) {
+          console.error(`
+=============
+${chainName} chain does not yet know of address ${soloAddr}
+=============
+          `);
+        }
+
+        await orInterrupt(sleep(6 * 1000));
+
+        return untilProvisioned(checks + 1);
+      };
+
+      await tryTimeout(timeout * 1000, untilProvisioned);
+    }
 
     console.log('Done');
   };
@@ -249,7 +336,7 @@ export const makeTasks = ({
     chainEnv.SLOGFILE = slogFifo.path;
     // chainEnv.DEBUG = 'agoric';
 
-    const launcherCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
+    const chainCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
       stdio: ['ignore', 'pipe', stdio[2]],
       env: chainEnv,
       detached: true,
@@ -258,7 +345,7 @@ export const makeTasks = ({
     let stopped = false;
 
     // Chain exit with code 98 when killed
-    const chainDone = childProcessDone(launcherCp, {
+    const chainDone = childProcessDone(chainCp, {
       ignoreExitCode: true,
     }).then((code) => {
       if (code !== 0 && (!stopped || code !== 98)) {
@@ -269,14 +356,23 @@ export const makeTasks = ({
       return 0;
     });
 
-    chainDone.then(
-      () => console.log('Chain exited successfully'),
-      (error) => console.error('Chain exited with error', error),
-    );
+    chainDone
+      .then(
+        () => console.log('Chain exited successfully'),
+        (error) => console.error('Chain exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
 
-    launcherCp.stdout.pipe(stdio[1], { end: false });
+    const chainElidedOutput = new ElidedBufferLineTransform();
+    chainCp.stdout.pipe(chainElidedOutput);
+    chainElidedOutput.pipe(stdio[1], { end: false });
     const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
-      launcherCp.stdout,
+      chainElidedOutput,
       [
         { matcher: chainSwingSetLaunchRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
@@ -295,37 +391,31 @@ export const makeTasks = ({
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        // Don't pipe output to console, it's too noisy
-        const statusCp = spawn('ag-chain-cosmos', ['status'], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
+        const result = await queryNodeStatus();
 
-        const pres = asBuffer(statusCp.stdout);
-        if (
-          (await childProcessDone(statusCp, {
-            ignoreExitCode: retries < 10,
-          }).catch(async (err) => {
+        if (result.type === 'error') {
+          if (retries >= 10) {
             console.error(
               'Failed to query chain status.\n',
-              (await pres).toString('utf-8'),
+              result.output,
+              result.error,
             );
-            throw err;
-          })) !== 0
-        ) {
+            throw new Error(
+              `Process exited with non-zero code: ${result.code}`,
+            );
+          }
+
           retries += 1;
           await sleep(retries * 1000);
-          continue; // eslint-disable-line no-continue
         } else {
           retries = 0;
+
+          if (result.status.SyncInfo.catching_up === false) {
+            return;
+          }
+
+          await sleep(5 * 1000);
         }
-
-        const status = JSON.parse((await pres).toString('utf-8'));
-
-        if (status.SyncInfo.catching_up === false) {
-          return;
-        }
-
-        await sleep(5 * 1000);
       }
     });
 
@@ -336,26 +426,20 @@ export const makeTasks = ({
 
         console.log('Chain running');
 
+        const processInfo = await getProcessInfo(
+          /** @type {number} */ (chainCp.pid),
+        );
+
         const stop = () => {
           stopped = true;
-          launcherCp.kill();
-          if (slogFifo.pending) {
-            slogLines.end();
-            slogFifo.close();
-          }
+          chainCp.kill();
         };
-
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (launcherCp.pid),
-        );
 
         return harden({
           stop,
           done,
           ready,
-          slogLines: {
-            [Symbol.asyncIterator]: () => slogLines[Symbol.asyncIterator](),
-          },
+          slogLines: cleanAsyncIterable(slogLines),
           storageLocation: chainStateDir,
           processInfo,
         });
@@ -363,14 +447,14 @@ export const makeTasks = ({
       async () => {
         // Avoid unhandled rejections for promises that can no longer be handled
         Promise.allSettled([done, ready]);
-        launcherCp.kill();
+        chainCp.kill();
         slogFifo.close();
       },
     );
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 20 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -379,27 +463,48 @@ export const makeTasks = ({
 
     console.log('Starting client');
 
-    const launcherCp = printerSpawn(
-      'agoric',
-      ['start', 'testnet', '8000', `${testnetOrigin}/network-config`],
-      {
-        stdio: ['ignore', 'pipe', stdio[2]],
-        detached: true,
-      },
-    );
+    const slogFifo = await makeFIFO('client.slog');
+    const slogReady = fsStreamReady(slogFifo);
+    const slogLines = new BufferLineTransform();
+    const slogPipeResult = pipeline(slogFifo, slogLines);
 
-    const clientDone = childProcessDone(launcherCp);
+    const clientEnv = Object.create(process.env);
+    clientEnv.SOLO_SLOGFILE = slogFifo.path;
 
-    clientDone.then(
-      () => console.log('Client exited successfully'),
-      (error) => console.error('Client exited with error', error),
-    );
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
+      stdio: ['ignore', 'pipe', stdio[2]],
+      cwd: clientStateDir,
+      env: clientEnv,
+      detached: true,
+    });
 
-    launcherCp.stdout.pipe(stdio[1], { end: false });
+    /** @type {{signal: undefined | 'SIGTERM'}} */
+    const ignoreKill = {
+      signal: undefined,
+    };
+
+    const soloCpReady = childProcessReady(soloCp);
+    const clientDone = childProcessDone(soloCp, { ignoreKill });
+
+    clientDone
+      .then(
+        () => console.log('Client exited successfully'),
+        (error) => console.error('Client exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
+
+    const soloElidedOutput = new ElidedBufferLineTransform();
+    soloCp.stdout.pipe(soloElidedOutput);
+    soloElidedOutput.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      launcherCp.stdout,
+      soloElidedOutput,
       [
-        { matcher: clientStartRE, resultIndex: -1 },
+        { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },
       ],
       {
@@ -407,39 +512,51 @@ export const makeTasks = ({
       },
     );
 
-    const done = PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
+    const done = PromiseAllOrErrors([
+      slogPipeResult,
+      outputParsed,
+      clientDone,
+    ]).then(() => {});
+
+    const ready = PromiseAllOrErrors([walletReady, slogReady]).then(() => {});
 
     return tryTimeout(
       timeout * 1000,
       async () => {
+        await soloCpReady;
         await clientStarted;
 
         console.log('Client running');
 
         const processInfo = await getProcessInfo(
-          /** @type {number} */ (launcherCp.pid),
-        ).then((launcherInfo) =>
-          getChildMatchingArgv(launcherInfo, clientArgvMatcher),
+          /** @type {number} */ (soloCp.pid),
         );
 
-        const stop = () => process.kill(processInfo.pid);
+        const stop = () => {
+          ignoreKill.signal = 'SIGTERM';
+          soloCp.kill(ignoreKill.signal);
+        };
 
         return harden({
           stop,
           done,
-          ready: walletReady,
+          ready,
+          slogLines: cleanAsyncIterable(slogLines),
+          storageLocation: clientStateDir,
+          processInfo,
         });
       },
       async () => {
         // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, walletReady]);
-        launcherCp.kill();
+        Promise.allSettled([done, clientStarted, walletReady]);
+        soloCp.kill();
+        slogFifo.close();
       },
     );
   };
 
   return harden({
-    getEnvInfo: makeGetEnvInfo({ spawn }),
+    getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }),
     setupTasks,
     runChain,
     runClient,

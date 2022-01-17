@@ -50,12 +50,13 @@ const defaultStageDurationMinutes = 6 * 60;
 const defaultNumberStages = 4 + 2;
 
 /**
+ * @template {Record<string, unknown> | undefined} T
  * @param {unknown} maybeObj
- * @param {Record<string, unknown>} [defaultValue]
+ * @param {T} defaultValue
  */
-const coerceRecordOption = (maybeObj, defaultValue = {}) => {
+const coerceRecordOption = (maybeObj, defaultValue) => {
   if (maybeObj == null) {
-    return defaultValue;
+    return /** @type {T extends undefined ? undefined : Record<string, unknown>} */ (defaultValue);
   }
 
   if (typeof maybeObj !== 'object') {
@@ -107,13 +108,14 @@ const coerceBooleanOption = (
  */
 const makeInterrupterKit = ({ console }) => {
   const signal = makePromiseKit();
-  /** @type {Error | null} */
+  /** @type {NodeJS.ErrnoException | null} */
   let rejection = null;
   const onInterrupt = () => {
     if (rejection) {
       console.warn('Interruption already in progress');
     } else {
       rejection = new Error('Interrupted');
+      rejection.code = 'ERR_SCRIPT_EXECUTION_INTERRUPTED';
       signal.reject(rejection);
     }
   };
@@ -204,7 +206,7 @@ const main = async (progName, rawArgs, powers) => {
   const argv = yargsParser(rawArgs);
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
-  const { findByPrefix, dirDiskUsage, makeFIFO } = makeFsHelper({
+  const { dirDiskUsage, makeFIFO } = makeFsHelper({
     fs,
     fsStream,
     spawn,
@@ -224,6 +226,32 @@ const main = async (progName, rawArgs, powers) => {
       errPrefix: prefix && `${chalk.bold.red(prefix)}: `,
     });
 
+  /**
+   * @param {string} source
+   * @param {string} tmpSuffix
+   * @param {string} destination
+   */
+  const backgroundCompressFolder = async (source, tmpSuffix, destination) => {
+    const tmp = `${source}${tmpSuffix}`;
+    const cleanup = async () => {
+      await childProcessDone(spawn('rm', ['-rf', tmp]));
+    };
+
+    try {
+      await childProcessDone(
+        spawn('cp', ['-a', '--reflink=auto', source, tmp]),
+      );
+    } catch (err) {
+      await aggregateTryFinally(cleanup, () => Promise.reject(err));
+    }
+
+    return {
+      done: aggregateTryFinally(async () => {
+        await childProcessDone(spawn('tar', ['-cSJf', destination, tmp]));
+      }, cleanup),
+    };
+  };
+
   const { console: topConsole } = makeConsole();
 
   const outputDir = String(argv.outputDir || `results/run-${Date.now()}`);
@@ -235,9 +263,9 @@ const main = async (progName, rawArgs, powers) => {
   /** @type {string} */
   let testnetOrigin;
 
-  switch (argv.profile) {
-    case null:
-    case undefined:
+  const profile = argv.profile == null ? 'local' : argv.profile;
+
+  switch (profile) {
     case 'local':
       makeTasks = makeLocalChainTasks;
       testnetOrigin = '';
@@ -246,17 +274,18 @@ const main = async (progName, rawArgs, powers) => {
     case 'testnet':
     case 'stage':
       makeTasks = makeTestnetTasks;
-      testnetOrigin =
-        argv.testnetOrigin || `https://${argv.profile}.agoric.net`;
+      testnetOrigin = argv.testnetOrigin || `https://${profile}.agoric.net`;
       break;
     default:
-      throw new Error(`Unexpected profile option: ${argv.profile}`);
+      throw new Error(`Unexpected profile option: ${profile}`);
   }
 
   const monitorInterval =
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
+  /** @type {Promise<void>[]} */
+  const pendingBackups = [];
   const timeSource = makeTimeSource({ performance });
   const cpuTimeOffset = await getCPUTimeOffset();
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
@@ -268,7 +297,6 @@ const main = async (progName, rawArgs, powers) => {
     {
       spawn,
       fs,
-      findDirByPrefix: findByPrefix,
       makeFIFO,
       getProcessInfo,
       sdkBinaries,
@@ -285,7 +313,7 @@ const main = async (progName, rawArgs, powers) => {
 
   const runStats = makeRunStats({
     metadata: {
-      profile: argv.profile || 'local',
+      profile,
       testnetOrigin,
       ...envInfo,
       testData: argv.testData,
@@ -330,6 +358,8 @@ const main = async (progName, rawArgs, powers) => {
     } = config;
     /** @type {string | void} */
     let chainStorageLocation;
+    /** @type {string | void} */
+    let clientStorageLocation;
     currentStageTimeSource = timeSource.shift();
 
     const { out, err } = makeConsole(`stage-${currentStage}`);
@@ -340,6 +370,7 @@ const main = async (progName, rawArgs, powers) => {
     });
 
     logPerfEvent('stage-start');
+    stageConsole.log('Starting stage', config);
     const stageStart = timeSource.shift();
 
     const stats = runStats.newStage({
@@ -349,7 +380,7 @@ const main = async (progName, rawArgs, powers) => {
 
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
-      stageConsole.log('Running chain', config);
+      stageConsole.log('Running chain');
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
@@ -390,10 +421,9 @@ const main = async (progName, rawArgs, powers) => {
       /** @type {(() => void) | null} */
       let resolveFirstBlockDone = firstBlockDoneKit.resolve;
 
-      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
-      const firstEmptyBlockKit = makePromiseKit();
       /** @type {(() => void) | null} */
-      let resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
+      let resolveFirstEmptyBlock = null;
+      let emptyBlockRetries = 10;
 
       const notifier = {
         /** @param {import('./stats/types.js').BlockStats} block */
@@ -404,7 +434,7 @@ const main = async (progName, rawArgs, powers) => {
           }
 
           if (resolveFirstEmptyBlock) {
-            if (block.slogLines === 0 || stats.blockCount > 10) {
+            if (block.slogLines === 0 || emptyBlockRetries === 0) {
               if (block.slogLines === 0) {
                 logPerfEvent('stage-first-empty-block', {
                   block: block.blockHeight,
@@ -412,6 +442,8 @@ const main = async (progName, rawArgs, powers) => {
               }
               resolveFirstEmptyBlock();
               resolveFirstEmptyBlock = null;
+            } else {
+              emptyBlockRetries -= 1;
             }
           }
         },
@@ -444,7 +476,11 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
-          await tryTimeout(60 * 1000, () =>
+          /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+          const firstEmptyBlockKit = makePromiseKit();
+          resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
+
+          await tryTimeout(2 * 60 * 1000, () =>
             Promise.race([
               slogMonitorDone,
               orInterrupt(firstBlockDoneKit.promise),
@@ -490,9 +526,26 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('client-stopped');
       });
 
+      clientStorageLocation = runClientResult.storageLocation;
+
+      const slogOutput = zlib.createGzip({
+        level: zlib.constants.Z_BEST_COMPRESSION,
+      });
+      const slogOutputWriteStream = fsStream.createWriteStream(
+        joinPath(outputDir, `client-stage-${currentStage}.slog.gz`),
+      );
+      await fsStreamReady(slogOutputWriteStream);
+      const slogOutputPipeResult = pipeline(
+        runClientResult.slogLines,
+        slogOutput,
+        slogOutputWriteStream,
+      );
+
       await aggregateTryFinally(
         async () => {
-          await orInterrupt(runClientResult.ready);
+          await tryTimeout(10 * 60 * 1000, () =>
+            orInterrupt(runClientResult.ready),
+          );
           stats.recordClientReady(timeSource.getTime());
           logPerfEvent('client-ready', {
             duration: stats.clientInitDuration,
@@ -508,14 +561,20 @@ const main = async (progName, rawArgs, powers) => {
 
           await nextStep(done);
         },
-        async () => {
-          if (!clientExited) {
-            stageConsole.log('Stopping client');
+        async () =>
+          aggregateTryFinally(
+            async () => {
+              if (!clientExited) {
+                stageConsole.log('Stopping client');
 
-            runClientResult.stop();
-            await done;
-          }
-        },
+                runClientResult.stop();
+                await done;
+              }
+            },
+            async () => {
+              await slogOutputPipeResult;
+            },
+          ),
       );
     };
 
@@ -557,7 +616,9 @@ const main = async (progName, rawArgs, powers) => {
 
       await aggregateTryFinally(
         async () => {
-          await orInterrupt(runLoadgenResult.ready);
+          await tryTimeout(10 * 60 * 1000, () =>
+            orInterrupt(runLoadgenResult.ready),
+          );
           stats.recordLoadgenReady(timeSource.getTime());
           logPerfEvent('loadgen-ready');
           if (!runStats.loadgenDeployEndedAt) {
@@ -582,8 +643,21 @@ const main = async (progName, rawArgs, powers) => {
             });
 
             await runLoadgenResult.updateConfig(null);
-            stageConsole.log('Waiting for loadgen tasks to end');
-            await orInterrupt(Promise.race([idle, sleep(2 * 60 * 1000)]));
+            const maxLoadgenDuration =
+              Object.values(stats.cycles).reduce(
+                (max, cycleStats) =>
+                  cycleStats &&
+                  cycleStats.duration != null &&
+                  !Number.isNaN(cycleStats.duration)
+                    ? Math.max(max, cycleStats.duration)
+                    : max,
+                0,
+              ) || 2 * 60;
+            const sleepTime = (maxLoadgenDuration + 2 * 6) * 1.2;
+            stageConsole.log(
+              `Waiting for loadgen tasks to end (Max ${sleepTime}s)`,
+            );
+            await orInterrupt(Promise.race([idle, sleep(sleepTime * 1000)]));
           }
         },
         async () => {
@@ -658,21 +732,39 @@ const main = async (progName, rawArgs, powers) => {
         await sequential(...tasks)((stop) => stop);
         stats.recordEnd(timeSource.getTime());
       },
-      async () =>
+      async (...stageError) =>
         aggregateTryFinally(
           async () => {
-            if (saveStorage && chainStorageLocation != null) {
-              stageConsole.log('Saving chain storage');
-              await childProcessDone(
-                spawn('tar', [
-                  '-cSJf',
-                  joinPath(
-                    outputDir,
-                    `chain-storage-stage-${currentStage}.tar.xz`,
-                  ),
-                  chainStorageLocation,
-                ]),
-              );
+            const suffix = `-stage-${currentStage}`;
+            if (
+              !saveStorage &&
+              (stageError.length === 0 ||
+                /** @type {NodeJS.ErrnoException} */ (stageError[0]).code ===
+                  'ERR_SCRIPT_EXECUTION_INTERRUPTED')
+            ) {
+              return;
+            }
+            const backupResults = await Promise.all(
+              Object.entries({
+                chain: chainStorageLocation,
+                client: clientStorageLocation,
+              }).map(([type, location]) => {
+                if (location != null) {
+                  stageConsole.log(`Saving ${type} storage`);
+                  return backgroundCompressFolder(
+                    location,
+                    suffix,
+                    joinPath(outputDir, `${type}-storage${suffix}.tar.xz`),
+                  );
+                }
+                return undefined;
+              }),
+            );
+
+            for (const result of backupResults) {
+              if (result) {
+                pendingBackups.push(result.done);
+              }
             }
           },
           async () => {
@@ -710,7 +802,7 @@ const main = async (progName, rawArgs, powers) => {
       const withMonitor = coerceBooleanOption(argv.monitor, true);
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       {
-        const { releaseInterrupt } = makeInterrupterKit({
+        const { orInterrupt, releaseInterrupt } = makeInterrupterKit({
           console: initConsole,
         });
 
@@ -725,7 +817,12 @@ const main = async (progName, rawArgs, powers) => {
         await aggregateTryFinally(
           // Do not short-circuit on interrupt, let the spawned setup process terminate
           async () =>
-            setupTasks({ stdout: out, stderr: err, config: setupConfig }),
+            setupTasks({
+              stdout: out,
+              stderr: err,
+              orInterrupt,
+              config: setupConfig,
+            }),
 
           // This will throw if there was any interrupt, and prevent further execution
           async () => releaseInterrupt(),
@@ -738,7 +835,7 @@ const main = async (progName, rawArgs, powers) => {
           ? parseInt(String(argv.stages), 10)
           : defaultNumberStages;
 
-      const stageConfigs = coerceRecordOption(argv.stage);
+      const stageConfigs = coerceRecordOption(argv.stage, {});
 
       const sharedLoadgenConfig = coerceRecordOption(
         stageConfigs.loadgen,
@@ -755,67 +852,126 @@ const main = async (progName, rawArgs, powers) => {
         undefined,
       );
 
-      const sharedStageDurationMinutes =
+      // Shared stage duration can only be positive
+      const sharedStageDurationMinutesRaw =
         stageConfigs.duration != null
           ? Number(stageConfigs.duration)
+          : undefined;
+      const sharedStageDurationMinutes =
+        sharedStageDurationMinutesRaw && sharedStageDurationMinutesRaw > 0
+          ? sharedStageDurationMinutesRaw
           : defaultStageDurationMinutes;
 
       while (currentStage < stages - 1) {
         currentStage += 1;
 
-        const stageConfig = coerceRecordOption(stageConfigs[currentStage]);
+        const stageConfig = coerceRecordOption(stageConfigs[currentStage], {});
 
-        const withLoadgen = coerceBooleanOption(
+        let stageWithLoadgen = coerceBooleanOption(
           stageConfig.loadgen,
-          globalChainOnly ? false : undefined,
+          undefined,
           false,
         );
 
-        const tentativeLoadgenConfig =
-          withLoadgen == null
-            ? coerceRecordOption(stageConfig.loadgen, sharedLoadgenConfig)
-            : sharedLoadgenConfig;
+        const stageLoadgenConfig =
+          stageWithLoadgen == null
+            ? coerceRecordOption(stageConfig.loadgen, undefined)
+            : undefined;
+        if (stageLoadgenConfig) {
+          stageWithLoadgen = true;
+        }
+
+        let stageDurationMinutes =
+          stageConfig.duration != null
+            ? Number(stageConfig.duration)
+            : undefined;
 
         const loadgenWindDown = coerceBooleanOption(
           stageConfig.loadgenWindDown,
           sharedLoadgenWindDown,
         );
 
-        // By default the first stage will only initialize the chain from genesis
-        // and the last stage will only capture the chain restart time
-        // loadgen and chainOnly options overide default
-        const chainOnly =
-          globalChainOnly ||
-          coerceBooleanOption(
-            stageConfig.chainOnly,
-            withLoadgen != null
-              ? !withLoadgen // use boolean loadgen option value as default chainOnly
-              : tentativeLoadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
-                  withMonitor && // If monitor is disabled, chainOnly has no meaning
-                  stages > 2 &&
-                  currentStage === stages - 1, // Last stage is restart only test
+        const stageChainOnly = coerceBooleanOption(
+          stageConfig.chainOnly,
+          undefined,
+        );
+
+        // By default the last stage will only capture the chain restart time
+        // unless loadgen was explicitly requested on this stage
+        const defaultChainOnly =
+          withMonitor && // If monitor is disabled, chainOnly has no meaning
+          stageChainOnly !== false &&
+          (stageWithLoadgen === false ||
+            (stageWithLoadgen == null &&
+              stages > 2 &&
+              currentStage === stages - 1));
+        // global chainOnly=true takes precedence
+        const chainOnly = globalChainOnly || stageChainOnly || defaultChainOnly;
+
+        if (chainOnly) {
+          if (!withMonitor) {
+            initConsole.error(`Stage ${currentStage} has conflicting config`, {
+              chainOnly,
+              withMonitor,
+            });
+            throw new Error('Invalid config');
+          }
+          if (stageWithLoadgen) {
+            initConsole.warn(
+              `Stage ${currentStage} has conflicting config, ignoring loadgen`,
+              {
+                chainOnly,
+                withLoadgen: stageWithLoadgen,
+              },
+            );
+            stageWithLoadgen = !chainOnly;
+          }
+        }
+
+        if (
+          chainOnly &&
+          makeTasks === makeLocalChainTasks &&
+          stageDurationMinutes
+        ) {
+          initConsole.warn(
+            `Stage ${currentStage} has conflicting config, ignoring duration`,
+            {
+              profile,
+              chainOnly,
+              duration: stageDurationMinutes,
+            },
           );
+          stageDurationMinutes = undefined;
+        }
 
         const saveStorage = coerceBooleanOption(
           stageConfig.saveStorage,
-          sharedSavedStorage !== undefined ? sharedSavedStorage : !chainOnly,
+          sharedSavedStorage !== undefined
+            ? sharedSavedStorage
+            : !defaultChainOnly,
         );
 
-        const duration =
-          (stageConfig.duration != null
-            ? Number(stageConfig.duration)
-            : // Local tasks have nothing to do without loadgen
-              (!(makeTasks === makeLocalChainTasks && chainOnly) &&
-                // First stage is setup only by default
-                !(currentStage === 0 && stages > 1) &&
-                sharedStageDurationMinutes) ||
-              0) * 60;
+        // By default the first stage only initializes but doesn't actually set any load
+        // Unless loadgen requested or duration explicitly set
+        const activeLoadgen =
+          (stageWithLoadgen || (stageWithLoadgen == null && !chainOnly)) &&
+          stageDurationMinutes !== 0 &&
+          (stageWithLoadgen ||
+            stageDurationMinutes != null ||
+            stages === 1 ||
+            currentStage > 0);
 
-        const loadgenConfig =
-          (withLoadgen === false || duration === 0) &&
-          tentativeLoadgenConfig === sharedLoadgenConfig
-            ? null
-            : tentativeLoadgenConfig;
+        const defaultDurationMinutes = activeLoadgen
+          ? sharedStageDurationMinutes
+          : 0;
+        const duration =
+          (stageDurationMinutes != null
+            ? stageDurationMinutes
+            : defaultDurationMinutes) * 60;
+
+        const loadgenConfig = activeLoadgen
+          ? stageLoadgenConfig || sharedLoadgenConfig
+          : null;
 
         // eslint-disable-next-line no-await-in-loop
         await runStage({
@@ -836,18 +992,35 @@ const main = async (progName, rawArgs, powers) => {
       outputStream.end();
 
       const { console } = makeConsole('summary');
-      console.log('Live blocks stats:', {
-        ...(runStats.liveBlocksSummary || {
-          blockCount: 0,
-        }),
-      });
-      console.log('Cycles stats:', {
-        ...(runStats.cyclesSummary || {
-          cycleCount: 0,
-        }),
-      });
 
-      await finished(outputStream);
+      await aggregateTryFinally(
+        async () => {
+          const backupsDone = Promise.all(pendingBackups).then(() => true);
+          if (
+            !(await Promise.race([
+              backupsDone,
+              Promise.resolve().then(() => false),
+            ]))
+          ) {
+            console.log('Waiting for storage backups to finish');
+          }
+          await backupsDone;
+        },
+        async () => {
+          console.log('Live blocks stats:', {
+            ...(runStats.liveBlocksSummary || {
+              blockCount: 0,
+            }),
+          });
+          console.log('Cycles stats:', {
+            ...(runStats.cyclesSummary || {
+              cycleCount: 0,
+            }),
+          });
+
+          await finished(outputStream);
+        },
+      );
     },
   );
 };
