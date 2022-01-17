@@ -6,6 +6,7 @@ import {
   cloneData,
   makeGetters,
   copyProperties,
+  rounder,
 } from './helpers.js';
 import { makeBlockStats } from './blocks.js';
 import { makeCycleStats, makeCycleStatsKey } from './cycles.js';
@@ -20,6 +21,15 @@ import { makeCycleStats, makeCycleStatsKey } from './cycles.js';
  * @typedef {|
  *   'firstBlockHeight' |
  *   'lastBlockHeight' |
+ *   'startedAt' |
+ *   'readyAt' |
+ *   'endedAt' |
+ *   'chainStartedAt' |
+ *   'chainReadyAt' |
+ *   'clientStartedAt' |
+ *   'clientReadyAt' |
+ *   'loadgenStartedAt' |
+ *   'loadgenReadyAt' |
  * never } RawStageStatsProps
  */
 
@@ -29,6 +39,15 @@ const rawStageStatsInit = {
   lastBlockHeight: {
     writeMulti: true,
   },
+  startedAt: null,
+  readyAt: null,
+  endedAt: null,
+  chainStartedAt: null,
+  chainReadyAt: null,
+  clientStartedAt: null,
+  clientReadyAt: null,
+  loadgenStartedAt: null,
+  loadgenReadyAt: null,
 };
 
 /**
@@ -36,7 +55,9 @@ const rawStageStatsInit = {
  * @returns {StageStats}
  */
 export const makeStageStats = (data) => {
-  const { publicProps, privateSetters } = makeRawStats(rawStageStatsInit);
+  const { savedData, publicProps, privateSetters } = makeRawStats(
+    rawStageStatsInit,
+  );
 
   /** @type {import("./helpers.js").MakeStatsCollectionReturnType<number, BlockStats>} */
   const {
@@ -78,11 +99,44 @@ export const makeStageStats = (data) => {
     }
     return cycle;
   };
+
+  const getReadyDuration = () =>
+    savedData.startedAt &&
+    savedData.readyAt &&
+    rounder(savedData.readyAt - savedData.startedAt);
+
+  const getDuration = () =>
+    savedData.startedAt &&
+    savedData.endedAt &&
+    rounder(savedData.endedAt - savedData.startedAt);
+
+  const getChainInitDuration = () =>
+    savedData.chainStartedAt &&
+    savedData.chainReadyAt &&
+    rounder(savedData.chainReadyAt - savedData.chainStartedAt);
+
+  const getClientInitDuration = () =>
+    savedData.clientStartedAt &&
+    savedData.clientReadyAt &&
+    rounder(savedData.clientReadyAt - savedData.clientStartedAt);
+
+  const getLoadgenInitDuration = () =>
+    savedData.loadgenStartedAt &&
+    savedData.loadgenReadyAt &&
+    rounder(savedData.loadgenReadyAt - savedData.loadgenStartedAt);
+
   const stats = harden(
     copyProperties(
       {
-        recordStart: () => {},
-        recordEnd: () => {},
+        recordStart: privateSetters.startedAt,
+        recordReady: privateSetters.readyAt,
+        recordEnd: privateSetters.endedAt,
+        recordChainStart: privateSetters.chainStartedAt,
+        recordChainReady: privateSetters.chainReadyAt,
+        recordClientStart: privateSetters.clientStartedAt,
+        recordClientReady: privateSetters.clientReadyAt,
+        recordLoadgenStart: privateSetters.loadgenStartedAt,
+        recordLoadgenReady: privateSetters.loadgenReadyAt,
         newBlock,
         getOrMakeCycle,
       },
@@ -93,6 +147,11 @@ export const makeStageStats = (data) => {
         cycles: () => cycles,
         blockCount: getBlockCount,
         cycleCount: getCycleCount,
+        readyDuration: getReadyDuration,
+        duration: getDuration,
+        chainInitDuration: getChainInitDuration,
+        clientInitDuration: getClientInitDuration,
+        loadgenInitDuration: getLoadgenInitDuration,
       }),
     ),
   );

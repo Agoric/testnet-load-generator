@@ -291,6 +291,7 @@ const main = async (progName, rawArgs, powers) => {
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
+      stats.recordChainStart(timeSource.getTime());
 
       let chainExited = false;
       const done = runChainResult.done.finally(() => {
@@ -377,6 +378,7 @@ const main = async (progName, rawArgs, powers) => {
       await aggregateTryFinally(
         async () => {
           await orInterrupt(runChainResult.ready);
+          stats.recordChainReady(timeSource.getTime());
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
@@ -414,9 +416,9 @@ const main = async (progName, rawArgs, powers) => {
     const spawnClient = async (nextStep) => {
       stageConsole.log('Running client');
       logPerfEvent('run-client-start');
-      const runClientStart = timeSource.shift();
       const runClientResult = await runClient({ stdout: out, stderr: err });
       logPerfEvent('run-client-finish');
+      stats.recordClientStart(timeSource.getTime());
 
       let clientExited = false;
       const done = runClientResult.done.finally(() => {
@@ -427,9 +429,18 @@ const main = async (progName, rawArgs, powers) => {
       await aggregateTryFinally(
         async () => {
           await orInterrupt(runClientResult.ready);
+          stats.recordClientReady(timeSource.getTime());
           logPerfEvent('client-ready', {
-            duration: runClientStart.now(),
+            duration: stats.clientInitDuration,
           });
+          if (!runStats.walletDeployEndedAt) {
+            runStats.recordWalletDeployStart(
+              /** @type {number} */ (stats.clientStartedAt),
+            );
+            runStats.recordWalletDeployEnd(
+              /** @type {number} */ (stats.clientReadyAt),
+            );
+          }
 
           await nextStep(done);
         },
@@ -453,6 +464,7 @@ const main = async (progName, rawArgs, powers) => {
         stderr: err,
         config: loadgenConfig,
       });
+      stats.recordLoadgenStart(timeSource.getTime());
       logPerfEvent('run-loadgen-finish');
 
       let loadgenExited = false;
@@ -469,7 +481,16 @@ const main = async (progName, rawArgs, powers) => {
       await aggregateTryFinally(
         async () => {
           await orInterrupt(runLoadgenResult.ready);
+          stats.recordLoadgenReady(timeSource.getTime());
           logPerfEvent('loadgen-ready');
+          if (!runStats.loadgenDeployEndedAt) {
+            runStats.recordLoadgenDeployStart(
+              /** @type {number} */ (stats.loadgenStartedAt),
+            );
+            runStats.recordLoadgenDeployEnd(
+              /** @type {number} */ (stats.loadgenReadyAt),
+            );
+          }
 
           await nextStep(done);
         },
@@ -510,6 +531,7 @@ const main = async (progName, rawArgs, powers) => {
           stageConsole.log('Stage ready, no time to sleep, moving on');
         }
       }
+      stats.recordReady(timeSource.getTime());
       logPerfEvent('stage-ready');
       await nextStep(sleeping).finally(sleepCancel.resolve);
       logPerfEvent('stage-shutdown');
@@ -540,10 +562,9 @@ const main = async (progName, rawArgs, powers) => {
         } else {
           tasks.push(stageReady);
         }
-
-        stats.recordStart();
+        stats.recordStart(timeSource.getTime());
         await sequential(...tasks)((stop) => stop);
-        stats.recordEnd();
+        stats.recordEnd(timeSource.getTime());
       },
       async () =>
         aggregateTryFinally(
@@ -577,7 +598,7 @@ const main = async (progName, rawArgs, powers) => {
   await aggregateTryFinally(
     async () => {
       const { console: initConsole, out, err } = makeConsole('init');
-      runStats.recordStart();
+      runStats.recordStart(timeSource.getTime());
       logPerfEvent('start', {
         cpuTimeOffset,
         timeOrigin: timeSource.timeOrigin,
@@ -679,7 +700,7 @@ const main = async (progName, rawArgs, powers) => {
         });
       }
 
-      runStats.recordEnd();
+      runStats.recordEnd(timeSource.getTime());
     },
     async () => {
       logPerfEvent('finish', { stats: runStats });

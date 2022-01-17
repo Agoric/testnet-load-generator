@@ -5,6 +5,7 @@ import {
   makeGetters,
   cloneData,
   copyProperties,
+  rounder,
 } from './helpers.js';
 
 /** @typedef {import("./types.js").CycleStatsInitData} CycleStatsInitData */
@@ -16,6 +17,8 @@ import {
  *   'success' |
  *   'startBlockHeight'|
  *   'endBlockHeight' |
+ *   'startedAt' |
+ *   'endedAt' |
  * never} RawCycleStatsProps
  */
 
@@ -24,6 +27,8 @@ const rawCycleStatsInit = {
   success: null,
   startBlockHeight: null,
   endBlockHeight: null,
+  startedAt: null,
+  endedAt: null,
 };
 
 /**
@@ -43,14 +48,16 @@ export const makeCycleStats = (data, stageStats) => {
   );
 
   /** @type {CycleStats['recordStart']} */
-  const recordStart = () => {
+  const recordStart = (time) => {
+    privateSetters.startedAt(time);
     if (stageStats) {
       privateSetters.startBlockHeight(stageStats.lastBlockHeight);
     }
   };
 
   /** @type {CycleStats['recordEnd']} */
-  const recordEnd = (successResult) => {
+  const recordEnd = (time, successResult) => {
+    privateSetters.endedAt(time);
     if (stageStats) {
       privateSetters.endBlockHeight(stageStats.lastBlockHeight);
     }
@@ -63,6 +70,11 @@ export const makeCycleStats = (data, stageStats) => {
     savedData.endBlockHeight &&
     savedData.endBlockHeight - savedData.startBlockHeight;
 
+  const getDuration = () =>
+    savedData.startedAt &&
+    savedData.endedAt &&
+    rounder(savedData.endedAt - savedData.startedAt);
+
   return harden(
     copyProperties(
       {
@@ -71,7 +83,7 @@ export const makeCycleStats = (data, stageStats) => {
       },
       cloneData(data),
       publicProps,
-      makeGetters({ blockCount: getBlockCount }),
+      makeGetters({ blockCount: getBlockCount, duration: getDuration }),
     ),
   );
 };

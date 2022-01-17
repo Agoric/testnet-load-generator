@@ -6,6 +6,7 @@ import {
   makeGetters,
   cloneData,
   copyProperties,
+  rounder,
 } from './helpers.js';
 import { makeStageStats } from './stages.js';
 
@@ -15,18 +16,33 @@ import { makeStageStats } from './stages.js';
 
 /**
  * @typedef {|
+ *   'startedAt' |
+ *   'endedAt' |
+ *   'walletDeployStartedAt' |
+ *   'walletDeployEndedAt' |
+ *   'loadgenDeployStartedAt' |
+ *   'loadgenDeployEndedAt' |
  * never} RawRunStatsProps
  */
 
 /** @type {import('./helpers.js').RawStatInit<RunStats,RawRunStatsProps>} */
-const rawRunStatsInit = {};
+const rawRunStatsInit = {
+  startedAt: null,
+  endedAt: null,
+  walletDeployStartedAt: null,
+  walletDeployEndedAt: null,
+  loadgenDeployStartedAt: null,
+  loadgenDeployEndedAt: null,
+};
 
 /**
  * @param {RunStatsInitData} data
  * @returns {RunStats}
  */
 export const makeRunStats = (data = {}) => {
-  const { publicProps } = makeRawStats(rawRunStatsInit);
+  const { savedData, publicProps, privateSetters } = makeRawStats(
+    rawRunStatsInit,
+  );
 
   /** @type {import("./helpers.js").MakeStatsCollectionReturnType<number, StageStats>} */
   const {
@@ -58,11 +74,30 @@ export const makeRunStats = (data = {}) => {
       0,
     );
 
+  const getDuration = () =>
+    savedData.startedAt &&
+    savedData.endedAt &&
+    rounder(savedData.endedAt - savedData.startedAt);
+
+  const getWalletDeployDuration = () =>
+    savedData.walletDeployStartedAt &&
+    savedData.walletDeployEndedAt &&
+    rounder(savedData.walletDeployEndedAt - savedData.walletDeployStartedAt);
+
+  const getLoadgenDeployDuration = () =>
+    savedData.loadgenDeployStartedAt &&
+    savedData.loadgenDeployEndedAt &&
+    rounder(savedData.loadgenDeployEndedAt - savedData.loadgenDeployStartedAt);
+
   const stats = harden(
     copyProperties(
       {
-        recordStart: () => {},
-        recordEnd: () => {},
+        recordStart: privateSetters.startedAt,
+        recordEnd: privateSetters.endedAt,
+        recordWalletDeployStart: privateSetters.walletDeployStartedAt,
+        recordWalletDeployEnd: privateSetters.walletDeployEndedAt,
+        recordLoadgenDeployStart: privateSetters.loadgenDeployStartedAt,
+        recordLoadgenDeployEnd: privateSetters.loadgenDeployEndedAt,
         newStage,
       },
       cloneData(data),
@@ -72,6 +107,9 @@ export const makeRunStats = (data = {}) => {
         stageCount: getStageCount,
         blockCount: getBlockCount,
         cycleCount: getCycleCount,
+        duration: getDuration,
+        walletDeployDuration: getWalletDeployDuration,
+        loadgenDeployDuration: getLoadgenDeployDuration,
       }),
     ),
   );

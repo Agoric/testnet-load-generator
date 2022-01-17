@@ -8,19 +8,20 @@
  */
 export const monitorLoadgen = async ({ taskEvents }, { stats, console }) => {
   for await (const event of taskEvents) {
+    const { time } = event;
     switch (event.type) {
       case 'start': {
         const { task, seq } = event;
         console.log('start', task, seq);
         const cycle = stats.getOrMakeCycle({ task, seq });
-        cycle.recordStart();
+        cycle.recordStart(time);
         break;
       }
       case 'finish': {
         const { task, seq, success } = event;
         console.log('finish', event.task, event.seq);
         const cycle = stats.getOrMakeCycle({ task, seq });
-        cycle.recordEnd(success);
+        cycle.recordEnd(time, success);
         break;
       }
       case 'status':
