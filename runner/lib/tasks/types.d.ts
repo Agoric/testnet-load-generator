@@ -13,7 +13,12 @@ export type RunChainInfo = {
   readonly storageLocation: string;
 };
 
+export type RunLoadgenInfo = {
+  readonly taskEvents: AsyncIterable<Record<string, unknown>>;
+};
+
 export type RunChainResult = TaskResult & RunChainInfo;
+export type RunLoadgenResult = TaskResult & RunLoadgenInfo;
 
 export interface TaskBaseOptions {
   readonly stdout: import('stream').Writable;
@@ -26,5 +31,5 @@ export interface OrchestratorTasks {
   setupTasks(options: TaskBaseOptions): Promise<void>;
   runChain(options: TaskBaseOptions): Promise<RunChainResult>;
   runClient(options: TaskBaseOptions): Promise<TaskResult>;
-  runLoadgen(options: TaskBaseOptions): Promise<TaskResult>;
+  runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
 }
