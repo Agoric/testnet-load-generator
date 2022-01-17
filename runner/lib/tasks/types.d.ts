@@ -49,6 +49,7 @@ export type TaskEvent = TaskEventStatus | TaskEventStart | TaskEventFinish;
 
 export type RunLoadgenInfo = {
   readonly taskEvents: AsyncIterable<TaskEvent>;
+  updateConfig(newConfig: unknown): Promise<void>;
 };
 
 export type RunChainResult = TaskResult & RunChainInfo;

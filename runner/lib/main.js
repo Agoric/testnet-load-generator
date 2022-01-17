@@ -299,6 +299,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {boolean} config.chainOnly
    * @param {number} config.durationConfig
    * @param {unknown} config.loadgenConfig
+   * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
    * @param {boolean} config.saveStorage
    */
@@ -307,6 +308,7 @@ const main = async (progName, rawArgs, powers) => {
       chainOnly,
       durationConfig,
       loadgenConfig,
+      loadgenWindDown,
       withMonitor,
       saveStorage,
     } = config;
@@ -506,7 +508,6 @@ const main = async (progName, rawArgs, powers) => {
       const runLoadgenResult = await runLoadgen({
         stdout: out,
         stderr: err,
-        config: loadgenConfig,
       });
       stats.recordLoadgenStart(timeSource.getTime());
       logPerfEvent('run-loadgen-finish');
@@ -517,9 +518,23 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('loadgen-stopped');
       });
 
+      const notifier = {
+        currentCount: 0,
+        /** @param {number} count */
+        updateActive(count) {
+          notifier.currentCount = count;
+          if (!count && notifier.idleCallback) {
+            notifier.idleCallback();
+          }
+        },
+        /** @type {null | (() => void)} */
+        idleCallback: null,
+      };
+
       const monitorLoadgenDone = monitorLoadgen(runLoadgenResult, {
         ...makeConsole('monitor-loadgen', out, err),
         stats,
+        notifier,
       });
 
       await aggregateTryFinally(
@@ -536,7 +551,22 @@ const main = async (progName, rawArgs, powers) => {
             );
           }
 
+          if (loadgenConfig != null) {
+            await runLoadgenResult.updateConfig(loadgenConfig);
+          }
+
           await nextStep(done);
+
+          if (loadgenWindDown && notifier.currentCount) {
+            /** @type {Promise<void>} */
+            const idle = new Promise((resolve) => {
+              notifier.idleCallback = resolve;
+            });
+
+            await runLoadgenResult.updateConfig(null);
+            stageConsole.log('Waiting for loadgen tasks to end');
+            await orInterrupt(Promise.race([idle, sleep(2 * 60 * 1000)]));
+          }
         },
         async () => {
           if (!loadgenExited) {
@@ -697,6 +727,11 @@ const main = async (progName, rawArgs, powers) => {
         defaultLoadgenConfig,
       );
 
+      const sharedLoadgenWindDown = coerceBooleanOption(
+        stageConfigs.loadgenWindDown,
+        true,
+      );
+
       const sharedSavedStorage = coerceBooleanOption(
         stageConfigs.saveStorage,
         undefined,
@@ -718,10 +753,15 @@ const main = async (progName, rawArgs, powers) => {
           false,
         );
 
-        const loadgenConfig =
+        const tentativeLoadgenConfig =
           withLoadgen == null
             ? coerceRecordOption(stageConfig.loadgen, sharedLoadgenConfig)
             : sharedLoadgenConfig;
+
+        const loadgenWindDown = coerceBooleanOption(
+          stageConfig.loadgenWindDown,
+          sharedLoadgenWindDown,
+        );
 
         // By default the first stage will only initialize the chain from genesis
         // and the last stage will only capture the chain restart time
@@ -732,7 +772,7 @@ const main = async (progName, rawArgs, powers) => {
             stageConfig.chainOnly,
             withLoadgen != null
               ? !withLoadgen // use boolean loadgen option value as default chainOnly
-              : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
+              : tentativeLoadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
                   withMonitor && // If monitor is disabled, chainOnly has no meaning
                   stages > 2 &&
                   currentStage === stages - 1, // Last stage is restart only test
@@ -753,11 +793,18 @@ const main = async (progName, rawArgs, powers) => {
                 sharedStageDurationMinutes) ||
               0) * 60;
 
+        const loadgenConfig =
+          (withLoadgen === false || duration === 0) &&
+          tentativeLoadgenConfig === sharedLoadgenConfig
+            ? null
+            : tentativeLoadgenConfig;
+
         // eslint-disable-next-line no-await-in-loop
         await runStage({
           chainOnly,
           durationConfig: duration,
           loadgenConfig,
+          loadgenWindDown,
           withMonitor,
           saveStorage,
         });
