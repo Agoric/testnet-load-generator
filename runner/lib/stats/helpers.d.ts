@@ -58,6 +58,7 @@ export declare function makeGetters<T extends { [key: string]: () => any }>(
 };
 
 export declare const rounder: (value: number) => number;
+export declare const percentageRounder: (value: number) => number;
 
 export declare function cloneData<T>(data: T): T;
 
@@ -73,3 +74,34 @@ export declare function copyProperties<T, U, V, W>(
   source2: V,
   source3: W,
 ): T & U & V & W;
+
+export declare function arrayGroupBy<T, U extends PropertyKey>(
+  source: ReadonlyArray<T>,
+  callback: (value: T, index: number, array: ReadonlyArray<T>) => U,
+): {
+  [key in U]: T[];
+};
+
+type SumRecord<K extends string> = {
+  readonly [P in K]: number;
+};
+
+export type Sums<K extends string> = {
+  readonly values: number;
+  readonly weights: number;
+  readonly items: SumRecord<K>;
+  readonly mins: SumRecord<K>;
+  readonly maxes: SumRecord<K>;
+  readonly totals: SumRecord<K>; // weighted
+  readonly counts: SumRecord<K>; // weighted
+  readonly averages: SumRecord<K>; // weighted
+};
+
+type SummableRecord = { readonly [P in string]: number | undefined };
+
+interface Summer<T extends SummableRecord> {
+  add(value: T, weight?: 1 | number): void;
+  getSums(): Sums<keyof T>;
+}
+
+export declare function makeSummer<T extends SummableRecord>(): Summer<T>;

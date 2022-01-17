@@ -1,5 +1,7 @@
 /* eslint-disable prefer-object-spread */
 
+import { makeBlockStatsSummary } from './blocks.js';
+import { makeCycleStatsSummary } from './cycles.js';
 import {
   makeRawStats,
   makeStatsCollection,
@@ -7,6 +9,7 @@ import {
   cloneData,
   copyProperties,
   rounder,
+  makeSummer,
 } from './helpers.js';
 import { makeStageStats } from './stages.js';
 
@@ -22,6 +25,9 @@ import { makeStageStats } from './stages.js';
  *   'walletDeployEndedAt' |
  *   'loadgenDeployStartedAt' |
  *   'loadgenDeployEndedAt' |
+ *   'totalBlockCount' |
+ *   'liveBlocksSummary' |
+ *   'cyclesSummary' |
  * never} RawRunStatsProps
  */
 
@@ -33,7 +39,32 @@ const rawRunStatsInit = {
   walletDeployEndedAt: null,
   loadgenDeployStartedAt: null,
   loadgenDeployEndedAt: null,
+  totalBlockCount: { default: 0, writeMulti: true },
+  liveBlocksSummary: { writeMulti: true },
+  cyclesSummary: { writeMulti: true },
 };
+
+/** @param {import('./types.js').BlockStatsSummary} blockStatsSummary */
+const blockSummerTransform = ({
+  liveMode,
+  startBlockHeight,
+  endBlockHeight,
+}) => ({
+  liveMode: liveMode !== undefined ? Number(liveMode) : undefined,
+  startBlockHeight,
+  endBlockHeight,
+});
+
+/** @param {import('./types.js').CycleStatsSummary} cycleStatsSummary */
+const cyclesSummerTransform = ({
+  cycleSuccessRate,
+  avgBlockCount,
+  avgDuration,
+}) => ({
+  success: cycleSuccessRate / 100,
+  blockCount: avgBlockCount,
+  duration: avgDuration,
+});
 
 /**
  * @param {RunStatsInitData} data
@@ -51,28 +82,86 @@ export const makeRunStats = (data) => {
     getCount: getStageCount,
   } = makeStatsCollection();
 
+  const getCyclesSummary = () => {
+    /** @type {import("./helpers.js").Summer<ReturnType<typeof cyclesSummerTransform>>} */
+    const summer = makeSummer();
+
+    for (const {
+      cyclesSummaries: { all: stageCyclesSummary = undefined } = {},
+    } of /** @type {StageStats[]} */ (Object.values(stages))) {
+      if (stageCyclesSummary) {
+        summer.add(
+          cyclesSummerTransform(stageCyclesSummary),
+          stageCyclesSummary.cycleCount,
+        );
+      }
+    }
+
+    return makeCycleStatsSummary(summer.getSums());
+  };
+
+  const getLiveBlocksSummary = () => {
+    /** @type {import("./helpers.js").Summer<ReturnType<typeof blockSummerTransform>>} */
+    const summer = makeSummer();
+
+    for (const {
+      blocksSummaries: { onlyLive: stageLiveBlocksSummary = undefined } = {},
+    } of /** @type {StageStats[]} */ (Object.values(stages))) {
+      if (stageLiveBlocksSummary) {
+        summer.add(
+          blockSummerTransform(stageLiveBlocksSummary),
+          stageLiveBlocksSummary.blockCount,
+        );
+      }
+    }
+
+    return makeBlockStatsSummary(summer.getSums());
+  };
+
+  const getTotalBlockCount = () => {
+    let blockCount = 0;
+
+    for (const {
+      blocksSummaries: { all: stageAllBlocksSummary = undefined } = {},
+    } of /** @type {StageStats[]} */ (Object.values(stages))) {
+      if (stageAllBlocksSummary) {
+        blockCount += stageAllBlocksSummary.blockCount;
+      }
+    }
+
+    return blockCount;
+  };
+
+  const updateSummaries = () => {
+    privateSetters.cyclesSummary(getCyclesSummary());
+    privateSetters.liveBlocksSummary(getLiveBlocksSummary());
+    privateSetters.totalBlockCount(getTotalBlockCount());
+  };
+
+  /** @type {RunStats['recordEnd']} */
+  const recordEnd = (time) => {
+    privateSetters.endedAt(time);
+
+    updateSummaries();
+  };
+
   /** @type {RunStats['newStage']} */
   const newStage = (stageData) => {
     const { stageIndex } = stageData;
 
     assert(stageIndex === getStageCount());
 
-    const stageStats = makeStageStats(stageData);
+    updateSummaries();
+
+    const stageStats = makeStageStats({
+      ...stageData,
+      previousCycleCount: publicProps.cyclesSummary
+        ? publicProps.cyclesSummary.cycleCount
+        : 0,
+    });
     insertStage(stageIndex, stageStats);
     return stageStats;
   };
-
-  const getBlockCount = () =>
-    Object.values(stages).reduce(
-      (acc, stage) => acc + (stage ? stage.blockCount : 0),
-      0,
-    );
-
-  const getCycleCount = () =>
-    Object.values(stages).reduce(
-      (acc, stage) => acc + (stage ? stage.cycleCount : 0),
-      0,
-    );
 
   const getDuration = () =>
     savedData.startedAt &&
@@ -93,7 +182,7 @@ export const makeRunStats = (data) => {
     copyProperties(
       {
         recordStart: privateSetters.startedAt,
-        recordEnd: privateSetters.endedAt,
+        recordEnd,
         recordWalletDeployStart: privateSetters.walletDeployStartedAt,
         recordWalletDeployEnd: privateSetters.walletDeployEndedAt,
         recordLoadgenDeployStart: privateSetters.loadgenDeployStartedAt,
@@ -105,8 +194,6 @@ export const makeRunStats = (data) => {
       makeGetters({
         stages: () => stages,
         stageCount: getStageCount,
-        blockCount: getBlockCount,
-        cycleCount: getCycleCount,
         duration: getDuration,
         walletDeployDuration: getWalletDeployDuration,
         loadgenDeployDuration: getLoadgenDeployDuration,

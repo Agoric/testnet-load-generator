@@ -23,6 +23,13 @@ export interface BlockStats extends BlockStatsInitData {
   readonly liveMode: boolean | undefined;
 }
 
+export type BlockStatsSummary = {
+  readonly liveMode: boolean | undefined;
+  readonly startBlockHeight: number;
+  readonly endBlockHeight: number;
+  readonly blockCount: number;
+};
+
 export interface CycleStatsInitData {
   readonly task: string;
   readonly seq: number;
@@ -42,10 +49,24 @@ export interface CycleStats extends CycleStatsInitData {
   readonly duration: number | undefined;
 }
 
+export type CycleStatsSummary = {
+  readonly cycleCount: number;
+  readonly avgBlockCount: number;
+  readonly avgDuration: number;
+  readonly cycleSuccessRate: number;
+};
+
 export interface StageStatsInitData {
   readonly stageConfig: Readonly<Record<string, unknown>>;
   readonly stageIndex: number;
+  readonly previousCycleCount: number;
 }
+
+export type StageBlocksSummaryType =
+  | 'all'
+  | 'onlyLive'
+  | 'onlyCatchup'
+  | 'last100';
 
 export interface StageStats extends StageStatsInitData {
   recordStart(time: TimeValueS): void;
@@ -63,6 +84,12 @@ export interface StageStats extends StageStatsInitData {
   readonly blockCount: number;
   readonly cycles: StatsCollection<CycleStatsCollectionKey, CycleStats>;
   readonly cycleCount: number;
+  readonly blocksSummaries:
+    | StatsCollection<StageBlocksSummaryType, BlockStatsSummary | undefined>
+    | undefined;
+  readonly cyclesSummaries:
+    | StatsCollection<'all' | string, CycleStatsSummary | undefined>
+    | undefined;
   readonly firstBlockHeight: number | undefined;
   readonly lastBlockHeight: number | undefined;
   readonly startedAt: TimeValueS | undefined;
@@ -95,15 +122,16 @@ export interface RunStatsInitData {
 export interface RunStats extends RunStatsInitData {
   recordStart(time: TimeValueS): void;
   recordEnd(time: TimeValueS): void;
-  newStage(data: StageStatsInitData): StageStats;
+  newStage(data: Omit<StageStatsInitData, 'previousCycleCount'>): StageStats;
   recordWalletDeployStart(time: TimeValueS): void;
   recordWalletDeployEnd(time: TimeValueS): void;
   recordLoadgenDeployStart(time: TimeValueS): void;
   recordLoadgenDeployEnd(time: TimeValueS): void;
   readonly stages: StatsCollection<number, StageStats>;
   readonly stageCount: number;
-  readonly blockCount: number;
-  readonly cycleCount: number;
+  readonly totalBlockCount: number;
+  readonly liveBlocksSummary: BlockStatsSummary | undefined;
+  readonly cyclesSummary: CycleStatsSummary | undefined;
   readonly startedAt: TimeValueS | undefined;
   readonly endedAt: TimeValueS | undefined;
   readonly duration: number | undefined;

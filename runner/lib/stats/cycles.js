@@ -6,6 +6,7 @@ import {
   cloneData,
   copyProperties,
   rounder,
+  percentageRounder,
 } from './helpers.js';
 
 /** @typedef {import("./types.js").CycleStatsInitData} CycleStatsInitData */
@@ -30,6 +31,22 @@ const rawCycleStatsInit = {
   startedAt: null,
   endedAt: null,
 };
+
+/** @typedef {'success' | 'blockCount' | 'duration'} CycleStatsSumKeys */
+
+/**
+ * @param {import('./helpers.js').Sums<CycleStatsSumKeys>} sums
+ * @returns {import('./types.js').CycleStatsSummary | undefined}
+ */
+export const makeCycleStatsSummary = ({ weights: cycleCount, averages }) =>
+  cycleCount
+    ? {
+        cycleCount,
+        cycleSuccessRate: percentageRounder(averages.success),
+        avgBlockCount: rounder(averages.blockCount),
+        avgDuration: rounder(averages.duration),
+      }
+    : undefined;
 
 /**
  * @param {CycleStatsInitData} data

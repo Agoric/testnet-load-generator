@@ -22,6 +22,39 @@ const rawBlockStatsInit = {
 };
 
 /**
+ * @typedef {|
+ *   'liveMode' |
+ *   'startBlockHeight' |
+ *   'endBlockHeight' |
+ * never} BlockStatsSumKeys
+ */
+
+/**
+ * @param {import('./helpers.js').Sums<BlockStatsSumKeys>} sums
+ * @returns {import('./types.js').BlockStatsSummary | undefined}
+ */
+export const makeBlockStatsSummary = ({
+  values,
+  weights: blockCount,
+  totals,
+  items,
+  mins,
+  maxes,
+}) =>
+  blockCount
+    ? {
+        blockCount,
+        liveMode:
+          blockCount === totals.liveMode ||
+          (items.liveMode === values && totals.liveMode === 0
+            ? false
+            : undefined),
+        startBlockHeight: mins.startBlockHeight,
+        endBlockHeight: maxes.endBlockHeight,
+      }
+    : undefined;
+
+/**
  * @param {BlockStatsInitData} data
  * @param {import("./types.js").StageStats} [stageStats]
  * @returns {BlockStats}

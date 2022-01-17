@@ -598,6 +598,16 @@ const main = async (progName, rawArgs, powers) => {
             releaseInterrupt();
 
             logPerfEvent('stage-finish');
+            stageConsole.log('Live blocks stats:', {
+              ...((stats.blocksSummaries && stats.blocksSummaries.onlyLive) || {
+                blockCount: 0,
+              }),
+            });
+            stageConsole.log('Cycles stats:', {
+              ...((stats.cyclesSummaries && stats.cyclesSummaries.all) || {
+                cycleCount: 0,
+              }),
+            });
             currentStageTimeSource = timeSource;
           },
         ),
@@ -717,6 +727,18 @@ const main = async (progName, rawArgs, powers) => {
       logPerfEvent('finish', { stats: runStats });
 
       outputStream.end();
+
+      const { console } = makeConsole('summary');
+      console.log('Live blocks stats:', {
+        ...(runStats.liveBlocksSummary || {
+          blockCount: 0,
+        }),
+      });
+      console.log('Cycles stats:', {
+        ...(runStats.cyclesSummary || {
+          cycleCount: 0,
+        }),
+      });
 
       await finished(outputStream);
     },
