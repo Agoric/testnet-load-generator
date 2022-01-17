@@ -52,10 +52,17 @@ const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
  *
  */
-export const makeTasks = ({ spawn: cpSpawn, fs, makeFIFO, getProcessInfo }) => {
+export const makeTasks = ({
+  spawn: cpSpawn,
+  fs,
+  makeFIFO,
+  getProcessInfo,
+  sdkBinaries,
+}) => {
   const spawn = makeSpawnWithPipedStream({
     spawn: cpSpawn,
     end: false,
@@ -242,7 +249,7 @@ export const makeTasks = ({ spawn: cpSpawn, fs, makeFIFO, getProcessInfo }) => {
     chainEnv.SLOGFILE = slogFifo.path;
     // chainEnv.DEBUG = 'agoric';
 
-    const launcherCp = printerSpawn('ag-chain-cosmos', ['start'], {
+    const launcherCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
       stdio: ['ignore', 'pipe', stdio[2]],
       env: chainEnv,
       detached: true,

@@ -27,7 +27,7 @@ const jsonDataRE = /^\{.*\}$/;
  *
  */
 export const makeLoadgenTask = ({ spawn }) => {
-  return harden(async ({ stdout, stderr, timeout = 30, config = {} }) => {
+  return harden(async ({ stdout, stderr, timeout = 30, config }) => {
     const { console, stdio } = getConsoleAndStdio('loadgen', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -92,6 +92,27 @@ export const makeLoadgenTask = ({ spawn }) => {
       },
     });
 
+    /** @param {unknown} newConfig */
+    const updateConfig = async (newConfig = {}) => {
+      console.log('Making request to loadgen');
+      const body = Buffer.from(JSON.stringify(newConfig), 'utf8');
+
+      const res = await httpRequest('http://127.0.0.1:3352/config', {
+        body,
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': body.byteLength,
+        },
+      });
+      // Consume and discard the response
+      for await (const _ of res);
+
+      if (!res.statusCode || res.statusCode >= 400) {
+        throw new Error('Could not update loadgen config');
+      }
+    };
+
     const [deploying, tasksReady, initialOutputParsed] = whenStreamSteps(
       combinedOutput,
       [{ matcher: loadgenStartRE }, { matcher: loadgenReadyRE }],
@@ -123,30 +144,15 @@ export const makeLoadgenTask = ({ spawn }) => {
 
         console.log('Load gen app running');
 
-        const ready = tasksReady.then(async () => {
-          console.log('Making request to loadgen');
-          const body = Buffer.from(JSON.stringify(config), 'utf8');
-
-          const res = await httpRequest('http://127.0.0.1:3352/config', {
-            body,
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Content-Length': body.byteLength,
-            },
-          });
-          // Consume and discard the response
-          for await (const _ of res);
-
-          if (!res.statusCode || res.statusCode >= 400) {
-            throw new Error('Could not start faucet');
-          }
-        });
+        const ready = tasksReady.then(() =>
+          config != null ? updateConfig(config) : undefined,
+        );
 
         return harden({
           stop,
           done,
           ready,
+          updateConfig,
           taskEvents: {
             [Symbol.asyncIterator]: () => taskEvents[Symbol.asyncIterator](),
           },

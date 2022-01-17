@@ -7,6 +7,12 @@ export interface EnvInfo {
   readonly agChainCosmosVersion?: unknown;
 }
 
+export interface SDKBinaries {
+  readonly agSolo: string;
+  readonly cosmosChain: string;
+  readonly cosmosHelper: string;
+}
+
 export type TaskResult = {
   readonly stop: () => void;
   readonly done: Promise<void>;
@@ -43,6 +49,7 @@ export type TaskEvent = TaskEventStatus | TaskEventStart | TaskEventFinish;
 
 export type RunLoadgenInfo = {
   readonly taskEvents: AsyncIterable<TaskEvent>;
+  updateConfig(newConfig: unknown): Promise<void>;
 };
 
 export type RunChainResult = TaskResult & RunChainInfo;

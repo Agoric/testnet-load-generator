@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@endo/eslint-config": "^0.3.9",
+    "@types/node": "^16.9.1",
     "@types/readline-transform": "^1.0.0",
     "@types/yargs-parser": "^20.2.1",
     "ava": "^3.13.0",
