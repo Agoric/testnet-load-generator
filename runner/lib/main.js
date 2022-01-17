@@ -50,12 +50,13 @@ const defaultStageDurationMinutes = 6 * 60;
 const defaultNumberStages = 4 + 2;
 
 /**
+ * @template {Record<string, unknown> | undefined} T
  * @param {unknown} maybeObj
- * @param {Record<string, unknown>} [defaultValue]
+ * @param {T} defaultValue
  */
-const coerceRecordOption = (maybeObj, defaultValue = {}) => {
+const coerceRecordOption = (maybeObj, defaultValue) => {
   if (maybeObj == null) {
-    return defaultValue;
+    return /** @type {T extends undefined ? undefined : Record<string, unknown>} */ (defaultValue);
   }
 
   if (typeof maybeObj !== 'object') {
@@ -235,9 +236,9 @@ const main = async (progName, rawArgs, powers) => {
   /** @type {string} */
   let testnetOrigin;
 
-  switch (argv.profile) {
-    case null:
-    case undefined:
+  const profile = argv.profile == null ? 'local' : argv.profile;
+
+  switch (profile) {
     case 'local':
       makeTasks = makeLocalChainTasks;
       testnetOrigin = '';
@@ -246,11 +247,10 @@ const main = async (progName, rawArgs, powers) => {
     case 'testnet':
     case 'stage':
       makeTasks = makeTestnetTasks;
-      testnetOrigin =
-        argv.testnetOrigin || `https://${argv.profile}.agoric.net`;
+      testnetOrigin = argv.testnetOrigin || `https://${profile}.agoric.net`;
       break;
     default:
-      throw new Error(`Unexpected profile option: ${argv.profile}`);
+      throw new Error(`Unexpected profile option: ${profile}`);
   }
 
   const monitorInterval =
@@ -285,7 +285,7 @@ const main = async (progName, rawArgs, powers) => {
 
   const runStats = makeRunStats({
     metadata: {
-      profile: argv.profile || 'local',
+      profile,
       testnetOrigin,
       ...envInfo,
       testData: argv.testData,
@@ -340,6 +340,7 @@ const main = async (progName, rawArgs, powers) => {
     });
 
     logPerfEvent('stage-start');
+    stageConsole.log('Starting stage', config);
     const stageStart = timeSource.shift();
 
     const stats = runStats.newStage({
@@ -349,7 +350,7 @@ const main = async (progName, rawArgs, powers) => {
 
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
-      stageConsole.log('Running chain', config);
+      stageConsole.log('Running chain');
       logPerfEvent('run-chain-start');
       const runChainResult = await runChain({ stdout: out, stderr: err });
       logPerfEvent('run-chain-finish');
@@ -738,7 +739,7 @@ const main = async (progName, rawArgs, powers) => {
           ? parseInt(String(argv.stages), 10)
           : defaultNumberStages;
 
-      const stageConfigs = coerceRecordOption(argv.stage);
+      const stageConfigs = coerceRecordOption(argv.stage, {});
 
       const sharedLoadgenConfig = coerceRecordOption(
         stageConfigs.loadgen,
@@ -755,67 +756,126 @@ const main = async (progName, rawArgs, powers) => {
         undefined,
       );
 
-      const sharedStageDurationMinutes =
+      // Shared stage duration can only be positive
+      const sharedStageDurationMinutesRaw =
         stageConfigs.duration != null
           ? Number(stageConfigs.duration)
+          : undefined;
+      const sharedStageDurationMinutes =
+        sharedStageDurationMinutesRaw && sharedStageDurationMinutesRaw > 0
+          ? sharedStageDurationMinutesRaw
           : defaultStageDurationMinutes;
 
       while (currentStage < stages - 1) {
         currentStage += 1;
 
-        const stageConfig = coerceRecordOption(stageConfigs[currentStage]);
+        const stageConfig = coerceRecordOption(stageConfigs[currentStage], {});
 
-        const withLoadgen = coerceBooleanOption(
+        let stageWithLoadgen = coerceBooleanOption(
           stageConfig.loadgen,
-          globalChainOnly ? false : undefined,
+          undefined,
           false,
         );
 
-        const tentativeLoadgenConfig =
-          withLoadgen == null
-            ? coerceRecordOption(stageConfig.loadgen, sharedLoadgenConfig)
-            : sharedLoadgenConfig;
+        const stageLoadgenConfig =
+          stageWithLoadgen == null
+            ? coerceRecordOption(stageConfig.loadgen, undefined)
+            : undefined;
+        if (stageLoadgenConfig) {
+          stageWithLoadgen = true;
+        }
+
+        let stageDurationMinutes =
+          stageConfig.duration != null
+            ? Number(stageConfig.duration)
+            : undefined;
 
         const loadgenWindDown = coerceBooleanOption(
           stageConfig.loadgenWindDown,
           sharedLoadgenWindDown,
         );
 
-        // By default the first stage will only initialize the chain from genesis
-        // and the last stage will only capture the chain restart time
-        // loadgen and chainOnly options overide default
-        const chainOnly =
-          globalChainOnly ||
-          coerceBooleanOption(
-            stageConfig.chainOnly,
-            withLoadgen != null
-              ? !withLoadgen // use boolean loadgen option value as default chainOnly
-              : tentativeLoadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
-                  withMonitor && // If monitor is disabled, chainOnly has no meaning
-                  stages > 2 &&
-                  currentStage === stages - 1, // Last stage is restart only test
+        const stageChainOnly = coerceBooleanOption(
+          stageConfig.chainOnly,
+          undefined,
+        );
+
+        // By default the last stage will only capture the chain restart time
+        // unless loadgen was explicitly requested on this stage
+        const defaultChainOnly =
+          withMonitor && // If monitor is disabled, chainOnly has no meaning
+          stageChainOnly !== false &&
+          (stageWithLoadgen === false ||
+            (stageWithLoadgen == null &&
+              stages > 2 &&
+              currentStage === stages - 1));
+        // global chainOnly=true takes precedence
+        const chainOnly = globalChainOnly || stageChainOnly || defaultChainOnly;
+
+        if (chainOnly) {
+          if (!withMonitor) {
+            initConsole.error(`Stage ${currentStage} has conflicting config`, {
+              chainOnly,
+              withMonitor,
+            });
+            throw new Error('Invalid config');
+          }
+          if (stageWithLoadgen) {
+            initConsole.warn(
+              `Stage ${currentStage} has conflicting config, ignoring loadgen`,
+              {
+                chainOnly,
+                withLoadgen: stageWithLoadgen,
+              },
+            );
+            stageWithLoadgen = !chainOnly;
+          }
+        }
+
+        if (
+          chainOnly &&
+          makeTasks === makeLocalChainTasks &&
+          stageDurationMinutes
+        ) {
+          initConsole.warn(
+            `Stage ${currentStage} has conflicting config, ignoring duration`,
+            {
+              profile,
+              chainOnly,
+              duration: stageDurationMinutes,
+            },
           );
+          stageDurationMinutes = undefined;
+        }
 
         const saveStorage = coerceBooleanOption(
           stageConfig.saveStorage,
-          sharedSavedStorage !== undefined ? sharedSavedStorage : !chainOnly,
+          sharedSavedStorage !== undefined
+            ? sharedSavedStorage
+            : !defaultChainOnly,
         );
 
-        const duration =
-          (stageConfig.duration != null
-            ? Number(stageConfig.duration)
-            : // Local tasks have nothing to do without loadgen
-              (!(makeTasks === makeLocalChainTasks && chainOnly) &&
-                // First stage is setup only by default
-                !(currentStage === 0 && stages > 1) &&
-                sharedStageDurationMinutes) ||
-              0) * 60;
+        // By default the first stage only initializes but doesn't actually set any load
+        // Unless loadgen requested or duration explicitly set
+        const activeLoadgen =
+          (stageWithLoadgen || (stageWithLoadgen == null && !chainOnly)) &&
+          stageDurationMinutes !== 0 &&
+          (stageWithLoadgen ||
+            stageDurationMinutes != null ||
+            stages === 1 ||
+            currentStage > 0);
 
-        const loadgenConfig =
-          (withLoadgen === false || duration === 0) &&
-          tentativeLoadgenConfig === sharedLoadgenConfig
-            ? null
-            : tentativeLoadgenConfig;
+        const defaultDurationMinutes = activeLoadgen
+          ? sharedStageDurationMinutes
+          : 0;
+        const duration =
+          (stageDurationMinutes != null
+            ? stageDurationMinutes
+            : defaultDurationMinutes) * 60;
+
+        const loadgenConfig = activeLoadgen
+          ? stageLoadgenConfig || sharedLoadgenConfig
+          : null;
 
         // eslint-disable-next-line no-await-in-loop
         await runStage({
