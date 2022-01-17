@@ -391,10 +391,9 @@ const main = async (progName, rawArgs, powers) => {
       /** @type {(() => void) | null} */
       let resolveFirstBlockDone = firstBlockDoneKit.resolve;
 
-      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
-      const firstEmptyBlockKit = makePromiseKit();
       /** @type {(() => void) | null} */
-      let resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
+      let resolveFirstEmptyBlock = null;
+      let emptyBlockRetries = 10;
 
       const notifier = {
         /** @param {import('./stats/types.js').BlockStats} block */
@@ -405,7 +404,7 @@ const main = async (progName, rawArgs, powers) => {
           }
 
           if (resolveFirstEmptyBlock) {
-            if (block.slogLines === 0 || stats.blockCount > 10) {
+            if (block.slogLines === 0 || emptyBlockRetries === 0) {
               if (block.slogLines === 0) {
                 logPerfEvent('stage-first-empty-block', {
                   block: block.blockHeight,
@@ -413,6 +412,8 @@ const main = async (progName, rawArgs, powers) => {
               }
               resolveFirstEmptyBlock();
               resolveFirstEmptyBlock = null;
+            } else {
+              emptyBlockRetries -= 1;
             }
           }
         },
@@ -445,7 +446,11 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
-          await tryTimeout(60 * 1000, () =>
+          /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+          const firstEmptyBlockKit = makePromiseKit();
+          resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
+
+          await tryTimeout(2 * 60 * 1000, () =>
             Promise.race([
               slogMonitorDone,
               orInterrupt(firstBlockDoneKit.promise),
@@ -493,7 +498,9 @@ const main = async (progName, rawArgs, powers) => {
 
       await aggregateTryFinally(
         async () => {
-          await orInterrupt(runClientResult.ready);
+          await tryTimeout(10 * 60 * 1000, () =>
+            orInterrupt(runClientResult.ready),
+          );
           stats.recordClientReady(timeSource.getTime());
           logPerfEvent('client-ready', {
             duration: stats.clientInitDuration,
@@ -558,7 +565,9 @@ const main = async (progName, rawArgs, powers) => {
 
       await aggregateTryFinally(
         async () => {
-          await orInterrupt(runLoadgenResult.ready);
+          await tryTimeout(10 * 60 * 1000, () =>
+            orInterrupt(runLoadgenResult.ready),
+          );
           stats.recordLoadgenReady(timeSource.getTime());
           logPerfEvent('loadgen-ready');
           if (!runStats.loadgenDeployEndedAt) {
@@ -583,8 +592,21 @@ const main = async (progName, rawArgs, powers) => {
             });
 
             await runLoadgenResult.updateConfig(null);
-            stageConsole.log('Waiting for loadgen tasks to end');
-            await orInterrupt(Promise.race([idle, sleep(2 * 60 * 1000)]));
+            const maxLoadgenDuration =
+              Object.values(stats.cycles).reduce(
+                (max, cycleStats) =>
+                  cycleStats &&
+                  cycleStats.duration != null &&
+                  !Number.isNaN(cycleStats.duration)
+                    ? Math.max(max, cycleStats.duration)
+                    : max,
+                0,
+              ) || 2 * 60;
+            const sleepTime = (maxLoadgenDuration + 2 * 6) * 1.2;
+            stageConsole.log(
+              `Waiting for loadgen tasks to end (Max ${sleepTime}s)`,
+            );
+            await orInterrupt(Promise.race([idle, sleep(sleepTime * 1000)]));
           }
         },
         async () => {

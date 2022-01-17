@@ -223,7 +223,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr }) => {
+  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -393,28 +393,31 @@ export const makeTasks = ({
 
     const done = PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
 
-    try {
-      await soloCpReady;
-      await clientStarted;
+    return tryTimeout(
+      timeout * 1000,
+      async () => {
+        await soloCpReady;
+        await clientStarted;
 
-      console.log('Client running');
+        console.log('Client running');
 
-      const stop = () => {
-        ignoreKill.signal = 'SIGTERM';
-        soloCp.kill(ignoreKill.signal);
-      };
+        const stop = () => {
+          ignoreKill.signal = 'SIGTERM';
+          soloCp.kill(ignoreKill.signal);
+        };
 
-      return harden({
-        stop,
-        done,
-        ready: walletReady,
-      });
-    } catch (err) {
-      // Avoid unhandled rejections for promises that can no longer be handled
-      Promise.allSettled([done, clientStarted, walletReady]);
-      soloCp.kill();
-      throw err;
-    }
+        return harden({
+          stop,
+          done,
+          ready: walletReady,
+        });
+      },
+      async () => {
+        // Avoid unhandled rejections for promises that can no longer be handled
+        Promise.allSettled([done, clientStarted, walletReady]);
+        soloCp.kill();
+      },
+    );
   };
 
   return harden({

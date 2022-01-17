@@ -370,7 +370,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 20 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
