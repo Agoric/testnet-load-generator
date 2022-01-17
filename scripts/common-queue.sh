@@ -34,7 +34,16 @@ start() {
     done
     echo "processing ${SDK_REVISION}"
     mkdir "${OUTPUT_DIR}"
-    DOCKER_ID=$(docker create -v "$(pwd)/${OUTPUT_DIR}:/out" -e SDK_REVISION=${SDK_REVISION} -e SDK_REPO=${SDK_REPO} --name "${OUTPUT_DIR}" loadgen-runner --test-data.test-type=${TEST_TYPE} "$@") || exit $?
+    DOCKER_ID=$(docker create \
+      -v loadgen-go-pkg-mod:/go/pkg/mod \
+      -v loadgen-yarn-cache:/home/node/.cache/yarn \
+      -v "$(pwd)/${OUTPUT_DIR}:/out" \
+      -e SDK_REVISION=${SDK_REVISION} \
+      -e SDK_REPO=${SDK_REPO} \
+      --name "${OUTPUT_DIR}" \
+      loadgen-runner \
+      --test-data.test-type=${TEST_TYPE} "$@" \
+    ) || exit $?
     docker start ${DOCKER_ID}
     docker wait ${DOCKER_ID} >"${OUTPUT_DIR}/exit_code" &
     DOCKER_WAIT_PID=$!
