@@ -273,10 +273,17 @@ export const makeTasks = ({
       return 0;
     });
 
-    chainDone.then(
-      () => console.log('Chain exited successfully'),
-      (error) => console.error('Chain exited with error', error),
-    );
+    chainDone
+      .then(
+        () => console.log('Chain exited successfully'),
+        (error) => console.error('Chain exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
 
     launcherCp.stdout.pipe(stdio[1], { end: false });
     const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
@@ -343,10 +350,6 @@ export const makeTasks = ({
         const stop = () => {
           stopped = true;
           launcherCp.kill();
-          if (slogFifo.pending) {
-            slogLines.end();
-            slogFifo.close();
-          }
         };
 
         const processInfo = await getProcessInfo(
@@ -406,10 +409,17 @@ export const makeTasks = ({
 
     const clientDone = childProcessDone(launcherCp);
 
-    clientDone.then(
-      () => console.log('Client exited successfully'),
-      (error) => console.error('Client exited with error', error),
-    );
+    clientDone
+      .then(
+        () => console.log('Client exited successfully'),
+        (error) => console.error('Client exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
 
     launcherCp.stdout.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
@@ -459,6 +469,7 @@ export const makeTasks = ({
         // Avoid unhandled rejections for promises that can no longer be handled
         Promise.allSettled([done, walletReady]);
         launcherCp.kill();
+        slogFifo.close();
       },
     );
   };

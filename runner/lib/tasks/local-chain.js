@@ -146,7 +146,10 @@ export const makeTasks = ({
     const chainDone = childProcessDone(launcherCp, {
       ignoreExitCode: true,
     }).then((code) => {
-      if (code !== 0 && (!stopped || code !== 98)) {
+      const wasStopped = stopped;
+      stopped = true;
+
+      if (code !== 0 && (!wasStopped || code !== 98)) {
         return Promise.reject(
           new Error(`Chain exited with non-zero code: ${code}`),
         );
@@ -154,10 +157,17 @@ export const makeTasks = ({
       return 0;
     });
 
-    chainDone.then(
-      () => console.log('Chain exited successfully'),
-      (error) => console.error('Chain exited with error', error),
-    );
+    chainDone
+      .then(
+        () => console.log('Chain exited successfully'),
+        (error) => console.error('Chain exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
 
     launcherCp.stdout.pipe(stdio[1], { end: false });
     const [chainStarted, firstBlock, outputParsed] = whenStreamSteps(
@@ -196,11 +206,9 @@ export const makeTasks = ({
         ]);
 
         const stop = () => {
-          stopped = true;
-          process.kill(processInfo.pid);
-          if (slogFifo.pending) {
-            slogLines.end();
-            slogFifo.close();
+          if (!stopped) {
+            stopped = true;
+            process.kill(processInfo.pid);
           }
         };
 
@@ -383,10 +391,17 @@ export const makeTasks = ({
     const soloCpReady = childProcessReady(soloCp);
     const clientDone = childProcessDone(soloCp, { ignoreKill });
 
-    clientDone.then(
-      () => console.log('Client exited successfully'),
-      (error) => console.error('Client exited with error', error),
-    );
+    clientDone
+      .then(
+        () => console.log('Client exited successfully'),
+        (error) => console.error('Client exited with error', error),
+      )
+      .finally(() => {
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
 
     soloCp.stdout.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
