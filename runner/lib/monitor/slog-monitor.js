@@ -3,9 +3,11 @@
 
 import { warnOnRejection } from '../helpers/async.js';
 
+/** @typedef {import('../helpers/time.js').TimeValueS} TimeValueS */
+
 /**
  * @typedef {{
- *   time: number,
+ *   time: TimeValueS,
  *   type: 'create-vat',
  *   vatID: string,
  *   name?: string,
@@ -16,7 +18,7 @@ import { warnOnRejection } from '../helpers/async.js';
 
 /**
  * @typedef {({
- *   time: number,
+ *   time: TimeValueS,
  *   type: |
  *     'vat-startup-finish' |
  *     'replay-transcript-start' | // Renamed to 'start-replay'
@@ -39,16 +41,51 @@ import { warnOnRejection } from '../helpers/async.js';
 
 /**
  * @typedef {{
- *   time: number,
+ *   time: TimeValueS,
  *   type: SlogCosmicSwingsetBlockEventTypes,
  *   blockHeight?: number,
- *   blockTime: number
+ *   blockTime: TimeValueS
  * }} SlogCosmicSwingsetBlockEvent
  */
 
 /**
+ * @typedef {{
+ *   time: TimeValueS,
+ *   type: 'deliver',
+ *   crankNum: number,
+ *   vatID: string,
+ *   deliveryNum: number,
+ * }} SlogCosmicSwingsetVatDeliveryEvent
+ */
+
+/**
+ * @typedef {{
+ *   time: TimeValueS,
+ *   type: 'deliver-result',
+ *   crankNum: number,
+ *   vatID: string,
+ *   deliveryNum: number,
+ *   dr: [
+ *    tag: 'ok' | 'error',
+ *    message: null | string,
+ *    usage: { compute: number } | null
+ *   ],
+ * }} SlogCosmicSwingsetVatDeliveryResultEvent
+ */
+
+/**
+ * @typedef { |
+ *   SlogCosmicSwingsetVatDeliveryEvent |
+ *   SlogCosmicSwingsetVatDeliveryResultEvent
+ * } SlogCosmicSwingsetVatEvent
+ */
+
+/** @typedef {SlogCosmicSwingsetVatEvent["type"]} SlogCosmicSwingsetVatEventTypes */
+
+/**
  * @typedef { |
  *   SlogVatEventTypes |
+ *   SlogCosmicSwingsetVatEventTypes |
  *   SlogCosmicSwingsetBlockEventTypes
  * } SlogSupportedEventTypes
  */
@@ -56,6 +93,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef { |
  *   SlogVatEvent |
+ *   SlogCosmicSwingsetVatEvent |
  *   SlogCosmicSwingsetBlockEvent
  * } SlogSupportedEvent
  */
@@ -81,14 +119,22 @@ const swingsetStartupBlockSlogEventTypes = [
   'cosmic-swingset-bootstrap-block-finish',
 ];
 
+/** @type {SlogCosmicSwingsetVatEventTypes[]} */
+const swingsetActiveSlogEventTypes = ['deliver', 'deliver-result'];
+
 /** @param {SlogSupportedEventTypes[]} eventTypes */
 const filterSlogEvent = (eventTypes) =>
   new RegExp(`^{"time":\\d+(?:\\.\\d+),"type":"(?:${eventTypes.join('|')})"`);
 
-const slogEventRE = filterSlogEvent([
+const startEventRE = filterSlogEvent([
   ...vatSlogEventTypes,
   ...swingsetRegularBlockSlogEventTypes,
   ...swingsetStartupBlockSlogEventTypes,
+]);
+const activeEventRE = filterSlogEvent([
+  ...vatSlogEventTypes,
+  ...swingsetRegularBlockSlogEventTypes,
+  ...swingsetActiveSlogEventTypes,
 ]);
 
 /**
@@ -110,6 +156,8 @@ export const monitorSlog = async (
   let slogBlocksSeen = 0;
   let slogLinesInBlock = 0;
 
+  let eventRE = startEventRE;
+
   for await (const line of slogLines) {
     if (slogStart == null && chainMonitor) {
       // TODO: figure out a better way
@@ -129,7 +177,7 @@ export const monitorSlog = async (
     // Avoid JSON parsing or converting lines we don't care about
     // Parse as ascii, in case the payload has multi-byte chars,
     // the time and type tested prefix is guaranteed to be single-byte.
-    if (!slogEventRE.test(line.toString('ascii', 0, 100))) continue;
+    if (!eventRE.test(line.toString('ascii', 0, 100))) continue;
 
     const localEventTime = localTimeSource && localTimeSource.getTime();
 
@@ -173,6 +221,7 @@ export const monitorSlog = async (
       }
       case 'cosmic-swingset-bootstrap-block-finish': {
         logPerfEvent('chain-first-init-finish');
+        eventRE = activeEventRE;
         break;
       }
       case 'cosmic-swingset-begin-block': {
@@ -183,6 +232,8 @@ export const monitorSlog = async (
             // This will abruptly end the monitor if there is an error
             await chainMonitor.logProcessUsage();
           }
+          // On restart, the first active slog event is a begin block
+          eventRE = activeEventRE;
         }
         console.log('begin-block', blockHeight);
         slogBlocksSeen += 1;
@@ -202,6 +253,7 @@ export const monitorSlog = async (
         if (event.blockHeight === 0) {
           // TODO: measure duration from start to finish
           logPerfEvent('chain-first-init-finish');
+          eventRE = activeEventRE;
         } else {
           const { blockHeight = 0 } = event;
           // Finish line itself doesn't count
@@ -216,6 +268,12 @@ export const monitorSlog = async (
             slogLinesInBlock,
           );
         }
+        break;
+      }
+      case 'deliver': {
+        break;
+      }
+      case 'deliver-result': {
         break;
       }
       default: {
