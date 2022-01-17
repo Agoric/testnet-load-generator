@@ -60,6 +60,7 @@ export interface TaskBaseOptions {
   readonly stdout: import('stream').Writable;
   readonly stderr: import('stream').Writable;
   readonly timeout?: number;
+  readonly orInterrupt?: (job?: Promise<any>) => Promise<any>;
   readonly config?: unknown;
 }
 

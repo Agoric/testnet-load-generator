@@ -803,7 +803,7 @@ const main = async (progName, rawArgs, powers) => {
       const withMonitor = coerceBooleanOption(argv.monitor, true);
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       {
-        const { releaseInterrupt } = makeInterrupterKit({
+        const { orInterrupt, releaseInterrupt } = makeInterrupterKit({
           console: initConsole,
         });
 
@@ -818,7 +818,12 @@ const main = async (progName, rawArgs, powers) => {
         await aggregateTryFinally(
           // Do not short-circuit on interrupt, let the spawned setup process terminate
           async () =>
-            setupTasks({ stdout: out, stderr: err, config: setupConfig }),
+            setupTasks({
+              stdout: out,
+              stderr: err,
+              orInterrupt,
+              config: setupConfig,
+            }),
 
           // This will throw if there was any interrupt, and prevent further execution
           async () => releaseInterrupt(),
