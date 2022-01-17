@@ -1,6 +1,7 @@
 /* global process Buffer */
 
-import { PassThrough } from 'stream';
+import { PassThrough, Transform, pipeline as pipelineCallback } from 'stream';
+import { promisify } from 'util';
 
 import {
   childProcessDone,
@@ -11,8 +12,12 @@ import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { whenStreamSteps } from '../helpers/stream.js';
 import { httpRequest, getConsoleAndStdio } from './helpers.js';
 
+const pipeline = promisify(pipelineCallback);
+
 const loadgenStartRE = /deploy.*loadgen\/loop\.js/;
 const loadgenReadyRE = /server running/;
+
+const jsonDataRE = /^\{.*\}$/;
 
 /**
  *
@@ -67,7 +72,27 @@ export const makeLoadgenTask = ({ spawn }) => {
     launcherCp.stderr.pipe(stdio[2], { end: false });
     launcherCp.stderr.pipe(errLines).pipe(combinedOutput);
 
-    const [deploying, tasksReady, outputParsed] = whenStreamSteps(
+    const taskEvents = new Transform({
+      objectMode: true,
+      /**
+       * @param {string} data
+       * @param {string} encoding
+       * @param {(error?: Error | null, data?: Record<string, unknown>) => void} callback
+       */
+      transform(data, encoding, callback) {
+        if (jsonDataRE.test(data)) {
+          try {
+            callback(null, JSON.parse(data));
+            return;
+          } catch (error) {
+            console.warn('Failed to parse loadgen event', data, error);
+          }
+        }
+        callback();
+      },
+    });
+
+    const [deploying, tasksReady, initialOutputParsed] = whenStreamSteps(
       combinedOutput,
       [{ matcher: loadgenStartRE }, { matcher: loadgenReadyRE }],
       {
@@ -78,8 +103,16 @@ export const makeLoadgenTask = ({ spawn }) => {
     const cleanCombined = () => {
       launcherCp.stdout.unpipe(outLines);
       launcherCp.stderr.unpipe(errLines);
+      taskEvents.end();
     };
-    outputParsed.then(cleanCombined, cleanCombined);
+
+    const outputParsed = initialOutputParsed.then(
+      () => pipeline(combinedOutput, new LineStreamTransform(), taskEvents),
+      (err) => {
+        cleanCombined();
+        return Promise.reject(err);
+      },
+    );
 
     const done = PromiseAllOrErrors([outputParsed, loadgenDone]).then(() => {});
 
@@ -114,6 +147,9 @@ export const makeLoadgenTask = ({ spawn }) => {
           stop,
           done,
           ready,
+          taskEvents: {
+            [Symbol.asyncIterator]: () => taskEvents[Symbol.asyncIterator](),
+          },
         });
       },
       async () => {

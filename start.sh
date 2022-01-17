@@ -34,6 +34,7 @@ then
 fi
 
 SDK_REVISION=$(git -C "${SDK_SRC}" rev-parse --short HEAD)
+SDK_COMMIT_TIME=$(git -C "${SDK_SRC}" show -s --format=%ct ${SDK_REVISION})
 
 AGORIC_BIN_DIR=/tmp/agoric-sdk-bin-${SDK_REVISION}
 mkdir -p ${AGORIC_BIN_DIR}
@@ -56,4 +57,4 @@ ln -sf "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR
 
 cd "$LOADGEN_DIR"
 agoric install
-exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" "$@" 2>&1 
+exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" --test-data.sdk-revision=${SDK_REVISION} --test-data.sdk-commit-time=${SDK_COMMIT_TIME} "$@" 2>&1 

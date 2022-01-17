@@ -3,9 +3,13 @@
 
 import { warnOnRejection } from '../helpers/async.js';
 
+/** @typedef {import('../stats/types.js').StageStats} StageStats */
+/** @typedef {import('../stats/types.js').BlockStats} BlockStats */
+/** @typedef {import('../helpers/time.js').TimeValueS} TimeValueS */
+
 /**
  * @typedef {{
- *   time: number,
+ *   time: TimeValueS,
  *   type: 'create-vat',
  *   vatID: string,
  *   name?: string,
@@ -16,7 +20,7 @@ import { warnOnRejection } from '../helpers/async.js';
 
 /**
  * @typedef {({
- *   time: number,
+ *   time: TimeValueS,
  *   type: |
  *     'vat-startup-finish' |
  *     'replay-transcript-start' | // Renamed to 'start-replay'
@@ -39,16 +43,51 @@ import { warnOnRejection } from '../helpers/async.js';
 
 /**
  * @typedef {{
- *   time: number,
+ *   time: TimeValueS,
  *   type: SlogCosmicSwingsetBlockEventTypes,
  *   blockHeight?: number,
- *   blockTime: number
+ *   blockTime: TimeValueS
  * }} SlogCosmicSwingsetBlockEvent
  */
 
 /**
+ * @typedef {{
+ *   time: TimeValueS,
+ *   type: 'deliver',
+ *   crankNum: number,
+ *   vatID: string,
+ *   deliveryNum: number,
+ * }} SlogCosmicSwingsetVatDeliveryEvent
+ */
+
+/**
+ * @typedef {{
+ *   time: TimeValueS,
+ *   type: 'deliver-result',
+ *   crankNum: number,
+ *   vatID: string,
+ *   deliveryNum: number,
+ *   dr: [
+ *    tag: 'ok' | 'error',
+ *    message: null | string,
+ *    usage: { compute: number } | null
+ *   ],
+ * }} SlogCosmicSwingsetVatDeliveryResultEvent
+ */
+
+/**
+ * @typedef { |
+ *   SlogCosmicSwingsetVatDeliveryEvent |
+ *   SlogCosmicSwingsetVatDeliveryResultEvent
+ * } SlogCosmicSwingsetVatEvent
+ */
+
+/** @typedef {SlogCosmicSwingsetVatEvent["type"]} SlogCosmicSwingsetVatEventTypes */
+
+/**
  * @typedef { |
  *   SlogVatEventTypes |
+ *   SlogCosmicSwingsetVatEventTypes |
  *   SlogCosmicSwingsetBlockEventTypes
  * } SlogSupportedEventTypes
  */
@@ -56,6 +95,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef { |
  *   SlogVatEvent |
+ *   SlogCosmicSwingsetVatEvent |
  *   SlogCosmicSwingsetBlockEvent
  * } SlogSupportedEvent
  */
@@ -81,20 +121,29 @@ const swingsetStartupBlockSlogEventTypes = [
   'cosmic-swingset-bootstrap-block-finish',
 ];
 
+/** @type {SlogCosmicSwingsetVatEventTypes[]} */
+const swingsetActiveSlogEventTypes = ['deliver', 'deliver-result'];
+
 /** @param {SlogSupportedEventTypes[]} eventTypes */
 const filterSlogEvent = (eventTypes) =>
   new RegExp(`^{"time":\\d+(?:\\.\\d+),"type":"(?:${eventTypes.join('|')})"`);
 
-const slogEventRE = filterSlogEvent([
+const startEventRE = filterSlogEvent([
   ...vatSlogEventTypes,
   ...swingsetRegularBlockSlogEventTypes,
   ...swingsetStartupBlockSlogEventTypes,
+]);
+const activeEventRE = filterSlogEvent([
+  ...vatSlogEventTypes,
+  ...swingsetRegularBlockSlogEventTypes,
+  ...swingsetActiveSlogEventTypes,
 ]);
 
 /**
  * @param {Pick<import("../tasks/types.js").RunChainInfo, 'slogLines'>} chainInfo
  * @param {Object} param1
- * @param {{blockDone(stats: {blockHeight: number, slogLines: number}): void}} [param1.notifier]
+ * @param {StageStats} param1.stats
+ * @param {{blockDone(block: BlockStats): void}} [param1.notifier]
  * @param {ReturnType<import("./chain-monitor").makeChainMonitor>} [param1.chainMonitor]
  * @param {import("../stats/types.js").LogPerfEvent} param1.logPerfEvent
  * @param {import("../helpers/time.js").TimeSource} [param1.localTimeSource]
@@ -102,13 +151,15 @@ const slogEventRE = filterSlogEvent([
  */
 export const monitorSlog = async (
   { slogLines },
-  { notifier, chainMonitor, localTimeSource, logPerfEvent, console },
+  { stats, notifier, chainMonitor, localTimeSource, logPerfEvent, console },
 ) => {
   /** @type {number | null}  */
   let slogStart = null;
 
-  let slogBlocksSeen = 0;
-  let slogLinesInBlock = 0;
+  /** @type {BlockStats | null} */
+  let block = null;
+
+  let eventRE = startEventRE;
 
   for await (const line of slogLines) {
     if (slogStart == null && chainMonitor) {
@@ -124,12 +175,14 @@ export const monitorSlog = async (
       );
     }
 
-    slogLinesInBlock += 1;
+    if (block) {
+      block.recordSlogLine();
+    }
 
     // Avoid JSON parsing or converting lines we don't care about
     // Parse as ascii, in case the payload has multi-byte chars,
     // the time and type tested prefix is guaranteed to be single-byte.
-    if (!slogEventRE.test(line.toString('ascii', 0, 100))) continue;
+    if (!eventRE.test(line.toString('ascii', 0, 100))) continue;
 
     const localEventTime = localTimeSource && localTimeSource.getTime();
 
@@ -173,48 +226,76 @@ export const monitorSlog = async (
       }
       case 'cosmic-swingset-bootstrap-block-finish': {
         logPerfEvent('chain-first-init-finish');
+        eventRE = activeEventRE;
         break;
       }
       case 'cosmic-swingset-begin-block': {
-        const { blockHeight = 0 } = event;
-        if (!slogBlocksSeen) {
+        const { time, blockHeight = 0, blockTime } = event;
+        if (!stats.blockCount) {
           logPerfEvent('stage-first-block', { block: blockHeight });
           if (chainMonitor) {
             // This will abruptly end the monitor if there is an error
             await chainMonitor.logProcessUsage();
           }
+          // On restart, the first active slog event is a begin block
+          eventRE = activeEventRE;
         }
         console.log('begin-block', blockHeight);
-        slogBlocksSeen += 1;
+        block = stats.newBlock({ blockHeight, blockTime });
+        block.recordStart(time);
         break;
       }
       case 'cosmic-swingset-end-block-start': {
-        if (event.blockHeight === 0) {
+        if (!block) {
           // Before https://github.com/Agoric/agoric-sdk/pull/3491
           // bootstrap didn't have it's own slog entry
+          // However in that case there is no begin-block
           logPerfEvent('chain-first-init-start');
         } else {
-          slogLinesInBlock = 0;
+          const { time, blockHeight = 0 } = event;
+          assert(block.blockHeight === blockHeight);
+          block.recordSwingsetStart(time);
         }
         break;
       }
       case 'cosmic-swingset-end-block-finish': {
-        if (event.blockHeight === 0) {
+        if (!block) {
           // TODO: measure duration from start to finish
           logPerfEvent('chain-first-init-finish');
+          eventRE = activeEventRE;
         } else {
-          const { blockHeight = 0 } = event;
-          // Finish line itself doesn't count
-          slogLinesInBlock -= 1;
-          notifier &&
-            notifier.blockDone({ blockHeight, slogLines: slogLinesInBlock });
+          const { time, blockHeight = 0 } = event;
+
+          assert(block.blockHeight === blockHeight);
+          block.recordEnd(time);
+          notifier && notifier.blockDone(block);
 
           console.log(
             'end-block',
             blockHeight,
             'linesInBlock=',
-            slogLinesInBlock,
+            block.slogLines,
           );
+          block = null;
+        }
+        break;
+      }
+      case 'deliver': {
+        break;
+      }
+      case 'deliver-result': {
+        if (block) {
+          let computrons;
+          const {
+            crankNum,
+            deliveryNum,
+            vatID,
+            dr: [, , usage],
+          } = event;
+          if (usage && typeof usage === 'object' && 'compute' in usage) {
+            computrons = usage.compute;
+          }
+          block.recordDelivery({ crankNum, deliveryNum, vatID, computrons });
         }
         break;
       }
