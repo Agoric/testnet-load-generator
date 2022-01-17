@@ -226,6 +226,7 @@ const main = async (progName, rawArgs, powers) => {
       makeTasks = makeLocalChainTasks;
       testnetOrigin = '';
       break;
+    case 'devnet':
     case 'testnet':
     case 'stage':
       makeTasks = makeTestnetTasks;
@@ -696,6 +697,11 @@ const main = async (progName, rawArgs, powers) => {
         defaultLoadgenConfig,
       );
 
+      const sharedSavedStorage = coerceBooleanOption(
+        stageConfigs.saveStorage,
+        undefined,
+      );
+
       const sharedStageDurationMinutes =
         stageConfigs.duration != null
           ? Number(stageConfigs.duration)
@@ -728,18 +734,22 @@ const main = async (progName, rawArgs, powers) => {
               ? !withLoadgen // use boolean loadgen option value as default chainOnly
               : loadgenConfig === sharedLoadgenConfig && // user provided stage loadgen config implies chain
                   withMonitor && // If monitor is disabled, chainOnly has no meaning
-                  (currentStage === 0 || currentStage === stages - 1),
+                  stages > 2 &&
+                  currentStage === stages - 1, // Last stage is restart only test
           );
 
         const saveStorage = coerceBooleanOption(
           stageConfig.saveStorage,
-          !chainOnly || currentStage === 0,
+          sharedSavedStorage !== undefined ? sharedSavedStorage : !chainOnly,
         );
 
         const duration =
           (stageConfig.duration != null
             ? Number(stageConfig.duration)
-            : (!(chainOnly && makeTasks === makeLocalChainTasks) &&
+            : // Local tasks have nothing to do without loadgen
+              (!(makeTasks === makeLocalChainTasks && chainOnly) &&
+                // First stage is setup only by default
+                !(currentStage === 0 && stages > 1) &&
                 sharedStageDurationMinutes) ||
               0) * 60;
 
