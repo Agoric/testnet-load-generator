@@ -5,20 +5,22 @@
   select(has("stats")) |
   .stats |
   {
-    sdkRevision: (.metadata.testData.sdkRevision | tostring), 
-    sdkCommitTime: (.metadata.testData.sdkCommitTime | strftime("%Y-%m-%d %H:%M:%S")),
+    sdkRevision: (.metadata.testData.sdkRevision // "" | tostring), 
+    sdkCommitTime: (.metadata.testData.sdkCommitTime | strftime("%Y-%m-%d %H:%M:%S")? // ""),
     success: (.duration != null),
+    chainBootstrapDuration: (.chainBootstrapDuration // .stages["0"].chainInitDuration),
     walletDeployDuration: .walletDeployDuration,
     loadgenDeployDuration: .loadgenDeployDuration,
-    cycleAvgDuration: .cyclesSummary.avgDuration,
     cycleSuccessRate: .cyclesSummary.cycleSuccessRate,
+    cycleAvgDuration: .cyclesSummary.avgDuration,
   } + (.stages | with_entries(
-    (.key | tonumber) as $stageIndex |
+    .value.stageConfig as $stageConfig |
     ("stage" + .key + "_") as $stagePrefix |
-    if ($stageIndex > 0 and $stageIndex < 5) then 
-      { key: ($stagePrefix + "cycleAvgDuration"), value: .value.cyclesSummaries.all.avgDuration },
+    if ($stageConfig["chainOnly"] != true and $stageConfig["durationConfig"] != 0) then 
       { key: ($stagePrefix + "cycleSuccessRate"), value: .value.cyclesSummaries.all.cycleSuccessRate },
+      { key: ($stagePrefix + "cycleAvgDuration"), value: .value.cyclesSummaries.all.avgDuration },
       { key: ($stagePrefix + "avgSwingsetBlockTime"), value: .value.blocksSummaries.onlyLive.avgSwingsetTime },
+      { key: ($stagePrefix + "avgSwingsetPercentage"), value: .value.blocksSummaries.onlyLive.avgSwingsetPercentage },
       empty
     else empty end
   ))

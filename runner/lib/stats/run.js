@@ -190,6 +190,12 @@ export const makeRunStats = (data) => {
     savedData.endedAt &&
     rounder(savedData.endedAt - savedData.startedAt);
 
+  const getChainBootstrapStartedAt = () =>
+    stages[0] && stages[0].chainStartedAt;
+  const getChainBootstrapEndedAt = () => stages[0] && stages[0].chainReadyAt;
+  const getChainBootstrapDuration = () =>
+    stages[0] && stages[0].chainInitDuration;
+
   const getWalletDeployDuration = () =>
     savedData.walletDeployStartedAt &&
     savedData.walletDeployEndedAt &&
@@ -217,6 +223,9 @@ export const makeRunStats = (data) => {
         stages: () => stages,
         stageCount: getStageCount,
         duration: getDuration,
+        chainBootstrapStartedAt: getChainBootstrapStartedAt,
+        chainBootstrapEndedAt: getChainBootstrapEndedAt,
+        chainBootstrapDuration: getChainBootstrapDuration,
         walletDeployDuration: getWalletDeployDuration,
         loadgenDeployDuration: getLoadgenDeployDuration,
       }),
