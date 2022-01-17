@@ -30,6 +30,8 @@ const keysDir = '_agstate/keys';
 const profileName = 'local-chain';
 const CLIENT_PORT = 8000;
 const CHAIN_PORT = 26657;
+const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
+const chainStateDir = `${stateDir}/${profileName}-${CHAIN_PORT}`;
 const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
 const CENTRAL_DENOM = 'urun';
@@ -56,7 +58,6 @@ const chainArgvMatcher = (argv) =>
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
- * @param {import("../helpers/fs.js").FindByPrefix} powers.findDirByPrefix
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
@@ -65,7 +66,6 @@ const chainArgvMatcher = (argv) =>
 export const makeTasks = ({
   spawn: cpSpawn,
   fs,
-  findDirByPrefix,
   makeFIFO,
   getProcessInfo,
   sdkBinaries,
@@ -88,8 +88,12 @@ export const makeTasks = ({
     }
   };
 
-  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean}}} options */
-  const setupTasks = async ({ stdout, stderr, config: { reset } = {} }) => {
+  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, withMonitor?: boolean}}} options */
+  const setupTasks = async ({
+    stdout,
+    stderr,
+    config: { reset, withMonitor } = {},
+  }) => {
     const { console, stdio } = getConsoleAndStdio(
       'setup-tasks',
       stdout,
@@ -102,17 +106,21 @@ export const makeTasks = ({
 
     console.log('Starting');
 
+    if (withMonitor !== false) {
+      if (reset) {
+        console.log('Resetting chain node');
+        await childProcessDone(
+          printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
+        );
+      }
+    }
+
     if (reset) {
-      console.log('Resetting chain node and client state');
-      await childProcessDone(printerSpawn('rm', ['-rf', stateDir], { stdio }));
+      console.log('Resetting client state');
       await childProcessDone(
-        printerSpawn('git', ['checkout', '--', stateDir], {
-          stdio,
-        }),
+        printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
       );
     }
-    await childProcessDone(printerSpawn('agoric', ['install'], { stdio }));
-
     console.log('Done');
   };
 
@@ -133,6 +141,7 @@ export const makeTasks = ({
 
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
+    chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
 
     const launcherCp = printerSpawn(
       'agoric',
@@ -196,15 +205,11 @@ export const makeTasks = ({
 
         console.log('Chain running');
 
-        const [storageLocation, processInfo] = await PromiseAllOrErrors([
-          chainStarted.then(findDirByPrefix),
-          getProcessInfo(
-            /** @type {number} */ (launcherCp.pid),
-          ).then((launcherInfo) =>
-            getChildMatchingArgv(launcherInfo, chainArgvMatcher),
-          ),
-        ]);
-
+        const processInfo = await getProcessInfo(
+          /** @type {number} */ (launcherCp.pid),
+        ).then((launcherInfo) =>
+          getChildMatchingArgv(launcherInfo, chainArgvMatcher),
+        );
         const stop = () => {
           if (!stopped) {
             stopped = true;
@@ -217,7 +222,7 @@ export const makeTasks = ({
           done,
           ready,
           slogLines: cleanAsyncIterable(slogLines),
-          storageLocation,
+          storageLocation: chainStateDir,
           processInfo,
         });
       },
@@ -240,22 +245,18 @@ export const makeTasks = ({
 
     console.log('Starting client');
 
-    const portNum = CLIENT_PORT;
-
-    const agServer = `${stateDir}/${profileName}-${portNum}`;
-
-    const gciFile = `${stateDir}/${profileName}-${CHAIN_PORT}/config/genesis.json.sha256`;
+    const gciFile = `${chainStateDir}/config/genesis.json.sha256`;
 
     if (!(await fsExists(gciFile))) {
       throw new Error('Chain not running');
     }
 
     // Initialize the solo directory and key.
-    if (!(await fsExists(agServer))) {
+    if (!(await fsExists(clientStateDir))) {
       await childProcessDone(
         printerSpawn(
           sdkBinaries.agSolo,
-          ['init', agServer, `--webport=${portNum}`],
+          ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
           {
             stdio,
           },
@@ -266,8 +267,8 @@ export const makeTasks = ({
     const rpcAddr = `localhost:${CHAIN_PORT}`;
 
     const soloAddr = (
-      await fs.readFile(`${agServer}/ag-cosmos-helper-address`, 'utf-8')
-    ).trimRight();
+      await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
+    ).trimEnd();
 
     const keysSharedArgs = [
       `--home=${keysDir}`,
@@ -300,7 +301,7 @@ export const makeTasks = ({
           `--gas-adjustment=${GAS_ADJUSTMENT}`,
           '--broadcast-mode=block',
           '--yes',
-          `local-solo-${portNum}`,
+          `local-solo-${CLIENT_PORT}`,
           soloAddr,
         ],
         // Then send it some coins.
@@ -359,12 +360,12 @@ export const makeTasks = ({
     }
 
     // Connect to the chain.
-    const gci = (await fs.readFile(gciFile, 'utf-8')).trimRight();
+    const gci = (await fs.readFile(gciFile, 'utf-8')).trimEnd();
     await childProcessDone(
       printerSpawn(
         sdkBinaries.agSolo,
         ['set-gci-ingress', `--chainID=${CHAIN_ID}`, gci, rpcAddr],
-        { stdio, cwd: agServer },
+        { stdio, cwd: clientStateDir },
       ),
     );
 
@@ -378,7 +379,7 @@ export const makeTasks = ({
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', stdio[2]],
-      cwd: agServer,
+      cwd: clientStateDir,
       env: clientEnv,
       detached: true,
     });
@@ -445,7 +446,7 @@ export const makeTasks = ({
           done,
           ready,
           slogLines: cleanAsyncIterable(slogLines),
-          storageLocation: agServer,
+          storageLocation: clientStateDir,
           processInfo,
         });
       },

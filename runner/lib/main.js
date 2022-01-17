@@ -206,7 +206,7 @@ const main = async (progName, rawArgs, powers) => {
   const argv = yargsParser(rawArgs);
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
-  const { findByPrefix, dirDiskUsage, makeFIFO } = makeFsHelper({
+  const { dirDiskUsage, makeFIFO } = makeFsHelper({
     fs,
     fsStream,
     spawn,
@@ -297,7 +297,6 @@ const main = async (progName, rawArgs, powers) => {
     {
       spawn,
       fs,
-      findDirByPrefix: findByPrefix,
       makeFIFO,
       getProcessInfo,
       sdkBinaries,

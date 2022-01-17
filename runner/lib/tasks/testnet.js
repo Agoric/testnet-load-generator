@@ -237,7 +237,7 @@ export const makeTasks = ({
 
       const soloAddr = (
         await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
-      ).trimRight();
+      ).trimEnd();
 
       const rpcAddrCandidates = [...rpcAddrs];
       let rpcAddr;
@@ -312,8 +312,6 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
       await tryTimeout(timeout * 1000, untilProvisioned);
     }
-
-    await childProcessDone(printerSpawn('agoric', ['install'], { stdio }));
 
     console.log('Done');
   };

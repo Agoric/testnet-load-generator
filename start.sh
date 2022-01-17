@@ -66,7 +66,7 @@ fi
 
 cd "$SDK_SRC"
 if [ "x$SDK_BUILD" != "x0" ]; then
-    yarn install
+    yarn install --frozen-lockfile
     yarn build
     make -C packages/cosmic-swingset
 fi
