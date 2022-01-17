@@ -1,31 +1,48 @@
 /* global process */
 
-import { childProcessOutput } from '../helpers/child-process.js';
-import { asJSON } from '../helpers/stream.js';
+import {
+  childProcessOutput,
+  makePrinterSpawn,
+} from '../helpers/child-process.js';
+import { getConsoleAndStdio } from './helpers.js';
 
 /**
  *
  * @param {Object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks['getEnvInfo']}
  *
  */
-export const makeGetEnvInfo = ({ spawn }) => {
-  return harden(async ({ stderr }) => {
+export const makeGetEnvInfo = ({ spawn, sdkBinaries }) => {
+  return harden(async ({ stdout, stderr }) => {
+    const { console, stdio } = getConsoleAndStdio('env-info', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
+
     const chainEnv = Object.create(process.env);
     // Disable any lockdown options as that interferes with stdout
     chainEnv.LOCKDOWN_OPTIONS = undefined;
 
-    const versionCp = spawn(
-      'ag-chain-cosmos',
+    const versionCp = printerSpawn(
+      sdkBinaries.cosmosChain,
       ['version', '--long', '--output', 'json'],
       {
-        stdio: ['ignore', 'pipe', stderr],
+        stdio: ['ignore', 'pipe', stdio[2]],
         env: chainEnv,
       },
     );
-    const version = await childProcessOutput(versionCp, asJSON);
+    const out = await childProcessOutput(versionCp);
 
-    return { agChainCosmosVersion: version };
+    const json = out.toString('utf-8').replace(/^Removing .+$/m, '');
+    try {
+      const version = JSON.parse(json);
+      return { agChainCosmosVersion: version };
+    } catch (err) {
+      stdio[1].write(out);
+      throw err;
+    }
   });
 };

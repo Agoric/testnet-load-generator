@@ -418,7 +418,7 @@ export const makeTasks = ({
   };
 
   return harden({
-    getEnvInfo: makeGetEnvInfo({ spawn }),
+    getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }),
     setupTasks,
     runChain,
     runClient,
