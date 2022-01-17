@@ -39,8 +39,5 @@
     "trailingComma": "all",
     "singleQuote": true
   },
-  "engines": {
-    "node": "14"
-  },
   "private": true
 }

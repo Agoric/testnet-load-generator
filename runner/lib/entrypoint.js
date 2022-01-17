@@ -48,7 +48,7 @@ process.on('uncaughtException', (error) => {
         spawn,
         tmpDir,
       }),
-    async () => fs.rmdir(tmpDir, { recursive: true }),
+    async () => (fs.rm || fs.rmdir)(tmpDir, { recursive: true }),
   );
 })().then(
   (res) => {

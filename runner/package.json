@@ -36,7 +36,7 @@
     "deterministic-json": "^1.0.5",
     "inquirer": "^6.3.1",
     "readline-transform": "^1.0.0",
-    "ses": "^0.14.0",
+    "ses": "^0.15.1",
     "yargs-parser": "^20.2.2"
   },
   "keywords": [],
