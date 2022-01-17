@@ -1,6 +1,8 @@
 /* global Buffer */
 /* eslint-disable no-unused-vars,no-redeclare */
 
+import type { TimeValueS } from '../helpers/time.js';
+
 export type TaskResult = {
   readonly stop: () => void;
   readonly done: Promise<void>;
@@ -13,8 +15,30 @@ export type RunChainInfo = {
   readonly storageLocation: string;
 };
 
+export type TaskEventStatus = Record<string, unknown> & {
+  time: TimeValueS;
+  type: 'status';
+};
+
+export type TaskEventStart = {
+  time: TimeValueS;
+  type: 'start';
+  task: string;
+  seq: number;
+};
+
+export type TaskEventFinish = {
+  time: TimeValueS;
+  type: 'finish';
+  task: string;
+  seq: number;
+  success: boolean;
+};
+
+export type TaskEvent = TaskEventStatus | TaskEventStart | TaskEventFinish;
+
 export type RunLoadgenInfo = {
-  readonly taskEvents: AsyncIterable<Record<string, unknown>>;
+  readonly taskEvents: AsyncIterable<TaskEvent>;
 };
 
 export type RunChainResult = TaskResult & RunChainInfo;

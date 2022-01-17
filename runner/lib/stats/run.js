@@ -52,6 +52,12 @@ export const makeRunStats = (data = {}) => {
       0,
     );
 
+  const getCycleCount = () =>
+    Object.values(stages).reduce(
+      (acc, stage) => acc + (stage ? stage.cycleCount : 0),
+      0,
+    );
+
   const stats = harden(
     copyProperties(
       {
@@ -65,6 +71,7 @@ export const makeRunStats = (data = {}) => {
         stages: () => stages,
         stageCount: getStageCount,
         blockCount: getBlockCount,
+        cycleCount: getCycleCount,
       }),
     ),
   );

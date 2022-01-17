@@ -20,6 +20,22 @@ export interface BlockStats extends BlockStatsInitData {
   readonly slogLines: number;
 }
 
+export interface CycleStatsInitData {
+  readonly task: string;
+  readonly seq: number;
+}
+
+export type CycleStatsCollectionKey = `${string}/${number}`;
+
+export interface CycleStats extends CycleStatsInitData {
+  recordStart(): void;
+  recordEnd(success: boolean): void;
+  readonly success: boolean | undefined;
+  readonly startBlockHeight: number | undefined;
+  readonly endBlockHeight: number | undefined;
+  readonly blockCount: number | undefined;
+}
+
 export interface StageStatsInitData {
   readonly stageConfig: Readonly<Record<string, unknown>>;
   readonly stageIndex: number;
@@ -29,8 +45,11 @@ export interface StageStats extends StageStatsInitData {
   recordStart(): void;
   recordEnd(): void;
   newBlock(data: BlockStatsInitData): BlockStats;
+  getOrMakeCycle(data: CycleStatsInitData): CycleStats;
   readonly blocks: StatsCollection<number, BlockStats>;
   readonly blockCount: number;
+  readonly cycles: StatsCollection<CycleStatsCollectionKey, CycleStats>;
+  readonly cycleCount: number;
   readonly firstBlockHeight: number | undefined;
   readonly lastBlockHeight: number | undefined;
 }
@@ -44,4 +63,5 @@ export interface RunStats extends RunStatsInitData {
   readonly stages: StatsCollection<number, StageStats>;
   readonly stageCount: number;
   readonly blockCount: number;
+  readonly cycleCount: number;
 }

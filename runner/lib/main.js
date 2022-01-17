@@ -26,6 +26,7 @@ import { makeTasks as makeTestnetTasks } from './tasks/testnet.js';
 
 import { makeChainMonitor } from './monitor/chain-monitor.js';
 import { monitorSlog } from './monitor/slog-monitor.js';
+import { monitorLoadgen } from './monitor/loadgen-monitor.js';
 import { makeRunStats } from './stats/run.js';
 import { makeTimeSource } from './helpers/time.js';
 
@@ -460,6 +461,11 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('loadgen-stopped');
       });
 
+      const monitorLoadgenDone = monitorLoadgen(runLoadgenResult, {
+        ...makeConsole('monitor-loadgen', out, err),
+        stats,
+      });
+
       await aggregateTryFinally(
         async () => {
           await orInterrupt(runLoadgenResult.ready);
@@ -474,6 +480,8 @@ const main = async (progName, rawArgs, powers) => {
             runLoadgenResult.stop();
             await done;
           }
+
+          await monitorLoadgenDone;
         },
       );
     };
