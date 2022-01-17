@@ -154,8 +154,19 @@ const getSDKBinaries = async () => {
     const { resolve } = await import('./helpers/module.js');
     // Older SDKs were only at lib
     const cliHelpersUrl = await resolve(libHelpers, import.meta.url);
+    // Prefer CJS as some versions have both and must use .cjs for RESM
+    let agSolo = new URL('../../solo/src/entrypoint.cjs', cliHelpersUrl)
+      .pathname;
+    if (
+      !(await resolve(agSolo, import.meta.url).then(
+        () => true,
+        () => false,
+      ))
+    ) {
+      agSolo = agSolo.replace(/\.cjs$/, '.js');
+    }
     return {
-      agSolo: new URL('../../solo/src/entrypoint.js', cliHelpersUrl).pathname,
+      agSolo,
       cosmosChain: new URL(
         '../../cosmic-swingset/bin/ag-chain-cosmos',
         cliHelpersUrl,

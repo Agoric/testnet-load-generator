@@ -7,13 +7,12 @@ import {
   childProcessDone,
   makeSpawnWithPipedStream,
   makePrinterSpawn,
-  childProcessOutput,
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import { whenStreamSteps } from '../helpers/stream.js';
+import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
@@ -33,7 +32,8 @@ const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
 const CENTRAL_DENOM = 'urun';
 const STAKING_DENOM = 'ubld';
-const SOLO_COINS = `75000000${STAKING_DENOM},220000000000${CENTRAL_DENOM}`;
+// Need to provision less than 50000 RUN as that's the most we can get from an old sdk genesis
+const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
 
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
@@ -267,6 +267,8 @@ export const makeTasks = ({
       `--node=tcp://${rpcAddr}`,
     ];
 
+    const outputArgs = ['--output=json'];
+
     // Provision the ag-solo, if necessary.
     const checkAddrStatus = await childProcessDone(
       printerSpawn(
@@ -283,7 +285,6 @@ export const makeTasks = ({
           'tx',
           'swingset',
           'provision-one',
-          '-ojson',
           ...keysSharedArgs,
           '--keyring-backend=test',
           '--from=provision',
@@ -299,7 +300,6 @@ export const makeTasks = ({
           'tx',
           'bank',
           'send',
-          '-ojson',
           ...keysSharedArgs,
           '--keyring-backend=test',
           '--gas=auto',
@@ -311,14 +311,37 @@ export const makeTasks = ({
           SOLO_COINS,
         ],
       ];
-      for (const cmd of provCmds) {
-        // eslint-disable-next-line no-await-in-loop
-        const ret = await childProcessOutput(
-          printerSpawn(sdkBinaries.cosmosHelper, cmd, {
-            stdio: ['ignore', 'pipe', stdio[2]],
-          }),
+      for (let i = 0; i < provCmds.length; i += 1) {
+        const cmd = provCmds[i];
+        const cmdCp = printerSpawn(
+          sdkBinaries.cosmosHelper,
+          [...outputArgs, ...cmd],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
         );
-        const json = ret.toString('utf-8').replace(/^gas estimate: \d+$/m, '');
+        // eslint-disable-next-line no-await-in-loop
+        const [out, err, cmdStatus] = await PromiseAllOrErrors([
+          asBuffer(cmdCp.stdout),
+          asBuffer(cmdCp.stderr),
+          childProcessDone(cmdCp, {
+            ignoreExitCode: true,
+          }),
+        ]);
+
+        if (cmdStatus !== 0) {
+          if (/unknown flag: --output/g.test(err.toString('utf-8'))) {
+            outputArgs.pop();
+            i -= 1; // Redo
+            continue; // eslint-disable-line no-continue
+          }
+          stdio[2].write(err);
+          throw new Error(
+            `Client provisioning command failed with status ${cmdStatus}`,
+          );
+        }
+
+        const json = out.toString('utf-8').replace(/^gas estimate: \d+$/m, '');
         const res = JSON.parse(json);
         console.log(...cmd.slice(0, 3), 'result', res);
         if (res.code !== 0) {

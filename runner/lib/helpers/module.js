@@ -15,6 +15,9 @@ export const resolve = async (specified, parent) => {
       return await import.meta.resolve(specified, parent);
     }
   } catch (err) {
+    if (/MODULE_NOT_FOUND/.test(/** @type {any} */ (err).code)) {
+      throw err;
+    }
     // Fall-through
   }
 
