@@ -108,13 +108,14 @@ const coerceBooleanOption = (
  */
 const makeInterrupterKit = ({ console }) => {
   const signal = makePromiseKit();
-  /** @type {Error | null} */
+  /** @type {NodeJS.ErrnoException | null} */
   let rejection = null;
   const onInterrupt = () => {
     if (rejection) {
       console.warn('Interruption already in progress');
     } else {
       rejection = new Error('Interrupted');
+      rejection.code = 'ERR_SCRIPT_EXECUTION_INTERRUPTED';
       signal.reject(rejection);
     }
   };
@@ -225,6 +226,32 @@ const main = async (progName, rawArgs, powers) => {
       errPrefix: prefix && `${chalk.bold.red(prefix)}: `,
     });
 
+  /**
+   * @param {string} source
+   * @param {string} tmpSuffix
+   * @param {string} destination
+   */
+  const backgroundCompressFolder = async (source, tmpSuffix, destination) => {
+    const tmp = `${source}${tmpSuffix}`;
+    const cleanup = async () => {
+      await childProcessDone(spawn('rm', ['-rf', tmp]));
+    };
+
+    try {
+      await childProcessDone(
+        spawn('cp', ['-a', '--reflink=auto', source, tmp]),
+      );
+    } catch (err) {
+      await aggregateTryFinally(cleanup, () => Promise.reject(err));
+    }
+
+    return {
+      done: aggregateTryFinally(async () => {
+        await childProcessDone(spawn('tar', ['-cSJf', destination, tmp]));
+      }, cleanup),
+    };
+  };
+
   const { console: topConsole } = makeConsole();
 
   const outputDir = String(argv.outputDir || `results/run-${Date.now()}`);
@@ -257,6 +284,8 @@ const main = async (progName, rawArgs, powers) => {
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
+  /** @type {Promise<void>[]} */
+  const pendingBackups = [];
   const timeSource = makeTimeSource({ performance });
   const cpuTimeOffset = await getCPUTimeOffset();
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
@@ -330,6 +359,8 @@ const main = async (progName, rawArgs, powers) => {
     } = config;
     /** @type {string | void} */
     let chainStorageLocation;
+    /** @type {string | void} */
+    let clientStorageLocation;
     currentStageTimeSource = timeSource.shift();
 
     const { out, err } = makeConsole(`stage-${currentStage}`);
@@ -496,6 +527,21 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('client-stopped');
       });
 
+      clientStorageLocation = runClientResult.storageLocation;
+
+      const slogOutput = zlib.createGzip({
+        level: zlib.constants.Z_BEST_COMPRESSION,
+      });
+      const slogOutputWriteStream = fsStream.createWriteStream(
+        joinPath(outputDir, `client-stage-${currentStage}.slog.gz`),
+      );
+      await fsStreamReady(slogOutputWriteStream);
+      const slogOutputPipeResult = pipeline(
+        runClientResult.slogLines,
+        slogOutput,
+        slogOutputWriteStream,
+      );
+
       await aggregateTryFinally(
         async () => {
           await tryTimeout(10 * 60 * 1000, () =>
@@ -516,14 +562,20 @@ const main = async (progName, rawArgs, powers) => {
 
           await nextStep(done);
         },
-        async () => {
-          if (!clientExited) {
-            stageConsole.log('Stopping client');
+        async () =>
+          aggregateTryFinally(
+            async () => {
+              if (!clientExited) {
+                stageConsole.log('Stopping client');
 
-            runClientResult.stop();
-            await done;
-          }
-        },
+                runClientResult.stop();
+                await done;
+              }
+            },
+            async () => {
+              await slogOutputPipeResult;
+            },
+          ),
       );
     };
 
@@ -681,21 +733,39 @@ const main = async (progName, rawArgs, powers) => {
         await sequential(...tasks)((stop) => stop);
         stats.recordEnd(timeSource.getTime());
       },
-      async () =>
+      async (...stageError) =>
         aggregateTryFinally(
           async () => {
-            if (saveStorage && chainStorageLocation != null) {
-              stageConsole.log('Saving chain storage');
-              await childProcessDone(
-                spawn('tar', [
-                  '-cSJf',
-                  joinPath(
-                    outputDir,
-                    `chain-storage-stage-${currentStage}.tar.xz`,
-                  ),
-                  chainStorageLocation,
-                ]),
-              );
+            const suffix = `-stage-${currentStage}`;
+            if (
+              !saveStorage &&
+              (stageError.length === 0 ||
+                /** @type {NodeJS.ErrnoException} */ (stageError[0]).code ===
+                  'ERR_SCRIPT_EXECUTION_INTERRUPTED')
+            ) {
+              return;
+            }
+            const backupResults = await Promise.all(
+              Object.entries({
+                chain: chainStorageLocation,
+                client: clientStorageLocation,
+              }).map(([type, location]) => {
+                if (location != null) {
+                  stageConsole.log(`Saving ${type} storage`);
+                  return backgroundCompressFolder(
+                    location,
+                    suffix,
+                    joinPath(outputDir, `${type}-storage${suffix}.tar.xz`),
+                  );
+                }
+                return undefined;
+              }),
+            );
+
+            for (const result of backupResults) {
+              if (result) {
+                pendingBackups.push(result.done);
+              }
             }
           },
           async () => {
@@ -918,18 +988,35 @@ const main = async (progName, rawArgs, powers) => {
       outputStream.end();
 
       const { console } = makeConsole('summary');
-      console.log('Live blocks stats:', {
-        ...(runStats.liveBlocksSummary || {
-          blockCount: 0,
-        }),
-      });
-      console.log('Cycles stats:', {
-        ...(runStats.cyclesSummary || {
-          cycleCount: 0,
-        }),
-      });
 
-      await finished(outputStream);
+      await aggregateTryFinally(
+        async () => {
+          const backupsDone = Promise.all(pendingBackups).then(() => true);
+          if (
+            !(await Promise.race([
+              backupsDone,
+              Promise.resolve().then(() => false),
+            ]))
+          ) {
+            console.log('Waiting for storage backups to finish');
+          }
+          await backupsDone;
+        },
+        async () => {
+          console.log('Live blocks stats:', {
+            ...(runStats.liveBlocksSummary || {
+              blockCount: 0,
+            }),
+          });
+          console.log('Cycles stats:', {
+            ...(runStats.cyclesSummary || {
+              cycleCount: 0,
+            }),
+          });
+
+          await finished(outputStream);
+        },
+      );
     },
   );
 };

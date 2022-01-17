@@ -17,7 +17,7 @@ export declare function warnOnRejection(
 
 export declare function aggregateTryFinally<T>(
   trier: () => Promise<T>,
-  finalizer: () => Promise<void>,
+  finalizer: (error?: unknown) => Promise<void>,
 ): Promise<T>;
 
 export declare function tryTimeout<T>(

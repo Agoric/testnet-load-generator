@@ -20,6 +20,15 @@ const protocolModules = {
 /** @typedef {http.RequestOptions & {body?: Buffer}} HTTPRequestOptions */
 
 /**
+ * @template T
+ * @param {AsyncIterable<T>} iterable
+ * @returns {AsyncIterable<T>}
+ */
+export const cleanAsyncIterable = (iterable) => ({
+  [Symbol.asyncIterator]: () => iterable[Symbol.asyncIterator](),
+});
+
+/**
  * @param {string | URL} urlOrString
  * @param {HTTPRequestOptions} [options]
  * @returns {Promise<http.IncomingMessage>}
@@ -34,7 +43,7 @@ export const httpRequest = (urlOrString, options = {}) => {
       // Ugly cast hack to make res look like what the consumer cares about
       const res = /** @type {http.IncomingMessage} */ (harden(
         /** @type {unknown} */ ({
-          [Symbol.asyncIterator]: () => stream[Symbol.asyncIterator](),
+          ...cleanAsyncIterable(stream),
           statusCode: 200,
         }),
       ));

@@ -18,6 +18,7 @@ import {
   getChildMatchingArgv,
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
+  cleanAsyncIterable,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
@@ -27,6 +28,7 @@ const pipeline = promisify(pipelineCallback);
 const stateDir = '_agstate/agoric-servers';
 const keysDir = '_agstate/keys';
 const profileName = 'local-chain';
+const CLIENT_PORT = 8000;
 const CHAIN_PORT = 26657;
 const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
@@ -206,9 +208,7 @@ export const makeTasks = ({
           stop,
           done,
           ready,
-          slogLines: {
-            [Symbol.asyncIterator]: () => slogLines[Symbol.asyncIterator](),
-          },
+          slogLines: cleanAsyncIterable(slogLines),
           storageLocation,
           processInfo,
         });
@@ -232,7 +232,7 @@ export const makeTasks = ({
 
     console.log('Starting client');
 
-    const portNum = 8000;
+    const portNum = CLIENT_PORT;
 
     const agServer = `${stateDir}/${profileName}-${portNum}`;
 
@@ -360,9 +360,18 @@ export const makeTasks = ({
       ),
     );
 
+    const slogFifo = await makeFIFO('client.slog');
+    const slogReady = fsStreamReady(slogFifo);
+    const slogLines = new BufferLineTransform();
+    const slogPipeResult = pipeline(slogFifo, slogLines);
+
+    const clientEnv = Object.create(process.env);
+    clientEnv.SOLO_SLOGFILE = slogFifo.path;
+
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', stdio[2]],
       cwd: agServer,
+      env: clientEnv,
       detached: true,
     });
 
@@ -391,7 +400,13 @@ export const makeTasks = ({
       },
     );
 
-    const done = PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
+    const done = PromiseAllOrErrors([
+      slogPipeResult,
+      outputParsed,
+      clientDone,
+    ]).then(() => {});
+
+    const ready = PromiseAllOrErrors([walletReady, slogReady]).then(() => {});
 
     return tryTimeout(
       timeout * 1000,
@@ -401,6 +416,10 @@ export const makeTasks = ({
 
         console.log('Client running');
 
+        const processInfo = await getProcessInfo(
+          /** @type {number} */ (soloCp.pid),
+        );
+
         const stop = () => {
           ignoreKill.signal = 'SIGTERM';
           soloCp.kill(ignoreKill.signal);
@@ -409,7 +428,10 @@ export const makeTasks = ({
         return harden({
           stop,
           done,
-          ready: walletReady,
+          ready,
+          slogLines: cleanAsyncIterable(slogLines),
+          storageLocation: agServer,
+          processInfo,
         });
       },
       async () => {

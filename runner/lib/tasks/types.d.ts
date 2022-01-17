@@ -19,7 +19,7 @@ export type TaskResult = {
   readonly ready: Promise<void>;
 };
 
-export type RunChainInfo = {
+export type RunKernelInfo = {
   readonly slogLines: AsyncIterable<Buffer>;
   readonly processInfo: import('../helpers/process-info.js').ProcessInfo;
   readonly storageLocation: string;
@@ -52,7 +52,8 @@ export type RunLoadgenInfo = {
   updateConfig(newConfig: unknown): Promise<void>;
 };
 
-export type RunChainResult = TaskResult & RunChainInfo;
+export type RunChainResult = TaskResult & RunKernelInfo;
+export type RunClientResult = TaskResult & RunKernelInfo;
 export type RunLoadgenResult = TaskResult & RunLoadgenInfo;
 
 export interface TaskBaseOptions {
@@ -66,6 +67,6 @@ export interface OrchestratorTasks {
   getEnvInfo(options: TaskBaseOptions): Promise<EnvInfo>;
   setupTasks(options: TaskBaseOptions): Promise<void>;
   runChain(options: TaskBaseOptions): Promise<RunChainResult>;
-  runClient(options: TaskBaseOptions): Promise<TaskResult>;
+  runClient(options: TaskBaseOptions): Promise<RunClientResult>;
   runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
 }

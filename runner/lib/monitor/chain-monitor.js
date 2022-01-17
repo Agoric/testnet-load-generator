@@ -8,7 +8,7 @@ import { PromiseAllOrErrors, warnOnRejection } from '../helpers/async.js';
 const vatIdentifierRE = /^(v\d+):(.*)$/;
 
 /**
- * @param {Pick<import("../tasks/types.js").RunChainInfo, 'storageLocation' | 'processInfo'>} chainInfo
+ * @param {Pick<import("../tasks/types.js").RunKernelInfo, 'storageLocation' | 'processInfo'>} kernelInfo
  * @param {Object} param1
  * @param {Console} param1.console
  * @param {import('../stats/types.js').LogPerfEvent} param1.logPerfEvent

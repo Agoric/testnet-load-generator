@@ -27,13 +27,17 @@ import {
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
   fetchAsJSON,
+  cleanAsyncIterable,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
-const clientStateDir = '_agstate/agoric-servers/testnet-8000';
+const stateDir = '_agstate/agoric-servers';
+const profileName = 'testnet';
+const CLIENT_PORT = 8000;
+const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
@@ -353,9 +357,7 @@ export const makeTasks = ({
           stop,
           done,
           ready,
-          slogLines: {
-            [Symbol.asyncIterator]: () => slogLines[Symbol.asyncIterator](),
-          },
+          slogLines: cleanAsyncIterable(slogLines),
           storageLocation: chainStateDir,
           processInfo,
         });
@@ -379,11 +381,25 @@ export const makeTasks = ({
 
     console.log('Starting client');
 
+    const slogFifo = await makeFIFO('client.slog');
+    const slogReady = fsStreamReady(slogFifo);
+    const slogLines = new BufferLineTransform();
+    const slogPipeResult = pipeline(slogFifo, slogLines);
+
+    const clientEnv = Object.create(process.env);
+    clientEnv.SOLO_SLOGFILE = slogFifo.path;
+
     const launcherCp = printerSpawn(
       'agoric',
-      ['start', 'testnet', '8000', `${testnetOrigin}/network-config`],
+      [
+        'start',
+        profileName,
+        `${CLIENT_PORT}`,
+        `${testnetOrigin}/network-config`,
+      ],
       {
         stdio: ['ignore', 'pipe', stdio[2]],
+        env: clientEnv,
         detached: true,
       },
     );
@@ -407,7 +423,13 @@ export const makeTasks = ({
       },
     );
 
-    const done = PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
+    const done = PromiseAllOrErrors([
+      slogPipeResult,
+      outputParsed,
+      clientDone,
+    ]).then(() => {});
+
+    const ready = PromiseAllOrErrors([walletReady, slogReady]).then(() => {});
 
     return tryTimeout(
       timeout * 1000,
@@ -427,7 +449,10 @@ export const makeTasks = ({
         return harden({
           stop,
           done,
-          ready: walletReady,
+          ready,
+          slogLines: cleanAsyncIterable(slogLines),
+          storageLocation: clientStateDir,
+          processInfo,
         });
       },
       async () => {

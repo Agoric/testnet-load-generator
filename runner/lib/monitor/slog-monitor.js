@@ -140,7 +140,7 @@ const activeEventRE = filterSlogEvent([
 ]);
 
 /**
- * @param {Pick<import("../tasks/types.js").RunChainInfo, 'slogLines'>} chainInfo
+ * @param {Pick<import("../tasks/types.js").RunKernelInfo, 'slogLines'>} chainInfo
  * @param {Object} param1
  * @param {StageStats} param1.stats
  * @param {{blockDone(block: BlockStats): void}} [param1.notifier]
