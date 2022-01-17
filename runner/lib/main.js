@@ -16,7 +16,12 @@ import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
 import { makePromiseKit } from './sdk/promise-kit.js';
 
-import { sleep, aggregateTryFinally, sequential } from './helpers/async.js';
+import {
+  sleep,
+  aggregateTryFinally,
+  sequential,
+  tryTimeout,
+} from './helpers/async.js';
 import { childProcessDone } from './helpers/child-process.js';
 import { fsStreamReady, makeFsHelper } from './helpers/fs.js';
 import { makeProcfsHelper } from './helpers/procsfs.js';
@@ -439,10 +444,12 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
-          await Promise.race([
-            slogMonitorDone,
-            orInterrupt(firstBlockDoneKit.promise),
-          ]);
+          await tryTimeout(60 * 1000, () =>
+            Promise.race([
+              slogMonitorDone,
+              orInterrupt(firstBlockDoneKit.promise),
+            ]),
+          );
           await orInterrupt(firstEmptyBlockKit.promise);
 
           await nextStep(done);
