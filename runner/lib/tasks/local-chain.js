@@ -19,6 +19,7 @@ import {
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
 } from './helpers.js';
+import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
@@ -265,6 +266,7 @@ export const makeTasks = ({
   };
 
   return harden({
+    getEnvInfo: makeGetEnvInfo({ spawn }),
     setupTasks,
     runChain,
     runClient,

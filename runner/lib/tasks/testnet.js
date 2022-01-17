@@ -28,6 +28,7 @@ import {
   getConsoleAndStdio,
   fetchAsJSON,
 } from './helpers.js';
+import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
@@ -431,6 +432,7 @@ export const makeTasks = ({ spawn: cpSpawn, fs, makeFIFO, getProcessInfo }) => {
   };
 
   return harden({
+    getEnvInfo: makeGetEnvInfo({ spawn }),
     setupTasks,
     runChain,
     runClient,

@@ -81,7 +81,16 @@ export interface StageStats extends StageStatsInitData {
   readonly loadgenInitDuration: number | undefined;
 }
 
-export interface RunStatsInitData {}
+export interface RunMetadata {
+  readonly profile: string;
+  readonly testnetOrigin?: string;
+  readonly agChainCosmosVersion?: unknown;
+  readonly testData?: unknown;
+}
+
+export interface RunStatsInitData {
+  readonly metadata: RunMetadata;
+}
 
 export interface RunStats extends RunStatsInitData {
   recordStart(time: TimeValueS): void;

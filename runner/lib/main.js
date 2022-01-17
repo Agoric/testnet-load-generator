@@ -207,13 +207,15 @@ const main = async (progName, rawArgs, powers) => {
       throw new Error(`Unexpected profile option: ${argv.profile}`);
   }
 
-  const { setupTasks, runChain, runClient, runLoadgen } = makeTasks({
-    spawn,
-    fs,
-    findDirByPrefix: findByPrefix,
-    makeFIFO,
-    getProcessInfo,
-  });
+  const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
+    {
+      spawn,
+      fs,
+      findDirByPrefix: findByPrefix,
+      makeFIFO,
+      getProcessInfo,
+    },
+  );
 
   const monitorInterval =
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
@@ -230,7 +232,16 @@ const main = async (progName, rawArgs, powers) => {
   );
   await fsStreamReady(outputStream);
 
-  const runStats = makeRunStats();
+  const envInfo = await getEnvInfo({ stdout, stderr });
+
+  const runStats = makeRunStats({
+    metadata: {
+      profile: argv.profile || 'local',
+      testnetOrigin,
+      ...envInfo,
+      testData: argv.testData,
+    },
+  });
 
   /** @type {import('./stats/types.js').LogPerfEvent} */
   const logPerfEvent = (eventType, data = {}) => {

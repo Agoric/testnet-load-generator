@@ -39,7 +39,7 @@ const rawRunStatsInit = {
  * @param {RunStatsInitData} data
  * @returns {RunStats}
  */
-export const makeRunStats = (data = {}) => {
+export const makeRunStats = (data) => {
   const { savedData, publicProps, privateSetters } = makeRawStats(
     rawRunStatsInit,
   );

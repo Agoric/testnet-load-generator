@@ -159,4 +159,4 @@ RUN mkdir -p $SDK_SRC $OUTPUT_DIR && chown $USER_UID:$USER_GID $SDK_SRC $OUTPUT_
 
 USER $USER_UID:$USER_GID
 
-ENTRYPOINT ["/tini", "--", "/app/start.sh", "--no-reset"]
+ENTRYPOINT ["/tini", "--", "/app/start.sh", "--no-reset", "--test-data.docker"]

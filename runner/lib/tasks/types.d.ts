@@ -3,6 +3,10 @@
 
 import type { TimeValueS } from '../helpers/time.js';
 
+export interface EnvInfo {
+  readonly agChainCosmosVersion?: unknown;
+}
+
 export type TaskResult = {
   readonly stop: () => void;
   readonly done: Promise<void>;
@@ -52,6 +56,7 @@ export interface TaskBaseOptions {
 }
 
 export interface OrchestratorTasks {
+  getEnvInfo(options: TaskBaseOptions): Promise<EnvInfo>;
   setupTasks(options: TaskBaseOptions): Promise<void>;
   runChain(options: TaskBaseOptions): Promise<RunChainResult>;
   runClient(options: TaskBaseOptions): Promise<TaskResult>;
