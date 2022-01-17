@@ -10,6 +10,7 @@ import {
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
+import ElidedBufferLineTransform from '../helpers/elided-buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
 import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
@@ -178,9 +179,11 @@ export const makeTasks = ({
         }
       });
 
-    launcherCp.stdout.pipe(stdio[1], { end: false });
+    const launcherElidedOutput = new ElidedBufferLineTransform();
+    launcherCp.stdout.pipe(launcherElidedOutput);
+    launcherElidedOutput.pipe(stdio[1], { end: false });
     const [chainStarted, firstBlock, outputParsed] = whenStreamSteps(
-      launcherCp.stdout,
+      launcherElidedOutput,
       [
         { matcher: chainStartRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
@@ -404,9 +407,11 @@ export const makeTasks = ({
         }
       });
 
-    soloCp.stdout.pipe(stdio[1], { end: false });
+    const soloElidedOutput = new ElidedBufferLineTransform();
+    soloCp.stdout.pipe(soloElidedOutput);
+    soloElidedOutput.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      soloCp.stdout,
+      soloElidedOutput,
       [
         { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },

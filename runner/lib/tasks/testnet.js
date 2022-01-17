@@ -14,6 +14,7 @@ import {
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
+import ElidedBufferLineTransform from '../helpers/elided-buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
 import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
@@ -367,9 +368,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
         }
       });
 
-    chainCp.stdout.pipe(stdio[1], { end: false });
+    const chainElidedOutput = new ElidedBufferLineTransform();
+    chainCp.stdout.pipe(chainElidedOutput);
+    chainElidedOutput.pipe(stdio[1], { end: false });
     const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
-      chainCp.stdout,
+      chainElidedOutput,
       [
         { matcher: chainSwingSetLaunchRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
@@ -495,9 +498,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
         }
       });
 
-    soloCp.stdout.pipe(stdio[1], { end: false });
+    const soloElidedOutput = new ElidedBufferLineTransform();
+    soloCp.stdout.pipe(soloElidedOutput);
+    soloElidedOutput.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      soloCp.stdout,
+      soloElidedOutput,
       [
         { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },
