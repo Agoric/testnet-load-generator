@@ -1,6 +1,7 @@
 /* global process console:off */
 
 import { resolve as resolvePath, join as joinPath } from 'path';
+import { URL } from 'url';
 import { performance } from 'perf_hooks';
 import zlib from 'zlib';
 import { promisify } from 'util';
@@ -141,6 +142,34 @@ const makeInterrupterKit = ({ console }) => {
 };
 
 /**
+ * @returns {Promise<import('./tasks/types.js').SDKBinaries>}
+ * */
+const getSDKBinaries = async () => {
+  const srcHelpers = 'agoric/src/helpers.js';
+  const libHelpers = 'agoric/lib/helpers.js';
+  try {
+    const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
+    return cliHelpers.getSDKBinaries();
+  } catch (err) {
+    const { resolve } = await import('./helpers/module.js');
+    // Older SDKs were only at lib
+    const cliHelpersUrl = await resolve(libHelpers, import.meta.url);
+    return {
+      agSolo: new URL('../../solo/src/entrypoint.js', cliHelpersUrl).pathname,
+      cosmosChain: new URL(
+        '../../cosmic-swingset/bin/ag-chain-cosmos',
+        cliHelpersUrl,
+      ).pathname,
+      cosmosHelper: new URL(
+        // The older SDKs without getSDKBinaries hadn't renamed to agd yet
+        '../../../golang/cosmos/build/ag-cosmos-helper',
+        cliHelpersUrl,
+      ).pathname,
+    };
+  }
+};
+
+/**
  *
  * @param {string} progName
  * @param {string[]} rawArgs
@@ -207,16 +236,6 @@ const main = async (progName, rawArgs, powers) => {
       throw new Error(`Unexpected profile option: ${argv.profile}`);
   }
 
-  const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
-    {
-      spawn,
-      fs,
-      findDirByPrefix: findByPrefix,
-      makeFIFO,
-      getProcessInfo,
-    },
-  );
-
   const monitorInterval =
     Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
@@ -225,6 +244,19 @@ const main = async (progName, rawArgs, powers) => {
   const cpuTimeOffset = await getCPUTimeOffset();
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
   let currentStageTimeSource = timeSource;
+
+  const sdkBinaries = await getSDKBinaries();
+
+  const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
+    {
+      spawn,
+      fs,
+      findDirByPrefix: findByPrefix,
+      makeFIFO,
+      getProcessInfo,
+      sdkBinaries,
+    },
+  );
 
   const outputStream = fsStream.createWriteStream(
     joinPath(outputDir, 'perf.jsonl'),

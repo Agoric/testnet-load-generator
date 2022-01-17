@@ -1,6 +1,5 @@
 /* global process */
 
-import { dirname } from 'path';
 import { promisify } from 'util';
 import { pipeline as pipelineCallback } from 'stream';
 
@@ -8,6 +7,8 @@ import {
   childProcessDone,
   makeSpawnWithPipedStream,
   makePrinterSpawn,
+  childProcessOutput,
+  childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
@@ -24,11 +25,19 @@ import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
-const chainDirPrefix = '_agstate/agoric-servers/local-chain-';
+const stateDir = '_agstate/agoric-servers';
+const keysDir = '_agstate/keys';
+const profileName = 'local-chain';
+const CHAIN_PORT = 26657;
+const CHAIN_ID = 'agoric';
+const GAS_ADJUSTMENT = '1.2';
+const CENTRAL_DENOM = 'urun';
+const STAKING_DENOM = 'ubld';
+const SOLO_COINS = `75000000${STAKING_DENOM},220000000000${CENTRAL_DENOM}`;
 
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
-const clientStartRE = /\bsolo\b\S+entrypoint\.[cm]?js start/;
+const clientSwingSetReadyRE = /start: swingset running$/;
 const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 
 const chainNodeArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
@@ -38,30 +47,44 @@ const chainGoArgvMatcher = getArgvMatcher([/(?:sh|node)$/, /ag-chain-cosmos$/]);
 /** @param {string[]} argv */
 const chainArgvMatcher = (argv) =>
   chainNodeArgvMatcher(argv) || chainGoArgvMatcher(argv);
-const clientArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
-  getArgvMatcher([/node$/, /\bsolo\b\S+entrypoint\.[cm]?js/]),
-);
 
 /**
  *
  * @param {Object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
+ * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
  * @param {import("../helpers/fs.js").FindByPrefix} powers.findDirByPrefix
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
  *
  */
 export const makeTasks = ({
   spawn: cpSpawn,
+  fs,
   findDirByPrefix,
   makeFIFO,
   getProcessInfo,
+  sdkBinaries,
 }) => {
   const spawn = makeSpawnWithPipedStream({
     spawn: cpSpawn,
     end: false,
   });
+
+  /** @param {string} name */
+  const fsExists = async (name) => {
+    try {
+      await fs.stat(name);
+      return true;
+    } catch (e) {
+      if (/** @type {NodeJS.ErrnoException} */ (e).code === 'ENOENT') {
+        return false;
+      }
+      throw e;
+    }
+  };
 
   /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean}}} options */
   const setupTasks = async ({ stdout, stderr, config: { reset } = {} }) => {
@@ -79,7 +102,6 @@ export const makeTasks = ({
 
     if (reset) {
       console.log('Resetting chain node and client state');
-      const stateDir = dirname(chainDirPrefix);
       await childProcessDone(printerSpawn('rm', ['-rf', stateDir], { stdio }));
       await childProcessDone(
         printerSpawn('git', ['checkout', '--', stateDir], {
@@ -112,7 +134,7 @@ export const makeTasks = ({
 
     const launcherCp = printerSpawn(
       'agoric',
-      ['start', 'local-chain', '--verbose'],
+      ['start', profileName, '--verbose'],
       { stdio: ['ignore', 'pipe', stdio[2]], env: chainEnv, detached: true },
     );
 
@@ -201,7 +223,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
+  const runClient = async ({ stdout, stderr }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -210,23 +232,135 @@ export const makeTasks = ({
 
     console.log('Starting client');
 
-    const launcherCp = printerSpawn('agoric', ['start', 'local-solo'], {
+    const portNum = 8000;
+
+    const agServer = `${stateDir}/${profileName}-${portNum}`;
+
+    const gciFile = `${stateDir}/${profileName}-${CHAIN_PORT}/config/genesis.json.sha256`;
+
+    if (!(await fsExists(gciFile))) {
+      throw new Error('Chain not running');
+    }
+
+    // Initialize the solo directory and key.
+    if (!(await fsExists(agServer))) {
+      await childProcessDone(
+        printerSpawn(
+          sdkBinaries.agSolo,
+          ['init', agServer, `--webport=${portNum}`],
+          {
+            stdio,
+          },
+        ),
+      );
+    }
+
+    const rpcAddr = `localhost:${CHAIN_PORT}`;
+
+    const soloAddr = (
+      await fs.readFile(`${agServer}/ag-cosmos-helper-address`, 'utf-8')
+    ).trimRight();
+
+    const keysSharedArgs = [
+      `--home=${keysDir}`,
+      `--chain-id=${CHAIN_ID}`,
+      `--node=tcp://${rpcAddr}`,
+    ];
+
+    // Provision the ag-solo, if necessary.
+    const checkAddrStatus = await childProcessDone(
+      printerSpawn(
+        sdkBinaries.cosmosHelper,
+        [...keysSharedArgs, 'query', 'swingset', 'egress', soloAddr],
+        { stdio: 'ignore' },
+      ),
+      { ignoreExitCode: true },
+    );
+    if (checkAddrStatus !== 0) {
+      const provCmds = [
+        // We need to provision our address.
+        [
+          'tx',
+          'swingset',
+          'provision-one',
+          '-ojson',
+          ...keysSharedArgs,
+          '--keyring-backend=test',
+          '--from=provision',
+          '--gas=auto',
+          `--gas-adjustment=${GAS_ADJUSTMENT}`,
+          '--broadcast-mode=block',
+          '--yes',
+          `local-solo-${portNum}`,
+          soloAddr,
+        ],
+        // Then send it some coins.
+        [
+          'tx',
+          'bank',
+          'send',
+          '-ojson',
+          ...keysSharedArgs,
+          '--keyring-backend=test',
+          '--gas=auto',
+          `--gas-adjustment=${GAS_ADJUSTMENT}`,
+          '--broadcast-mode=block',
+          '--yes',
+          'provision',
+          soloAddr,
+          SOLO_COINS,
+        ],
+      ];
+      for (const cmd of provCmds) {
+        // eslint-disable-next-line no-await-in-loop
+        const ret = await childProcessOutput(
+          printerSpawn(sdkBinaries.cosmosHelper, cmd, {
+            stdio: ['ignore', 'pipe', stdio[2]],
+          }),
+        );
+        const json = ret.toString('utf-8').replace(/^gas estimate: \d+$/m, '');
+        const res = JSON.parse(json);
+        console.log(...cmd.slice(0, 3), 'result', res);
+        if (res.code !== 0) {
+          throw new Error('Client provisioning command failed');
+        }
+      }
+    }
+
+    // Connect to the chain.
+    const gci = (await fs.readFile(gciFile, 'utf-8')).trimRight();
+    await childProcessDone(
+      printerSpawn(
+        sdkBinaries.agSolo,
+        ['set-gci-ingress', `--chainID=${CHAIN_ID}`, gci, rpcAddr],
+        { stdio, cwd: agServer },
+      ),
+    );
+
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', stdio[2]],
+      cwd: agServer,
       detached: true,
     });
 
-    const clientDone = childProcessDone(launcherCp);
+    /** @type {{signal: undefined | 'SIGTERM'}} */
+    const ignoreKill = {
+      signal: undefined,
+    };
+
+    const soloCpReady = childProcessReady(soloCp);
+    const clientDone = childProcessDone(soloCp, { ignoreKill });
 
     clientDone.then(
       () => console.log('Client exited successfully'),
       (error) => console.error('Client exited with error', error),
     );
 
-    launcherCp.stdout.pipe(stdio[1], { end: false });
+    soloCp.stdout.pipe(stdio[1], { end: false });
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      launcherCp.stdout,
+      soloCp.stdout,
       [
-        { matcher: clientStartRE, resultIndex: -1 },
+        { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },
       ],
       {
@@ -236,33 +370,28 @@ export const makeTasks = ({
 
     const done = PromiseAllOrErrors([outputParsed, clientDone]).then(() => {});
 
-    return tryTimeout(
-      timeout * 1000,
-      async () => {
-        await clientStarted;
+    try {
+      await soloCpReady;
+      await clientStarted;
 
-        console.log('Client running');
+      console.log('Client running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (launcherCp.pid),
-        ).then((launcherInfo) =>
-          getChildMatchingArgv(launcherInfo, clientArgvMatcher),
-        );
+      const stop = () => {
+        ignoreKill.signal = 'SIGTERM';
+        soloCp.kill(ignoreKill.signal);
+      };
 
-        const stop = () => process.kill(processInfo.pid);
-
-        return harden({
-          stop,
-          done,
-          ready: walletReady,
-        });
-      },
-      async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, walletReady]);
-        launcherCp.kill();
-      },
-    );
+      return harden({
+        stop,
+        done,
+        ready: walletReady,
+      });
+    } catch (err) {
+      // Avoid unhandled rejections for promises that can no longer be handled
+      Promise.allSettled([done, clientStarted, walletReady]);
+      soloCp.kill();
+      throw err;
+    }
   };
 
   return harden({
