@@ -1,11 +1,13 @@
 /* global Buffer */
 
 import { promisify } from 'util';
-import { finished as finishedCallback } from 'stream';
+import { finished as finishedCallback, PassThrough } from 'stream';
 
 import { makePromiseKit } from '../sdk/promise-kit.js';
 
 import LineStreamTransform from './line-stream-transform.js';
+import ElidedBufferLineTransform from './elided-buffer-line-transform.js';
+import BufferLineTransform from './buffer-line-transform.js';
 
 const finished = promisify(finishedCallback);
 
@@ -20,8 +22,13 @@ const finished = promisify(finishedCallback);
  * @param {StepConfig[]} steps
  * @param {Object} [options]
  * @param {boolean} [options.waitEnd=true]
+ * @param {boolean} [options.close=true]
  */
-export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
+export const whenStreamSteps = (
+  stream,
+  steps,
+  { waitEnd = true, close = true } = {},
+) => {
   const stepsAndKits = steps.map((step) => ({ step, kit: makePromiseKit() }));
 
   const lines = new LineStreamTransform();
@@ -55,10 +62,55 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
 
     if (waitEnd) {
       await finished(stream);
+    } else if (close) {
+      stream.destroy();
     }
   })();
 
   return [...stepsAndKits.map(({ kit: { promise } }) => promise), parseResult];
+};
+
+/**
+ *
+ * @param {[unknown, import("stream").Readable, import("stream").Readable, ...unknown[]]} stdioIn
+ * @param {[unknown, import("stream").Writable, import("stream").Writable, ...unknown[]]} stdioOut
+ * @param {boolean} [elide]
+ */
+export const combineAndPipe = (stdioIn, stdioOut, elide = true) => {
+  const combinedOutput = new PassThrough();
+  const outLines = new (elide
+    ? ElidedBufferLineTransform
+    : BufferLineTransform)();
+  const errLines = new (elide
+    ? ElidedBufferLineTransform
+    : BufferLineTransform)();
+
+  stdioIn[1].pipe(outLines);
+  outLines.pipe(stdioOut[1], { end: false });
+  outLines.pipe(combinedOutput, { end: false });
+  stdioIn[2].pipe(errLines);
+  errLines.pipe(stdioOut[2], { end: false });
+  errLines.pipe(combinedOutput, { end: false });
+
+  let active = 2;
+  const sourceEnd = () => {
+    if (!active) return;
+
+    active -= 1;
+
+    if (!active) {
+      combinedOutput.end();
+    }
+  };
+  outLines.once('end', sourceEnd);
+  errLines.once('end', sourceEnd);
+  combinedOutput.once('close', () => {
+    outLines.unpipe(combinedOutput);
+    errLines.unpipe(combinedOutput);
+    active = 0;
+  });
+
+  return combinedOutput;
 };
 
 /**
