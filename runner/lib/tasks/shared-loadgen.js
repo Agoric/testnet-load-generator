@@ -1,15 +1,16 @@
 /* global process Buffer */
 
-import { PassThrough, Transform, pipeline as pipelineCallback } from 'stream';
+import { Transform, pipeline as pipelineCallback } from 'stream';
 import { promisify } from 'util';
 
+import { makePromiseKit } from '../sdk/promise-kit.js';
 import {
   childProcessDone,
   makePrinterSpawn,
 } from '../helpers/child-process.js';
 import LineStreamTransform from '../helpers/line-stream-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
-import { whenStreamSteps } from '../helpers/stream.js';
+import { combineAndPipe, whenStreamSteps } from '../helpers/stream.js';
 import {
   httpRequest,
   getConsoleAndStdio,
@@ -68,13 +69,13 @@ export const makeLoadgenTask = ({ spawn }) => {
     // The agoric deploy output is currently sent to stderr
     // Combine both stderr and stdout in to detect both steps
     // accommodating future changes
-    const combinedOutput = new PassThrough();
-    const outLines = new LineStreamTransform({ lineEndings: true });
-    const errLines = new LineStreamTransform({ lineEndings: true });
-    launcherCp.stdout.pipe(stdio[1], { end: false });
-    launcherCp.stdout.pipe(outLines).pipe(combinedOutput);
-    launcherCp.stderr.pipe(stdio[2], { end: false });
-    launcherCp.stderr.pipe(errLines).pipe(combinedOutput);
+    const combinedOutputStopKit = makePromiseKit();
+    const combinedOutput = combineAndPipe(
+      launcherCp.stdio,
+      stdio,
+      false,
+      combinedOutputStopKit.promise,
+    );
 
     const taskEvents = new Transform({
       objectMode: true,
@@ -125,16 +126,10 @@ export const makeLoadgenTask = ({ spawn }) => {
       },
     );
 
-    const cleanCombined = () => {
-      launcherCp.stdout.unpipe(outLines);
-      launcherCp.stderr.unpipe(errLines);
-      taskEvents.end();
-    };
-
     const outputParsed = initialOutputParsed.then(
       () => pipeline(combinedOutput, new LineStreamTransform(), taskEvents),
       (err) => {
-        cleanCombined();
+        combinedOutputStopKit.resolve(undefined);
         return Promise.reject(err);
       },
     );

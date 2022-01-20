@@ -14,10 +14,13 @@ import {
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
-import ElidedBufferLineTransform from '../helpers/elided-buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
+import {
+  asBuffer,
+  combineAndPipe,
+  whenStreamSteps,
+} from '../helpers/stream.js';
 import {
   getConsoleAndStdio,
   fetchAsJSON,
@@ -337,7 +340,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     // chainEnv.DEBUG = 'agoric';
 
     const chainCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
-      stdio: ['ignore', 'pipe', stdio[2]],
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: chainEnv,
       detached: true,
     });
@@ -368,11 +371,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         }
       });
 
-    const chainElidedOutput = new ElidedBufferLineTransform();
-    chainCp.stdout.pipe(chainElidedOutput);
-    chainElidedOutput.pipe(stdio[1], { end: false });
+    const chainCombinedElidedOutput = combineAndPipe(chainCp.stdio, stdio);
     const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
-      chainElidedOutput,
+      chainCombinedElidedOutput,
       [
         { matcher: chainSwingSetLaunchRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
@@ -472,7 +473,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
-      stdio: ['ignore', 'pipe', stdio[2]],
+      stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
       detached: true,
@@ -498,11 +499,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         }
       });
 
-    const soloElidedOutput = new ElidedBufferLineTransform();
-    soloCp.stdout.pipe(soloElidedOutput);
-    soloElidedOutput.pipe(stdio[1], { end: false });
+    const soloCombinedElidedOutput = combineAndPipe(soloCp.stdio, stdio);
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      soloElidedOutput,
+      soloCombinedElidedOutput,
       [
         { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },

@@ -1,11 +1,13 @@
 /* global Buffer */
 
 import { promisify } from 'util';
-import { finished as finishedCallback } from 'stream';
+import { finished as finishedCallback, PassThrough } from 'stream';
 
 import { makePromiseKit } from '../sdk/promise-kit.js';
 
 import LineStreamTransform from './line-stream-transform.js';
+import ElidedBufferLineTransform from './elided-buffer-line-transform.js';
+import BufferLineTransform from './buffer-line-transform.js';
 
 const finished = promisify(finishedCallback);
 
@@ -59,6 +61,36 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
   })();
 
   return [...stepsAndKits.map(({ kit: { promise } }) => promise), parseResult];
+};
+
+/**
+ *
+ * @param {[unknown, import("stream").Readable, import("stream").Readable, ...unknown[]]} stdioIn
+ * @param {[unknown, import("stream").Writable, import("stream").Writable, ...unknown[]]} stdioOut
+ * @param {boolean} [elide]
+ * @param {Promise<void>} [stop]
+ */
+export const combineAndPipe = (stdioIn, stdioOut, elide = true, stop) => {
+  const combinedOutput = new PassThrough();
+  const outLines = new (elide
+    ? ElidedBufferLineTransform
+    : BufferLineTransform)();
+  const errLines = new (elide
+    ? ElidedBufferLineTransform
+    : BufferLineTransform)();
+  stdioIn[1].pipe(stdioOut[1], { end: false });
+  stdioIn[1].pipe(outLines).pipe(combinedOutput);
+  stdioIn[2].pipe(stdioOut[2], { end: false });
+  stdioIn[2].pipe(errLines).pipe(combinedOutput);
+  if (stop) {
+    Promise.resolve(stop).finally(() => {
+      stdioIn[1].unpipe(outLines);
+      stdioIn[2].unpipe(errLines);
+      combinedOutput.end();
+    });
+  }
+
+  return combinedOutput;
 };
 
 /**

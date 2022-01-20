@@ -10,10 +10,13 @@ import {
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
-import ElidedBufferLineTransform from '../helpers/elided-buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import { asBuffer, whenStreamSteps } from '../helpers/stream.js';
+import {
+  asBuffer,
+  combineAndPipe,
+  whenStreamSteps,
+} from '../helpers/stream.js';
 import {
   getArgvMatcher,
   getChildMatchingArgv,
@@ -147,7 +150,7 @@ export const makeTasks = ({
     const launcherCp = printerSpawn(
       'agoric',
       ['start', profileName, '--verbose'],
-      { stdio: ['ignore', 'pipe', stdio[2]], env: chainEnv, detached: true },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: chainEnv, detached: true },
     );
 
     let stopped = false;
@@ -179,11 +182,12 @@ export const makeTasks = ({
         }
       });
 
-    const launcherElidedOutput = new ElidedBufferLineTransform();
-    launcherCp.stdout.pipe(launcherElidedOutput);
-    launcherElidedOutput.pipe(stdio[1], { end: false });
+    const launcherCombinedElidedOutput = combineAndPipe(
+      launcherCp.stdio,
+      stdio,
+    );
     const [chainStarted, firstBlock, outputParsed] = whenStreamSteps(
-      launcherElidedOutput,
+      launcherCombinedElidedOutput,
       [
         { matcher: chainStartRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
@@ -381,7 +385,7 @@ export const makeTasks = ({
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
-      stdio: ['ignore', 'pipe', stdio[2]],
+      stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
       detached: true,
@@ -407,11 +411,9 @@ export const makeTasks = ({
         }
       });
 
-    const soloElidedOutput = new ElidedBufferLineTransform();
-    soloCp.stdout.pipe(soloElidedOutput);
-    soloElidedOutput.pipe(stdio[1], { end: false });
+    const soloCombinedElidedOutput = combineAndPipe(soloCp.stdio, stdio);
     const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      soloElidedOutput,
+      soloCombinedElidedOutput,
       [
         { matcher: clientSwingSetReadyRE, resultIndex: -1 },
         { matcher: clientWalletReadyRE, resultIndex: -1 },
