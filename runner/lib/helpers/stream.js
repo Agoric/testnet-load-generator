@@ -22,8 +22,13 @@ const finished = promisify(finishedCallback);
  * @param {StepConfig[]} steps
  * @param {Object} [options]
  * @param {boolean} [options.waitEnd=true]
+ * @param {boolean} [options.close=true]
  */
-export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
+export const whenStreamSteps = (
+  stream,
+  steps,
+  { waitEnd = true, close = true } = {},
+) => {
   const stepsAndKits = steps.map((step) => ({ step, kit: makePromiseKit() }));
 
   const lines = new LineStreamTransform();
@@ -57,6 +62,8 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
 
     if (waitEnd) {
       await finished(stream);
+    } else if (close) {
+      stream.destroy();
     }
   })();
 
@@ -68,9 +75,8 @@ export const whenStreamSteps = (stream, steps, { waitEnd = true } = {}) => {
  * @param {[unknown, import("stream").Readable, import("stream").Readable, ...unknown[]]} stdioIn
  * @param {[unknown, import("stream").Writable, import("stream").Writable, ...unknown[]]} stdioOut
  * @param {boolean} [elide]
- * @param {Promise<void>} [stop]
  */
-export const combineAndPipe = (stdioIn, stdioOut, elide = true, stop) => {
+export const combineAndPipe = (stdioIn, stdioOut, elide = true) => {
   const combinedOutput = new PassThrough();
   const outLines = new (elide
     ? ElidedBufferLineTransform
@@ -78,17 +84,31 @@ export const combineAndPipe = (stdioIn, stdioOut, elide = true, stop) => {
   const errLines = new (elide
     ? ElidedBufferLineTransform
     : BufferLineTransform)();
-  stdioIn[1].pipe(stdioOut[1], { end: false });
-  stdioIn[1].pipe(outLines).pipe(combinedOutput);
-  stdioIn[2].pipe(stdioOut[2], { end: false });
-  stdioIn[2].pipe(errLines).pipe(combinedOutput);
-  if (stop) {
-    Promise.resolve(stop).finally(() => {
-      stdioIn[1].unpipe(outLines);
-      stdioIn[2].unpipe(errLines);
+
+  stdioIn[1].pipe(outLines);
+  outLines.pipe(stdioOut[1], { end: false });
+  outLines.pipe(combinedOutput, { end: false });
+  stdioIn[2].pipe(errLines);
+  errLines.pipe(stdioOut[2], { end: false });
+  errLines.pipe(combinedOutput, { end: false });
+
+  let active = 2;
+  const sourceEnd = () => {
+    if (!active) return;
+
+    active -= 1;
+
+    if (!active) {
       combinedOutput.end();
-    });
-  }
+    }
+  };
+  outLines.once('end', sourceEnd);
+  errLines.once('end', sourceEnd);
+  combinedOutput.once('close', () => {
+    outLines.unpipe(combinedOutput);
+    errLines.unpipe(combinedOutput);
+    active = 0;
+  });
 
   return combinedOutput;
 };

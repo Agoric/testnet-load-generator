@@ -3,7 +3,6 @@
 import { Transform, pipeline as pipelineCallback } from 'stream';
 import { promisify } from 'util';
 
-import { makePromiseKit } from '../sdk/promise-kit.js';
 import {
   childProcessDone,
   makePrinterSpawn,
@@ -69,13 +68,7 @@ export const makeLoadgenTask = ({ spawn }) => {
     // The agoric deploy output is currently sent to stderr
     // Combine both stderr and stdout in to detect both steps
     // accommodating future changes
-    const combinedOutputStopKit = makePromiseKit();
-    const combinedOutput = combineAndPipe(
-      launcherCp.stdio,
-      stdio,
-      false,
-      combinedOutputStopKit.promise,
-    );
+    const combinedOutput = combineAndPipe(launcherCp.stdio, stdio, false);
 
     const taskEvents = new Transform({
       objectMode: true,
@@ -123,13 +116,14 @@ export const makeLoadgenTask = ({ spawn }) => {
       [{ matcher: loadgenStartRE }, { matcher: loadgenReadyRE }],
       {
         waitEnd: false,
+        close: false,
       },
     );
 
     const outputParsed = initialOutputParsed.then(
       () => pipeline(combinedOutput, new LineStreamTransform(), taskEvents),
       (err) => {
-        combinedOutputStopKit.resolve(undefined);
+        combinedOutput.destroy(err);
         return Promise.reject(err);
       },
     );
