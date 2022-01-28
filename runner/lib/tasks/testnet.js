@@ -474,7 +474,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start', '--verbose'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
