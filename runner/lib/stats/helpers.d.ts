@@ -95,6 +95,7 @@ export type Summary<K extends string> = {
   readonly totals: SumRecord<K>; // weighted
   readonly counts: SumRecord<K>; // weighted
   readonly averages: SumRecord<K>; // weighted
+  readonly p95s: SumRecord<K>;
 };
 
 type SummaryRecord = { readonly [P in string]: number | undefined };

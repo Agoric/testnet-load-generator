@@ -38,13 +38,19 @@ const rawCycleStatsInit = {
  * @param {import('./helpers.js').Summary<CycleStatsSumKeys>} sums
  * @returns {import('./types.js').CycleStatsSummary | undefined}
  */
-export const makeCycleStatsSummary = ({ weights: cycleCount, averages }) =>
+export const makeCycleStatsSummary = ({
+  weights: cycleCount,
+  averages,
+  p95s,
+}) =>
   cycleCount
     ? {
         cycleCount,
         cycleSuccessRate: percentageRounder(averages.success),
         avgBlockCount: rounder(averages.blockCount),
         avgDuration: rounder(averages.duration),
+        p95BlockCount: rounder(p95s.blockCount),
+        p95Duration: rounder(p95s.duration),
       }
     : undefined;
 

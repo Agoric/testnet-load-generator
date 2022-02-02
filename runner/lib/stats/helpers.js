@@ -163,6 +163,7 @@ export const summarize = (data) => {
   const totals = /** @type {Record<string, number>} */ ({});
   const counts = /** @type {Record<string, number>} */ ({});
   const averages = /** @type {Record<string, number>} */ ({});
+  const p95s = /** @type {Record<string, number>} */ ({});
 
   for (const key of keys) {
     const sortedData = /** @type {Array<{values: Record<string, number>, weight?: number | undefined}>} */ (data.filter(
@@ -179,6 +180,21 @@ export const summarize = (data) => {
       counts[key] += weight;
     }
     averages[key] = totals[key] / counts[key];
+
+    if (
+      sortedData.length > 1 &&
+      sortedData.every(({ weight = 1 }) => weight === 1)
+    ) {
+      const rank = (95 * (sortedData.length - 1)) / 100;
+      const rankIndex = Math.floor(rank);
+      const basePercentile = sortedData[rankIndex].values[key];
+      const nextPercentile = sortedData[rankIndex + 1].values[key];
+      p95s[key] =
+        basePercentile +
+        (rankIndex - rankIndex) * (nextPercentile - basePercentile);
+    } else {
+      p95s[key] = NaN;
+    }
   }
 
   return harden({
@@ -190,5 +206,6 @@ export const summarize = (data) => {
     totals,
     counts,
     averages,
+    p95s,
   });
 };
