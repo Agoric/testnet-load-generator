@@ -467,12 +467,14 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const slogFifo = await makeFIFO('client.slog');
     const slogReady = fsStreamReady(slogFifo);
     const slogLines = new BufferLineTransform();
-    const slogPipeResult = pipeline(slogFifo, slogLines);
+    const slogPipeResult = slogReady.then(() =>
+      slogLines.writableEnded ? undefined : pipeline(slogFifo, slogLines),
+    );
 
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start', '--verbose'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
@@ -517,7 +519,14 @@ ${chainName} chain does not yet know of address ${soloAddr}
       clientDone,
     ]).then(() => {});
 
-    const ready = PromiseAllOrErrors([walletReady, slogReady]).then(() => {});
+    walletReady
+      .then(() =>
+        Promise.race([
+          slogReady,
+          Promise.reject(new Error('Slog not supported')),
+        ]),
+      )
+      .catch((err) => console.warn(err.message || err));
 
     return tryTimeout(
       timeout * 1000,
@@ -539,7 +548,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
         return harden({
           stop,
           done,
-          ready,
+          ready: walletReady,
           slogLines: cleanAsyncIterable(slogLines),
           storageLocation: clientStateDir,
           processInfo,
