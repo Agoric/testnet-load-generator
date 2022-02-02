@@ -145,74 +145,50 @@ export const arrayGroupBy = (source, callback) => {
   return target;
 };
 
-export const makeSummer = () => {
-  /** @type {Map<string, {min: number, max: number, values: number, weights: number, total: number}>} */
-  const sumDatas = new Map();
-  let weights = 0;
-  let values = 0;
+/** @param {unknown} val */
+export const notUndefined = (val) => val !== undefined;
 
-  /**
-   *
-   * @param {Record<string, number | undefined>} obj
-   * @param {number} [weight]
-   */
-  const add = (obj, weight = 1) => {
-    values += 1;
-    weights += weight;
-    for (const [key, value] of Object.entries(obj)) {
-      let sumData = sumDatas.get(key);
-      if (!sumData) {
-        sumData = {
-          min: NaN,
-          max: NaN,
-          values: 0,
-          weights: 0,
-          total: 0,
-        };
-        sumDatas.set(key, sumData);
-      }
-      if (value != null && !Number.isNaN(value)) {
-        sumData.values += 1;
-        sumData.weights += weight;
-        sumData.total += value * weight;
-        if (!(value > sumData.min)) {
-          sumData.min = value;
-        }
-        if (!(value < sumData.max)) {
-          sumData.max = value;
-        }
-      }
+/**
+ * @param {Array<{values: Record<string, number | undefined>, weight?: number | undefined}>} data
+ * @returns {import('./helpers.js').Summary<string>}
+ */
+export const summarize = (data) => {
+  const keys = new Set(data.flatMap(({ values }) => Object.keys(values)));
+
+  const weights = data.reduce((acc, { weight = 1 }) => acc + weight, 0);
+
+  const items = /** @type {Record<string, number>} */ ({});
+  const mins = /** @type {Record<string, number>} */ ({});
+  const maxes = /** @type {Record<string, number>} */ ({});
+  const totals = /** @type {Record<string, number>} */ ({});
+  const counts = /** @type {Record<string, number>} */ ({});
+  const averages = /** @type {Record<string, number>} */ ({});
+
+  for (const key of keys) {
+    const sortedData = /** @type {Array<{values: Record<string, number>, weight?: number | undefined}>} */ (data.filter(
+      ({ values }) => Number.isFinite(values[key]),
+    )).sort((a, b) => a.values[key] - b.values[key]);
+
+    items[key] = sortedData.length;
+    mins[key] = sortedData.length ? sortedData[0].values[key] : NaN;
+    maxes[key] = sortedData.length ? sortedData.slice(-1)[0].values[key] : NaN;
+    totals[key] = 0;
+    counts[key] = 0;
+    for (const { values, weight = 1 } of sortedData) {
+      totals[key] += values[key] * weight;
+      counts[key] += weight;
     }
-  };
+    averages[key] = totals[key] / counts[key];
+  }
 
-  const getSums = () => {
-    const items = /** @type {Record<string, number>} */ ({});
-    const mins = /** @type {Record<string, number>} */ ({});
-    const maxes = /** @type {Record<string, number>} */ ({});
-    const totals = /** @type {Record<string, number>} */ ({});
-    const counts = /** @type {Record<string, number>} */ ({});
-    const averages = /** @type {Record<string, number>} */ ({});
-
-    for (const [key, sumData] of sumDatas.entries()) {
-      items[key] = sumData.values;
-      mins[key] = sumData.min;
-      maxes[key] = sumData.max;
-      totals[key] = sumData.total;
-      counts[key] = sumData.weights;
-      averages[key] = sumData.total / sumData.weights;
-    }
-
-    return harden({
-      values,
-      weights,
-      items,
-      mins,
-      maxes,
-      totals,
-      counts,
-      averages,
-    });
-  };
-
-  return harden({ add, getSums });
+  return harden({
+    values: data.values.length,
+    weights,
+    items,
+    mins,
+    maxes,
+    totals,
+    counts,
+    averages,
+  });
 };

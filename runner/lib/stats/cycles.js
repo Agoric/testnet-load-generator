@@ -35,7 +35,7 @@ const rawCycleStatsInit = {
 /** @typedef {'success' | 'blockCount' | 'duration'} CycleStatsSumKeys */
 
 /**
- * @param {import('./helpers.js').Sums<CycleStatsSumKeys>} sums
+ * @param {import('./helpers.js').Summary<CycleStatsSumKeys>} sums
  * @returns {import('./types.js').CycleStatsSummary | undefined}
  */
 export const makeCycleStatsSummary = ({ weights: cycleCount, averages }) =>

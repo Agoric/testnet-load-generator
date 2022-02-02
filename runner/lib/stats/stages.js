@@ -8,7 +8,8 @@ import {
   copyProperties,
   rounder,
   arrayGroupBy,
-  makeSummer,
+  summarize,
+  notUndefined,
 } from './helpers.js';
 import { makeBlockStats, makeBlockStatsSummary } from './blocks.js';
 import {
@@ -103,31 +104,82 @@ const cyclesSummerTransform = ({ success, blockCount, duration }) => ({
  * @param {BlockStats[] | undefined} blocks
  */
 const generateBlocksSummary = (blocks = []) => {
-  /** @type {import("./helpers.js").Summer<ReturnType<typeof blockSummerTransform>>} */
-  const summer = makeSummer();
+  const sumData = blocks.map((stats) => ({
+    values: blockSummerTransform(stats),
+    weight: 1,
+  }));
 
-  for (const stats of blocks) {
-    summer.add(blockSummerTransform(stats));
-  }
-
-  return makeBlockStatsSummary(summer.getSums());
+  return makeBlockStatsSummary(summarize(sumData));
 };
 
 /**
  * @param {CycleStats[] | undefined} cycles
  */
 const generateCyclesSummary = (cycles = []) => {
-  /** @type {import("./helpers.js").Summer<ReturnType<typeof cyclesSummerTransform>>} */
-  const summer = makeSummer();
+  const sumData = cycles
+    .filter((stats) => stats.success !== undefined)
+    .map((stats) => ({
+      values: cyclesSummerTransform(stats),
+      weight: 1,
+    }));
 
-  for (const stats of cycles) {
-    // Ignore unfinished cycles
-    if (stats.success !== undefined) {
-      summer.add(cyclesSummerTransform(stats));
-    }
+  return makeCycleStatsSummary(summarize(sumData));
+};
+
+/**
+ * @param {CycleStats[]} allCycles
+ */
+export const getCyclesSummaries = (allCycles) => {
+  /**
+   * @type {import('./helpers.js').MakeStatsCollectionReturnType<
+   *    string,
+   *    import('./types.js').CycleStatsSummary | undefined
+   * >}
+   */
+  const {
+    collection: cyclesSummaries,
+    insert: setCyclesSummary,
+  } = makeStatsCollection();
+
+  const cyclesByTask = arrayGroupBy(allCycles, ({ task }) => task);
+
+  setCyclesSummary('all', generateCyclesSummary(allCycles));
+
+  for (const [task, taskCycles] of Object.entries(cyclesByTask)) {
+    setCyclesSummary(task, generateCyclesSummary(taskCycles));
   }
 
-  return makeCycleStatsSummary(summer.getSums());
+  return cyclesSummaries;
+};
+
+/**
+ * @param {BlockStats[]} allBlocks
+ */
+export const getBlocksSummaries = (allBlocks) => {
+  /**
+   * @type {import('./helpers.js').MakeStatsCollectionReturnType<
+   *    import('./types.js').StageBlocksSummaryType,
+   *    import('./types.js').BlockStatsSummary | undefined
+   * >}
+   */
+  const {
+    collection: blocksSummaries,
+    insert: setBlocksSummary,
+  } = makeStatsCollection();
+
+  const blocksByLiveMode = arrayGroupBy(allBlocks, ({ liveMode }) =>
+    String(liveMode),
+  );
+
+  setBlocksSummary('all', generateBlocksSummary(allBlocks));
+  setBlocksSummary('last100', generateBlocksSummary(allBlocks.slice(-100)));
+  setBlocksSummary('onlyLive', generateBlocksSummary(blocksByLiveMode.true));
+  setBlocksSummary(
+    'onlyCatchup',
+    generateBlocksSummary(blocksByLiveMode.false),
+  );
+
+  return blocksSummaries;
 };
 
 /**
@@ -181,69 +233,19 @@ export const makeStageStats = (data) => {
     return cycle;
   };
 
-  const getCyclesSummaries = () => {
-    /**
-     * @type {import('./helpers.js').MakeStatsCollectionReturnType<
-     *    string,
-     *    import('./types.js').CycleStatsSummary | undefined
-     * >}
-     */
-    const {
-      collection: cyclesSummaries,
-      insert: setCyclesSummary,
-    } = makeStatsCollection();
-
-    const allCycles = /** @type {CycleStats[]} */ (Object.values(cycles));
-
-    const cyclesByTask = arrayGroupBy(allCycles, ({ task }) => task);
-
-    setCyclesSummary('all', generateCyclesSummary(allCycles));
-
-    for (const [task, taskCycles] of Object.entries(cyclesByTask)) {
-      setCyclesSummary(task, generateCyclesSummary(taskCycles));
-    }
-
-    return cyclesSummaries;
-  };
-
-  const getBlocksSummaries = () => {
-    /**
-     * @type {import('./helpers.js').MakeStatsCollectionReturnType<
-     *    import('./types.js').StageBlocksSummaryType,
-     *    import('./types.js').BlockStatsSummary | undefined
-     * >}
-     */
-    const {
-      collection: blocksSummaries,
-      insert: setBlocksSummary,
-    } = makeStatsCollection();
-
-    const allBlocks = /** @type {BlockStats[]} */ (Object.values(blocks));
-
-    const blocksByLiveMode = arrayGroupBy(allBlocks, ({ liveMode }) =>
-      String(liveMode),
-    );
-
-    setBlocksSummary('all', generateBlocksSummary(allBlocks));
-    setBlocksSummary('last100', generateBlocksSummary(allBlocks.slice(-100)));
-    setBlocksSummary('onlyLive', generateBlocksSummary(blocksByLiveMode.true));
-    setBlocksSummary(
-      'onlyCatchup',
-      generateBlocksSummary(blocksByLiveMode.false),
-    );
-
-    return blocksSummaries;
-  };
-
   /** @type {StageStats['recordEnd']} */
   const recordEnd = (time) => {
     privateSetters.endedAt(time);
 
     privateSetters.cyclesSummaries(
-      getCycleCount() ? getCyclesSummaries() : undefined,
+      getCycleCount()
+        ? getCyclesSummaries(Object.values(cycles).filter(notUndefined))
+        : undefined,
     );
     privateSetters.blocksSummaries(
-      getBlockCount() ? getBlocksSummaries() : undefined,
+      getBlockCount()
+        ? getBlocksSummaries(Object.values(blocks).filter(notUndefined))
+        : undefined,
     );
   };
 

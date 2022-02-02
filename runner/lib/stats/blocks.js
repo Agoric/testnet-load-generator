@@ -79,7 +79,7 @@ const rawBlockStatsInit = {
  */
 
 /**
- * @param {import('./helpers.js').Sums<BlockStatsSumKeys>} sums
+ * @param {import('./helpers.js').Summary<BlockStatsSumKeys>} summary
  * @returns {import('./types.js').BlockStatsSummary | undefined}
  */
 export const makeBlockStatsSummary = ({
