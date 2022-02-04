@@ -86,7 +86,7 @@ type SumRecord<K extends string> = {
   readonly [P in K]: number;
 };
 
-export type Sums<K extends string> = {
+export type Summary<K extends string> = {
   readonly values: number;
   readonly weights: number;
   readonly items: SumRecord<K>;
@@ -95,13 +95,17 @@ export type Sums<K extends string> = {
   readonly totals: SumRecord<K>; // weighted
   readonly counts: SumRecord<K>; // weighted
   readonly averages: SumRecord<K>; // weighted
+  readonly p95s: SumRecord<K>;
 };
 
-type SummableRecord = { readonly [P in string]: number | undefined };
+type SummaryRecord = { readonly [P in string]: number | undefined };
+export type SummarizeData<T extends SummaryRecord> = ReadonlyArray<{
+  values: T;
+  weight?: number;
+}>;
 
-interface Summer<T extends SummableRecord> {
-  add(value: T, weight?: 1 | number): void;
-  getSums(): Sums<keyof T>;
-}
+export declare function summarize<T extends SummaryRecord>(
+  data: SummarizeData<T>,
+): Summary<keyof T>;
 
-export declare function makeSummer<T extends SummableRecord>(): Summer<T>;
+export declare function notUndefined<T>(x: T | undefined): x is T;

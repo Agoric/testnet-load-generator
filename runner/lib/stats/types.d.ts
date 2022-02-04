@@ -64,6 +64,17 @@ export type BlockStatsSummary = {
   readonly avgProcessingPercentage: number;
   readonly avgDeliveries: number;
   readonly avgComputrons: number;
+  readonly p95Lag: number;
+  readonly p95BlockDuration: number;
+  readonly p95ChainBlockDuration: number;
+  readonly p95IdleTime: number;
+  readonly p95CosmosTime: number;
+  readonly p95SwingsetTime: number;
+  readonly p95ProcessingTime: number;
+  readonly p95SwingsetPercentage: number;
+  readonly p95ProcessingPercentage: number;
+  readonly p95Deliveries: number;
+  readonly p95Computrons: number;
 };
 
 export interface CycleStatsInitData {
@@ -89,6 +100,8 @@ export type CycleStatsSummary = {
   readonly cycleCount: number;
   readonly avgBlockCount: number;
   readonly avgDuration: number;
+  readonly p95BlockCount: number | undefined;
+  readonly p95Duration: number | undefined;
   readonly cycleSuccessRate: number;
 };
 

@@ -79,7 +79,7 @@ const rawBlockStatsInit = {
  */
 
 /**
- * @param {import('./helpers.js').Sums<BlockStatsSumKeys>} sums
+ * @param {import('./helpers.js').Summary<BlockStatsSumKeys>} summary
  * @returns {import('./types.js').BlockStatsSummary | undefined}
  */
 export const makeBlockStatsSummary = ({
@@ -90,6 +90,7 @@ export const makeBlockStatsSummary = ({
   items,
   mins,
   maxes,
+  p95s,
 }) =>
   blockCount
     ? {
@@ -115,6 +116,19 @@ export const makeBlockStatsSummary = ({
         ),
         avgProcessingPercentage: percentageRounder(
           averages.processingPercentage / 100,
+        ),
+        p95Lag: timeRounder(p95s.lag),
+        p95BlockDuration: timeRounder(p95s.blockDuration),
+        p95ChainBlockDuration: timeRounder(p95s.chainBlockDuration),
+        p95IdleTime: timeRounder(p95s.idleTime),
+        p95CosmosTime: timeRounder(p95s.cosmosTime),
+        p95SwingsetTime: timeRounder(p95s.swingsetTime),
+        p95ProcessingTime: timeRounder(p95s.processingTime),
+        p95Deliveries: timeRounder(p95s.deliveries),
+        p95Computrons: timeRounder(p95s.computrons),
+        p95SwingsetPercentage: percentageRounder(p95s.swingsetPercentage / 100),
+        p95ProcessingPercentage: percentageRounder(
+          p95s.processingPercentage / 100,
         ),
       }
     : undefined;

@@ -729,8 +729,9 @@ const main = async (progName, rawArgs, powers) => {
           tasks.push(stageReady);
         }
         stats.recordStart(timeSource.getTime());
-        await sequential(...tasks)((stop) => stop);
-        stats.recordEnd(timeSource.getTime());
+        await sequential(...tasks)((stop) => stop).finally(() =>
+          stats.recordEnd(timeSource.getTime()),
+        );
       },
       async (...stageError) =>
         aggregateTryFinally(

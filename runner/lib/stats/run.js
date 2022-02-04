@@ -9,7 +9,8 @@ import {
   cloneData,
   copyProperties,
   rounder,
-  makeSummer,
+  summarize,
+  notUndefined,
 } from './helpers.js';
 import { makeStageStats } from './stages.js';
 
@@ -88,6 +89,60 @@ const cyclesSummerTransform = ({
   duration: avgDuration,
 });
 
+/** @param {import("./types.js").StatsCollection<number, StageStats>} stages */
+export const getCyclesSummary = (stages) => {
+  const sumData = Object.values(stages)
+    .map(
+      (stageStats) =>
+        stageStats &&
+        stageStats.cyclesSummaries &&
+        stageStats.cyclesSummaries.all,
+    )
+    .filter(notUndefined)
+    .map((stageCyclesSummary) => ({
+      values: cyclesSummerTransform(stageCyclesSummary),
+      weight: stageCyclesSummary.cycleCount,
+    }));
+
+  return makeCycleStatsSummary(summarize(sumData));
+};
+
+/** @param {import("./types.js").StatsCollection<number, StageStats>} stages */
+export const getLiveBlocksSummary = (stages) => {
+  const sumData = Object.values(stages)
+    .map(
+      (stageStats) =>
+        stageStats &&
+        stageStats.blocksSummaries &&
+        stageStats.blocksSummaries.onlyLive,
+    )
+    .filter(notUndefined)
+    .map((stageLiveBlocksSummary) => ({
+      values: blockSummerTransform(stageLiveBlocksSummary),
+      weight: stageLiveBlocksSummary.blockCount,
+    }));
+
+  return makeBlockStatsSummary(summarize(sumData));
+};
+
+/** @param {import("./types.js").StatsCollection<number, StageStats>} stages */
+export const getTotalBlockCount = (stages) => {
+  const blockCount = Object.values(stages)
+    .map(
+      (stageStats) =>
+        stageStats &&
+        stageStats.blocksSummaries &&
+        stageStats.blocksSummaries.all,
+    )
+    .filter(notUndefined)
+    .reduce(
+      (acc, stageAllBlocksSummary) => acc + stageAllBlocksSummary.blockCount,
+      0,
+    );
+
+  return blockCount;
+};
+
 /**
  * @param {RunStatsInitData} data
  * @returns {RunStats}
@@ -104,60 +159,10 @@ export const makeRunStats = (data) => {
     getCount: getStageCount,
   } = makeStatsCollection();
 
-  const getCyclesSummary = () => {
-    /** @type {import("./helpers.js").Summer<ReturnType<typeof cyclesSummerTransform>>} */
-    const summer = makeSummer();
-
-    for (const {
-      cyclesSummaries: { all: stageCyclesSummary = undefined } = {},
-    } of /** @type {StageStats[]} */ (Object.values(stages))) {
-      if (stageCyclesSummary) {
-        summer.add(
-          cyclesSummerTransform(stageCyclesSummary),
-          stageCyclesSummary.cycleCount,
-        );
-      }
-    }
-
-    return makeCycleStatsSummary(summer.getSums());
-  };
-
-  const getLiveBlocksSummary = () => {
-    /** @type {import("./helpers.js").Summer<ReturnType<typeof blockSummerTransform>>} */
-    const summer = makeSummer();
-
-    for (const {
-      blocksSummaries: { onlyLive: stageLiveBlocksSummary = undefined } = {},
-    } of /** @type {StageStats[]} */ (Object.values(stages))) {
-      if (stageLiveBlocksSummary) {
-        summer.add(
-          blockSummerTransform(stageLiveBlocksSummary),
-          stageLiveBlocksSummary.blockCount,
-        );
-      }
-    }
-
-    return makeBlockStatsSummary(summer.getSums());
-  };
-
-  const getTotalBlockCount = () => {
-    let blockCount = 0;
-
-    for (const {
-      blocksSummaries: { all: stageAllBlocksSummary = undefined } = {},
-    } of /** @type {StageStats[]} */ (Object.values(stages))) {
-      if (stageAllBlocksSummary) {
-        blockCount += stageAllBlocksSummary.blockCount;
-      }
-    }
-
-    return blockCount;
-  };
-
   const updateSummaries = () => {
-    privateSetters.cyclesSummary(getCyclesSummary());
-    privateSetters.liveBlocksSummary(getLiveBlocksSummary());
-    privateSetters.totalBlockCount(getTotalBlockCount());
+    privateSetters.cyclesSummary(getCyclesSummary(stages));
+    privateSetters.liveBlocksSummary(getLiveBlocksSummary(stages));
+    privateSetters.totalBlockCount(getTotalBlockCount(stages));
   };
 
   /** @type {RunStats['recordEnd']} */
