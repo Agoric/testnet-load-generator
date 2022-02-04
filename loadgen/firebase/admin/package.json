@@ -10,34 +10,17 @@
     "@google-cloud/functions-framework": "^1.9.0",
     "@google-cloud/logging": "^9.6.0"
   },
-  "devDependencies": {
-    "eslint": "^7.11.0",
-    "eslint-config-airbnb-base": "^14.0.0",
-    "eslint-config-jessie": "^0.0.6",
-    "eslint-config-prettier": "^6.12.0",
-    "eslint-plugin-import": "^2.22.1",
-    "eslint-plugin-prettier": "^3.1.0",
-    "prettier": "^2.1.2"
-  },
+  "devDependencies": {},
   "scripts": {
     "build": "exit 0",
     "test": "exit 0",
-    "lint": "yarn lint-check",
-    "lint-check": "eslint --max-warnings=0 .",
+    "lint": "eslint --max-warnings=0 .",
+    "lint-fix": "exit 0",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "yarn run shell",
     "deploy": "firebase deploy --only functions,database",
     "logs": "firebase functions:log"
-  },
-  "eslintConfig": {
-    "extends": [
-      "@endo"
-    ]
-  },
-  "prettier": {
-    "trailingComma": "all",
-    "singleQuote": true
   },
   "private": true
 }
