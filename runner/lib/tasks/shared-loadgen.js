@@ -28,7 +28,6 @@ const jsonDataRE = /^\{.*\}$/;
  * @param {Object} powers
  * @param {import("child_process").spawn} powers.spawn spawn
  * @returns {import("./types.js").OrchestratorTasks['runLoadgen']}
- *
  */
 export const makeLoadgenTask = ({ spawn }) => {
   return harden(async ({ stdout, stderr, timeout = 30, config }) => {

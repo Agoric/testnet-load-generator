@@ -38,9 +38,9 @@ const makeAggregateError = (errors, message) => {
  */
 export const PromiseAllOrErrors = async (values) => {
   return Promise.allSettled(values).then((results) => {
-    const errors = /** @type {PromiseRejectedResult[]} */ (results.filter(
-      ({ status }) => status === 'rejected',
-    )).map((result) => result.reason);
+    const errors = /** @type {PromiseRejectedResult[]} */ (
+      results.filter(({ status }) => status === 'rejected')
+    ).map((result) => result.reason);
     if (!errors.length) {
       return /** @type {PromiseFulfilledResult<T>[]} */ (results).map(
         (result) => result.value,
@@ -138,22 +138,24 @@ export const sequential = (...tasks) => {
  * @param {Task[]} tasks
  * @returns {Task}
  */
-export const parallel = (...tasks) => async (nextStep) => {
-  /** @type {PromiseRecord<{stop: Promise<void>}>[]} */
-  const kits = tasks.map(() => makePromiseKit());
-  /** @type {PromiseRecord<void>} */
-  const nextStepDone = makePromiseKit();
-  Promise.all(kits.map((kit) => kit.promise)).then((wrappedStops) => {
-    nextStepDone.resolve(
-      nextStep(Promise.race(wrappedStops.map(({ stop }) => stop))),
+export const parallel =
+  (...tasks) =>
+  async (nextStep) => {
+    /** @type {PromiseRecord<{stop: Promise<void>}>[]} */
+    const kits = tasks.map(() => makePromiseKit());
+    /** @type {PromiseRecord<void>} */
+    const nextStepDone = makePromiseKit();
+    Promise.all(kits.map((kit) => kit.promise)).then((wrappedStops) => {
+      nextStepDone.resolve(
+        nextStep(Promise.race(wrappedStops.map(({ stop }) => stop))),
+      );
+    });
+    await Promise.all(
+      tasks.map((task, i) =>
+        task((stop) => {
+          kits[i].resolve({ stop });
+          return nextStepDone.promise;
+        }),
+      ),
     );
-  });
-  await Promise.all(
-    tasks.map((task, i) =>
-      task((stop) => {
-        kits[i].resolve({ stop });
-        return nextStepDone.promise;
-      }),
-    ),
-  );
-};
+  };

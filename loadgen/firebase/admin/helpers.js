@@ -19,15 +19,15 @@ export const deepEquals = (a, b) => {
   });
 };
 
-export const debounce = (fn, snapFromArgs = (snap) => snap) => async (
-  ...args
-) => {
-  const snap = snapFromArgs(...args);
-  const now = await snap.ref.once('value');
+export const debounce =
+  (fn, snapFromArgs = (snap) => snap) =>
+  async (...args) => {
+    const snap = snapFromArgs(...args);
+    const now = await snap.ref.once('value');
 
-  if (!deepEquals(snap.val(), now.val())) {
-    return null;
-  }
+    if (!deepEquals(snap.val(), now.val())) {
+      return null;
+    }
 
-  return fn(...args);
-};
+    return fn(...args);
+  };

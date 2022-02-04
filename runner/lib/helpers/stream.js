@@ -40,7 +40,10 @@ export const whenStreamSteps = (
       if (stepsAndKits.length) {
         const match = stepsAndKits[0].step.matcher.exec(line);
         if (match) {
-          const stepAndKit = /** @type {{step: StepConfig, kit: import('../sdk/promise-kit.js').PromiseRecord<any>}} */ (stepsAndKits.shift());
+          const stepAndKit =
+            /** @type {{step: StepConfig, kit: import('../sdk/promise-kit.js').PromiseRecord<any>}} */ (
+              stepsAndKits.shift()
+            );
           const {
             step: { resultIndex = 1 },
             kit: { resolve },
@@ -78,12 +81,12 @@ export const whenStreamSteps = (
  */
 export const combineAndPipe = (stdioIn, stdioOut, elide = true) => {
   const combinedOutput = new PassThrough();
-  const outLines = new (elide
-    ? ElidedBufferLineTransform
-    : BufferLineTransform)();
-  const errLines = new (elide
-    ? ElidedBufferLineTransform
-    : BufferLineTransform)();
+  const outLines = new (
+    elide ? ElidedBufferLineTransform : BufferLineTransform
+  )();
+  const errLines = new (
+    elide ? ElidedBufferLineTransform : BufferLineTransform
+  )();
 
   stdioIn[1].pipe(outLines);
   outLines.pipe(stdioOut[1], { end: false });

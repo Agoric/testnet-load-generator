@@ -13,26 +13,20 @@ export default async function startAgent([key, home]) {
 
   console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-  const {
-    runBrand,
-    bldBrand,
-    amm,
-    autoswap,
-    runPurse,
-    bldPurse,
-  } = await allValues({
-    runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
-    // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
-    bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
-    amm: E(agoricNames)
-      .lookup('instance', 'amm')
-      .catch(() => {}),
-    autoswap: E(agoricNames)
-      .lookup('instance', 'autoswap')
-      .catch(() => {}),
-    runPurse: E(wallet).getPurse(pursePetnames.RUN),
-    bldPurse: E(wallet).getPurse(pursePetnames.BLD),
-  });
+  const { runBrand, bldBrand, amm, autoswap, runPurse, bldPurse } =
+    await allValues({
+      runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
+      // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
+      bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
+      amm: E(agoricNames)
+        .lookup('instance', 'amm')
+        .catch(() => {}),
+      autoswap: E(agoricNames)
+        .lookup('instance', 'autoswap')
+        .catch(() => {}),
+      runPurse: E(wallet).getPurse(pursePetnames.RUN),
+      bldPurse: E(wallet).getPurse(pursePetnames.BLD),
+    });
   // const bldBrand = await E(bldPurse).getAllegedBrand();
 
   {

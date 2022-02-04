@@ -21,33 +21,40 @@ const makeGetterObject = (entries) =>
  * @param {import('./helpers.js').RawStatInit<T, K>} init
  */
 export const makeRawStats = (init) => {
-  const initEntries = /** @type {[K, NonNullable<RawStatInitDesc>][]} */ (Object.entries(
-    init,
-  ).map(
-    /** @param {[string, RawStatInitDesc]} entry */
-    ([key, desc]) => [key, harden({ ...(desc || {}) })],
-  ));
-  const savedData = /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['savedData']} */ ({});
-  const publicProps = /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['publicProps']} */ (makeGetterObject(
-    initEntries.map(([key, desc]) => [
-      key,
-      () => (key in savedData ? savedData[key] : desc.default),
-    ]),
-  ));
-  const privateSetters = /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['privateSetters']} */ (harden(
-    Object.fromEntries(
-      initEntries.map(([key, desc]) => [
-        key,
-        /** @param {any} value */
-        (value) => {
-          if (!desc.writeMulti) {
-            assert(!(key in savedData));
-          }
-          savedData[key] = value;
-        },
-      ]),
-    ),
-  ));
+  const initEntries = /** @type {[K, NonNullable<RawStatInitDesc>][]} */ (
+    Object.entries(init).map(
+      /** @param {[string, RawStatInitDesc]} entry */
+      ([key, desc]) => [key, harden({ ...(desc || {}) })],
+    )
+  );
+  const savedData =
+    /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['savedData']} */ ({});
+  const publicProps =
+    /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['publicProps']} */ (
+      makeGetterObject(
+        initEntries.map(([key, desc]) => [
+          key,
+          () => (key in savedData ? savedData[key] : desc.default),
+        ]),
+      )
+    );
+  const privateSetters =
+    /** @type {import("./helpers.js").MakeRawStatsReturnType<T, K>['privateSetters']} */ (
+      harden(
+        Object.fromEntries(
+          initEntries.map(([key, desc]) => [
+            key,
+            /** @param {any} value */
+            (value) => {
+              if (!desc.writeMulti) {
+                assert(!(key in savedData));
+              }
+              savedData[key] = value;
+            },
+          ]),
+        ),
+      )
+    );
   return { savedData, publicProps, privateSetters };
 };
 
@@ -166,9 +173,10 @@ export const summarize = (data) => {
   const p95s = /** @type {Record<string, number>} */ ({});
 
   for (const key of keys) {
-    const sortedData = /** @type {Array<{values: Record<string, number>, weight?: number | undefined}>} */ (data.filter(
-      ({ values }) => Number.isFinite(values[key]),
-    )).sort((a, b) => a.values[key] - b.values[key]);
+    const sortedData =
+      /** @type {Array<{values: Record<string, number>, weight?: number | undefined}>} */ (
+        data.filter(({ values }) => Number.isFinite(values[key]))
+      ).sort((a, b) => a.values[key] - b.values[key]);
 
     items[key] = sortedData.length;
     mins[key] = sortedData.length ? sortedData[0].values[key] : NaN;

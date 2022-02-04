@@ -66,9 +66,9 @@ export const childProcessOutput =
    */
   async (childProcess, outHandler = asBuffer) => {
     const [res] = await PromiseAllOrErrors([
-      /** @type {(out: import("stream").Readable) => Promise<any>} */ (outHandler)(
-        childProcess.stdout,
-      ),
+      /** @type {(out: import("stream").Readable) => Promise<any>} */ (
+        outHandler
+      )(childProcess.stdout),
       childProcessDone(childProcess),
     ]);
     return res;
@@ -119,15 +119,14 @@ export const makeSpawnWithPipedStream = ({ spawn, end }) => {
       [stdin, stdout, stderr] = internalStdio;
     }
 
-    const childProcess = /** @type {import("child_process").ChildProcessWithoutNullStreams} */ (spawn(
-      command,
-      args,
-      {
-        ...spawnOptions,
-        // @ts-ignore stdio can be undefined
-        stdio,
-      },
-    ));
+    const childProcess =
+      /** @type {import("child_process").ChildProcessWithoutNullStreams} */ (
+        spawn(command, args, {
+          ...spawnOptions,
+          // @ts-ignore stdio can be undefined
+          stdio,
+        })
+      );
 
     const endOption = end !== undefined ? { end } : {};
 

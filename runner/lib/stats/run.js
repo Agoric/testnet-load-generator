@@ -148,9 +148,8 @@ export const getTotalBlockCount = (stages) => {
  * @returns {RunStats}
  */
 export const makeRunStats = (data) => {
-  const { savedData, publicProps, privateSetters } = makeRawStats(
-    rawRunStatsInit,
-  );
+  const { savedData, publicProps, privateSetters } =
+    makeRawStats(rawRunStatsInit);
 
   /** @type {import("./helpers.js").MakeStatsCollectionReturnType<number, StageStats>} */
   const {

@@ -44,7 +44,6 @@ import { childProcessDone } from './child-process.js';
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {string} powers.tmpDir Directory location to place temporary files in
  * @returns {FsHelper}
- *
  */
 export const makeFsHelper = ({ fs, fsStream, spawn, tmpDir }) => {
   /** @type {FindByPrefix} */
@@ -81,7 +80,7 @@ export const makeFsHelper = ({ fs, fsStream, spawn, tmpDir }) => {
           /**
            * @param {string} name
            * @returns {Promise<[string, import('fs').Stats]>}
-           * */
+           */
           async (name) => [
             joinPath(subpath, name),
             await fs.lstat(joinPath(rootDir, subpath, name)),
@@ -127,9 +126,10 @@ export const makeFsHelper = ({ fs, fsStream, spawn, tmpDir }) => {
     const originalStreamDestroy = stream._destroy;
     // eslint-disable-next-line no-underscore-dangle
     stream._destroy = (error, callback) => {
-      const internalStream = /** @type {{closed: boolean, fd: number | null}} */ (
-        /** @type {unknown} */ (stream)
-      );
+      const internalStream =
+        /** @type {{closed: boolean, fd: number | null}} */ (
+          /** @type {unknown} */ (stream)
+        );
       if (!internalStream.closed && typeof internalStream.fd !== 'number') {
         console.warn(
           'FIFO was never opened for write, self opening to unblock process.',

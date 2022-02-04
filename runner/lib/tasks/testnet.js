@@ -39,7 +39,8 @@ const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientSwingSetReadyRE = /start: swingset running$/;
-const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
+const clientWalletReadyRE =
+  /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 
 /**
  *
@@ -50,7 +51,6 @@ const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
- *
  */
 export const makeTasks = ({
   spawn: cpSpawn,
@@ -145,7 +145,8 @@ export const makeTasks = ({
 
     console.log('Fetching network config');
     // eslint-disable-next-line jsdoc/check-alignment
-    const { chainName, peers, rpcAddrs, seeds } = /** @type {{
+    const { chainName, peers, rpcAddrs, seeds } = /**
+     * @type {{
      *   chainName: string,
      *   peers: string[],
      *   rpcAddrs: string[],

@@ -41,12 +41,14 @@ export const httpRequest = (urlOrString, options = {}) => {
     if (url.protocol === 'file:') {
       const stream = fs.createReadStream(url.pathname);
       // Ugly cast hack to make res look like what the consumer cares about
-      const res = /** @type {http.IncomingMessage} */ (harden(
-        /** @type {unknown} */ ({
-          ...cleanAsyncIterable(stream),
-          statusCode: 200,
-        }),
-      ));
+      const res = /** @type {http.IncomingMessage} */ (
+        harden(
+          /** @type {unknown} */ ({
+            ...cleanAsyncIterable(stream),
+            statusCode: 200,
+          }),
+        )
+      );
       resolve(fsStreamReady(stream).then(() => res));
       return;
     }
@@ -116,7 +118,9 @@ export const getChildMatchingArgv = async (
   retries = 50,
 ) => {
   const childrenWithArgv = await Promise.all(
-    (await launcherInfo.getChildren()).map(async (info) => ({
+    (
+      await launcherInfo.getChildren()
+    ).map(async (info) => ({
       info,
       argv: await info.getArgv(),
     })),

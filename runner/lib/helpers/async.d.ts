@@ -36,7 +36,7 @@ export declare function PromiseAllOrErrors<
   T7,
   T8,
   T9,
-  T10
+  T10,
 >(
   values: readonly [
     T1 | PromiseLike<T1>,

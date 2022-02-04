@@ -115,13 +115,13 @@ export const makeClientConnectionHandlerFactory = (walletAddress) => (app) => {
             [`clients/${clientId}/activeConnection`]: clientConnectionId,
             [`clients/${clientId}/disconnectedAt`]: null,
             [`clientConnections/${clientConnectionId}/connected`]: true,
-            [`clientConnections/${clientConnectionId}/connectedAt`]: serverTimestamp(),
+            [`clientConnections/${clientConnectionId}/connectedAt`]:
+              serverTimestamp(),
           };
 
           if (firstConnection) {
-            loadgenRootUpdateData[
-              `clients/${clientId}/connectedAt`
-            ] = serverTimestamp();
+            loadgenRootUpdateData[`clients/${clientId}/connectedAt`] =
+              serverTimestamp();
           }
 
           const done = Promise.all([

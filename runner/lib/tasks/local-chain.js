@@ -46,7 +46,8 @@ const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientSwingSetReadyRE = /start: swingset running$/;
-const clientWalletReadyRE = /(?:Deployed Wallet!|Don't need our provides: wallet)/;
+const clientWalletReadyRE =
+  /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 
 const chainNodeArgvMatcher = wrapArgvMatcherIgnoreEnvShebang(
   getArgvMatcher([/node$/, /chain-entrypoint/]),
@@ -65,7 +66,6 @@ const chainArgvMatcher = (argv) =>
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
- *
  */
 export const makeTasks = ({
   spawn: cpSpawn,
