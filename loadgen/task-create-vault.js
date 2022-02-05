@@ -2,18 +2,19 @@
 import path from 'path';
 import { E } from '@agoric/eventual-send';
 import { disp } from './contract/display.js';
+import { collateralToken } from './config.js';
 
 // Prepare to create and close a vault on each cycle. We measure our
-// available BLD at startup. On each cycle, we deposit 1% of that value as
+// available collateral token at startup. On each cycle, we deposit 1% of that value as
 // collateral to borrow as much RUN as they'll give us. Then we pay back the
 // loan (using all the borrowed RUN, plus some more as a fee), getting back
-// most (but not all?) of our BLD. If we are not interrupted, we finish each
-// cycle with slightly less BLD and RUN than we started (because of fees),
+// most (but not all?) of our collateral. If we are not interrupted, we finish each
+// cycle with slightly less collateral and RUN than we started (because of fees),
 // but with no vaults or loans outstanding.
 
 // Make sure to run this after task-trade-amm has started (which converts 50%
-// of our BLD into RUN), so we don't TOCTTOU ourselves into believing we have
-// twice as much BLD as we really do.
+// of our RUN into collateral), so we don't TOCTTOU ourselves into believing we have
+// a different amount of collateral.
 
 export async function prepareVaultCycle(homePromise, deployPowers) {
   const key = 'open-close-vault';
@@ -26,14 +27,14 @@ export async function prepareVaultCycle(homePromise, deployPowers) {
     const agentBundle = await bundleSource(agentFn);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    agent = await E(installerP).spawn([key, home]);
+    agent = await E(installerP).spawn([key, home, collateralToken]);
   }
 
   async function vaultCycle() {
-    const [newRunBalance, newBldBalance] = await E(agent).doVaultCycle();
+    const [newRunBalance, newCollateralBalance] = await E(agent).doVaultCycle();
     console.log(
-      `create-vault done: RUN=${disp(newRunBalance)} BLD=${disp(
-        newBldBalance,
+      `create-vault done: RUN=${disp(newRunBalance)} ${collateralToken}=${disp(
+        newCollateralBalance,
       )}`,
     );
   }
