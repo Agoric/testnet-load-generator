@@ -94,5 +94,5 @@ To link the loadgen to the remote orchestrator, you need to provide authenticati
 The load generators defined so far:
 
 - `faucet`: initialize by creating a `dapp-fungible-faucet` -style mint on the chain, then each cycle requests an invitation and completes it, adding 1000 Tokens to Bob's Purse. Takes 4 round-trips to complete.
-- `amm`: initialize by selling some (currently 33%) of the initial RUN to get BLD, then record the balances. Each cycle sells 1% of the recorded BLD to get RUN, then sells 1% of the recorded RUN to get BLD. Because of fees, the total available will drop slowly over time.
-- `vault`: initialize by recording our BLD balance and the BLD/RUN price. Each cycle deposits 1% of the recorded BLD balance and borrows half its value in RUN, then pays back the loan and recovers the BLD (less fees).
+- `amm`: initialize by selling some (currently 33%) of the initial RUN to get a trade token, then record the balances. Each cycle sells 1% of the recorded trade token to get RUN, then sells 1% of the recorded RUN to get the trade token back. Because of fees, the total available will drop slowly over time.
+- `vault`: initialize by recording our collateral token balance and the collateral/RUN price. Each cycle deposits 1% of the recorded collateral balance and borrows half its value in RUN, then pays back the loan and recovers the collateral (less fees).

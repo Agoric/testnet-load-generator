@@ -8,16 +8,17 @@ import { allValues } from './allValues.js';
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
 
-export default async function startAgent([key, home]) {
+export default async function startAgent([key, home, tradeToken]) {
   const { zoe, scratch, agoricNames, wallet, faucet } = home;
 
   console.error(`trade-amm: building tools`);
   // const runIssuer = await E(agoricNames).lookup('issuer', issuerPetnames.RUN);
-  const { runBrand, bldBrand, amm, autoswap, runPurse, bldPurse } =
+  const { runBrand, targetBrand, amm, autoswap, runPurse, targetPurse } =
     await allValues({
       runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
-      // bldBrand: E(agoricNames).lookup('brand', issuerPetnames.BLD),
-      bldBrand: E(E(wallet).getIssuer(issuerPetnames.BLD)).getBrand(),
+      targetBrand: E(
+        E(wallet).getIssuer(issuerPetnames[tradeToken]),
+      ).getBrand(),
       amm: E(agoricNames)
         .lookup('instance', 'amm')
         .catch(() => {}),
@@ -25,9 +26,8 @@ export default async function startAgent([key, home]) {
         .lookup('instance', 'autoswap')
         .catch(() => {}),
       runPurse: E(wallet).getPurse(pursePetnames.RUN),
-      bldPurse: E(wallet).getPurse(pursePetnames.BLD),
+      targetPurse: E(wallet).getPurse(pursePetnames[tradeToken]),
     });
-  // const bldBrand = await E(bldPurse).getAllegedBrand();
 
   {
     const feePurse = await E(faucet)
@@ -68,23 +68,26 @@ export default async function startAgent([key, home]) {
       bal = await E(runPurse).getCurrentAmount();
       return bal;
     }
-    if (which === 'BLD') {
-      bal = await E(bldPurse).getCurrentAmount();
+    if (which === tradeToken) {
+      bal = await E(targetPurse).getCurrentAmount();
       return bal;
     }
     throw Error(`unknown type ${which}`);
   }
 
   async function getBalances() {
-    return allValues({ run: getBalance('RUN'), bld: getBalance('BLD') });
+    return allValues({
+      run: getBalance('RUN'),
+      target: getBalance(tradeToken),
+    });
   }
 
-  async function buyRunWithBld(bldOffered) {
+  async function buyRunWithTarget(targetOffered) {
     const proposal = harden({
       want: { Out: AmountMath.makeEmpty(runBrand, AssetKind.NAT) },
-      give: { In: bldOffered },
+      give: { In: targetOffered },
     });
-    const payment = harden({ In: E(bldPurse).withdraw(bldOffered) });
+    const payment = harden({ In: E(targetPurse).withdraw(targetOffered) });
     const seatP = E(zoe).offer(
       E(publicFacet).makeSwapInInvitation(),
       proposal,
@@ -95,15 +98,15 @@ export default async function startAgent([key, home]) {
       E(seatP).getPayout('Out'),
     ]);
     await Promise.all([
-      E(bldPurse).deposit(refundPayout),
+      E(targetPurse).deposit(refundPayout),
       E(runPurse).deposit(payout),
       E(seatP).getOfferResult(),
     ]);
   }
 
-  async function buyBldWithRun(runOffered) {
+  async function buyTargetWithRun(runOffered) {
     const proposal = harden({
-      want: { Out: AmountMath.makeEmpty(bldBrand, AssetKind.NAT) },
+      want: { Out: AmountMath.makeEmpty(targetBrand, AssetKind.NAT) },
       give: { In: runOffered },
     });
     const payment = harden({ In: E(runPurse).withdraw(runOffered) });
@@ -118,31 +121,40 @@ export default async function startAgent([key, home]) {
     ]);
     await Promise.all([
       E(runPurse).deposit(refundPayout),
-      E(bldPurse).deposit(payout),
+      E(targetPurse).deposit(payout),
       E(seatP).getOfferResult(),
     ]);
   }
 
   // perform the setup transfer
   async function doSetupTransfer() {
-    let { run, bld } = await getBalances();
-    console.error(`trade-amm setup: initial RUN=${disp(run)} BLD=${disp(bld)}`);
+    let { run, target } = await getBalances();
+    console.error(
+      `trade-amm setup: outstanding RUN=${disp(run)} ${tradeToken}=${disp(
+        target,
+      )}`,
+    );
     // eslint-disable-next-line no-constant-condition
     if (1) {
-      // setup: buy BLD with 50% of our remaining RUN (33% of initial amount)
-      console.error(`trade-amm: buying BLD with 33% of our initial RUN`);
+      // setup: buy trade token with 50% of our remaining RUN (33% of initial amount)
+      console.error(
+        `trade-amm: buying ${tradeToken} with 50% of our outstanding RUN`,
+      );
       const halfAmount = AmountMath.make(runBrand, run.value / BigInt(2));
-      await buyBldWithRun(halfAmount);
-      ({ run, bld } = await getBalances());
+      await buyTargetWithRun(halfAmount);
+      ({ run, target } = await getBalances());
     }
     // we sell 1% of the holdings each time
     const runPerCycle = AmountMath.make(runBrand, run.value / BigInt(100));
-    const bldPerCycle = AmountMath.make(bldBrand, bld.value / BigInt(100));
-    console.error(`setup: RUN=${disp(run)} BLD=${disp(bld)}`);
+    const targetPerCycle = AmountMath.make(
+      targetBrand,
+      target.value / BigInt(100),
+    );
+    console.error(`setup: RUN=${disp(run)} ${tradeToken}=${disp(target)}`);
     console.error(
       `will trade about ${disp(runPerCycle)} RUN and ${disp(
-        bldPerCycle,
-      )} BLD per cycle`,
+        targetPerCycle,
+      )} ${tradeToken} per cycle`,
     );
     console.error(`trade-amm: initial trade complete`);
   }
@@ -150,22 +162,25 @@ export default async function startAgent([key, home]) {
 
   const agent = Far('AMM agent', {
     async doAMMCycle() {
-      console.error('trade-amm cycle: BLD->RUN');
-      const bld = await getBalance('BLD');
-      const bldOffered = AmountMath.make(bldBrand, bld.value / BigInt(100));
-      await buyRunWithBld(bldOffered);
+      console.error(`trade-amm cycle: ${tradeToken}->RUN`);
+      const target = await getBalance(tradeToken);
+      const targetOffered = AmountMath.make(
+        targetBrand,
+        target.value / BigInt(100),
+      );
+      await buyRunWithTarget(targetOffered);
 
-      console.error('trade-amm cycle: RUN->BLD');
+      console.error(`trade-amm cycle: RUN->${tradeToken}`);
       const run = await getBalance('RUN');
       const runOffered = AmountMath.make(runBrand, run.value / BigInt(100));
-      await buyBldWithRun(runOffered);
+      await buyTargetWithRun(runOffered);
 
-      const [newRunBalance, newBldBalance] = await Promise.all([
+      const [newRunBalance, newTargetBalance] = await Promise.all([
         E(runPurse).getCurrentAmount(),
-        E(bldPurse).getCurrentAmount(),
+        E(targetPurse).getCurrentAmount(),
       ]);
       console.error('trade-amm cycle: done');
-      return [newRunBalance, newBldBalance];
+      return [newRunBalance, newTargetBalance];
     },
   });
 

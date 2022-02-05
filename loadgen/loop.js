@@ -41,7 +41,7 @@ let pushBroker = null;
 const tasks = {
   // we must start the AMM task before other tasks:
   // - AMM sets up Zoe fee purse
-  // - AMM exchanges some RUN for BLD, and Vault measures the balances
+  // - AMM exchanges some RUN for target token, and Vault measures the balances
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
   faucet: [prepareFaucet],

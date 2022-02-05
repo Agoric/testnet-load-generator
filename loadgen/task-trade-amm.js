@@ -1,6 +1,7 @@
 /* global __dirname */
 import path from 'path';
 import { E } from '@agoric/eventual-send';
+import { tradeToken } from './config.js';
 
 // prepare to make a trade on the AMM each cycle
 export async function prepareAMMTrade(homePromise, deployPowers) {
@@ -14,13 +15,13 @@ export async function prepareAMMTrade(homePromise, deployPowers) {
     const agentBundle = await bundleSource(agentFn);
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    agent = await E(installerP).spawn([key, home]);
+    agent = await E(installerP).spawn([key, home, tradeToken]);
   }
 
   async function tradeAMMCycle() {
-    const [newRunBalance, newBldBalance] = await E(agent).doAMMCycle();
+    const [newRunBalance, newTargetBalance] = await E(agent).doAMMCycle();
     console.log(
-      `trade-amm done: RUN=${newRunBalance.value} BLD=${newBldBalance.value}`,
+      `trade-amm done: RUN=${newRunBalance.value} ${tradeToken}=${newTargetBalance.value}`,
     );
   }
   console.log(`--- trade-amm ready for cycles`);
