@@ -56,7 +56,9 @@ const defaultNumberStages = 4 + 2;
  */
 const coerceRecordOption = (maybeObj, defaultValue) => {
   if (maybeObj == null) {
-    return /** @type {T extends undefined ? undefined : Record<string, unknown>} */ (defaultValue);
+    return /** @type {T extends undefined ? undefined : Record<string, unknown>} */ (
+      defaultValue
+    );
   }
 
   if (typeof maybeObj !== 'object') {
@@ -150,7 +152,7 @@ const makeInterrupterKit = ({ console }) => {
 
 /**
  * @returns {Promise<import('./tasks/types.js').SDKBinaries>}
- * */
+ */
 const getSDKBinaries = async () => {
   const srcHelpers = 'agoric/src/helpers.js';
   const libHelpers = 'agoric/lib/helpers.js';

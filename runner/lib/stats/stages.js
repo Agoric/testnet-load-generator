@@ -136,10 +136,8 @@ export const getCyclesSummaries = (allCycles) => {
    *    import('./types.js').CycleStatsSummary | undefined
    * >}
    */
-  const {
-    collection: cyclesSummaries,
-    insert: setCyclesSummary,
-  } = makeStatsCollection();
+  const { collection: cyclesSummaries, insert: setCyclesSummary } =
+    makeStatsCollection();
 
   const cyclesByTask = arrayGroupBy(allCycles, ({ task }) => task);
 
@@ -162,10 +160,8 @@ export const getBlocksSummaries = (allBlocks) => {
    *    import('./types.js').BlockStatsSummary | undefined
    * >}
    */
-  const {
-    collection: blocksSummaries,
-    insert: setBlocksSummary,
-  } = makeStatsCollection();
+  const { collection: blocksSummaries, insert: setBlocksSummary } =
+    makeStatsCollection();
 
   const blocksByLiveMode = arrayGroupBy(allBlocks, ({ liveMode }) =>
     String(liveMode),
@@ -187,9 +183,8 @@ export const getBlocksSummaries = (allBlocks) => {
  * @returns {StageStats}
  */
 export const makeStageStats = (data) => {
-  const { savedData, publicProps, privateSetters } = makeRawStats(
-    rawStageStatsInit,
-  );
+  const { savedData, publicProps, privateSetters } =
+    makeRawStats(rawStageStatsInit);
 
   /** @type {import("./helpers.js").MakeStatsCollectionReturnType<number, BlockStats>} */
   const {

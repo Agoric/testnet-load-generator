@@ -11,8 +11,11 @@ export default class BufferLineTransform extends Transform {
    * @param {import('./buffer-line-transform.js').BufferLineTransformOptions} [options]
    */
   constructor(options) {
-    const { break: breakValue, breakEncoding, ...transformOptions } =
-      options || {};
+    const {
+      break: breakValue,
+      breakEncoding,
+      ...transformOptions
+    } = options || {};
     super({ ...transformOptions, readableObjectMode: true });
     this._breakValue = breakValue || 10;
     this._breakEncoding = breakEncoding;
@@ -37,7 +40,7 @@ export default class BufferLineTransform extends Transform {
    * @param {any} chunk
    * @param {BufferEncoding | 'buffer'} encoding
    * @param {import('stream').TransformCallback} cb
-   * */
+   */
   _transform(chunk, encoding, cb) {
     try {
       /** @type {Buffer} */
@@ -89,7 +92,7 @@ export default class BufferLineTransform extends Transform {
   /**
    * @override
    * @param {import('stream').TransformCallback} cb
-   * */
+   */
   _flush(cb) {
     if (this._chunks.length) {
       this._writeItem(

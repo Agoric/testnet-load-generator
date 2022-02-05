@@ -1,11 +1,12 @@
-"use strict";
-module.exports = inquire;
-inquire.register = register;
+/* global module */
+
+'use strict';
 
 const modules = new Map();
 
 /**
  * Requires a module only if available.
+ *
  * @memberof util
  * @param {string} moduleName Module to require
  * @returns {?Object} Required module if available and not empty, otherwise `null`
@@ -15,13 +16,16 @@ function inquire(moduleName) {
   if (!mod) {
     if (modules.size === 0) {
       try {
-        mod = eval("require")(moduleName);
-      } catch (e) {}
+        // eslint-disable-next-line no-eval
+        mod = eval('require')(moduleName);
+      } catch (e) {
+        // Ignore
+      }
     }
     console.log(
       `inquire doesn't have registered module '${moduleName}'.${
-        mod ? " Using require fallback." : ""
-      }`
+        mod ? ' Using require fallback.' : ''
+      }`,
     );
   }
   return mod;
@@ -37,3 +41,6 @@ function inquire(moduleName) {
 function register(moduleName, mod) {
   modules.set(moduleName, mod);
 }
+
+module.exports = inquire;
+inquire.register = register;

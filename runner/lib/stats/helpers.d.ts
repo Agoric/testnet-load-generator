@@ -48,7 +48,7 @@ export declare function makeRawStats<T, K extends keyof T>(
 
 export declare function makeStatsCollection<
   K extends string | number,
-  T
+  T,
 >(): MakeStatsCollectionReturnType<K, T>;
 
 export declare function makeGetters<T extends { [key: string]: () => any }>(

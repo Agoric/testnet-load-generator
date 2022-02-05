@@ -16,7 +16,7 @@ Make sure you have the `agoric-sdk` with the correct revision built, with the `a
 
 ```sh
 git clone https://github.com/Agoric/agoric-sdk.git -b agorictest-17
-git checkout 
+git checkout
 
 # Install and build Agoric Javascript packages
 yarn install

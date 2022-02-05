@@ -34,7 +34,6 @@ const statusLineFormat = /^([^:]+):[\s]+(.+)$/;
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {number} [powers.startPid] The PID of the process to use as a start time reference
  * @returns {ProcessHelper}
- *
  */
 export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
   // Kernel data has no encoding so just copy bytes

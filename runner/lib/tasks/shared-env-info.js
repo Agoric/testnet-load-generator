@@ -12,7 +12,6 @@ import { getConsoleAndStdio } from './helpers.js';
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks['getEnvInfo']}
- *
  */
 export const makeGetEnvInfo = ({ spawn, sdkBinaries }) => {
   return harden(async ({ stdout, stderr }) => {

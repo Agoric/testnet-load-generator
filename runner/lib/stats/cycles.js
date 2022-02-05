@@ -66,9 +66,8 @@ export const makeCycleStatsKey = ({ task, seq }) => `${task}/${seq}`;
  * @returns {CycleStats}
  */
 export const makeCycleStats = (data, stageStats) => {
-  const { savedData, publicProps, privateSetters } = makeRawStats(
-    rawCycleStatsInit,
-  );
+  const { savedData, publicProps, privateSetters } =
+    makeRawStats(rawCycleStatsInit);
 
   /** @type {CycleStats['recordStart']} */
   const recordStart = (time) => {
