@@ -35,6 +35,7 @@ const stateDir = '_agstate/agoric-servers';
 const profileName = 'testnet';
 const CLIENT_PORT = 8000;
 const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
+const VerboseDebugEnv = 'SwingSet:vat,SwingSet:ls';
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
@@ -322,7 +323,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 30 }) => {
+  const runChain = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -338,7 +339,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
-    // chainEnv.DEBUG = 'agoric';
+    chainEnv.DEBUG = VerboseDebugEnv;
 
     const chainCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -456,7 +457,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -474,8 +475,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
+    clientEnv.DEBUG = VerboseDebugEnv;
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start', '--verbose'], {
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,

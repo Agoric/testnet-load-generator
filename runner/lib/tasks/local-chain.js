@@ -129,7 +129,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 120 }) => {
+  const runChain = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -243,7 +243,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -385,8 +385,9 @@ export const makeTasks = ({
 
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
+    clientEnv.DEBUG = 'SwingSet:vat,SwingSet:ls';
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start', '--verbose'], {
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
