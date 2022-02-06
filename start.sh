@@ -45,7 +45,9 @@ export PATH="$AGORIC_BIN_DIR:$PATH"
 
 if [ ! -f "${OUTPUT_DIR}/.nvmrc" ] ; then
     SDK_NODE16_REVISION=475d7ff1eb2371aa9e0c0dc7a50644089db351f6
-    if ! git -C "${SDK_SRC}" merge-base --is-ancestor $SDK_NODE16_REVISION $SDK_FULL_REVISION ; then
+    if git -C "${SDK_SRC}" cat-file -e $SDK_NODE16_REVISION^{commit} && \
+      ! git -C "${SDK_SRC}" merge-base --is-ancestor $SDK_NODE16_REVISION $SDK_FULL_REVISION
+    then
         echo "lts/fermium" > "${OUTPUT_DIR}/.nvmrc"
     fi
     if [ -n "$NVM_RC_VERSION" ]; then 
