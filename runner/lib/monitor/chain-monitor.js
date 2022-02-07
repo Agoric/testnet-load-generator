@@ -8,7 +8,9 @@ import { PromiseAllOrErrors, warnOnRejection } from '../helpers/async.js';
 const vatIdentifierRE = /^(v\d+):(.*)$/;
 
 /**
- * @param {Pick<import("../tasks/types.js").RunKernelInfo, 'storageLocation' | 'processInfo'>} kernelInfo
+ * @param {Object} kernelInfo
+ * @param {string | void} kernelInfo.storageLocation
+ * @param {import("../helpers/procsfs.js").ProcessInfo} kernelInfo.processInfo
  * @param {Object} param1
  * @param {Console} param1.console
  * @param {import('../stats/types.js').LogPerfEvent} param1.logPerfEvent
@@ -149,11 +151,13 @@ export const makeChainMonitor = (
     return results;
   };
 
-  const logStorageUsage = async () => {
-    logPerfEvent('chain-storage-usage', {
-      chain: await dirDiskUsage(storageLocation),
-    });
-  };
+  const logStorageUsage = storageLocation
+    ? async () => {
+        logPerfEvent('chain-storage-usage', {
+          chain: await dirDiskUsage(storageLocation),
+        });
+      }
+    : async () => {};
 
   /** @type {NodeJS.Timer | null} */
   let monitorIntervalId = null;
