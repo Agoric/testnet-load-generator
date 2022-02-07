@@ -35,7 +35,8 @@ const stateDir = '_agstate/agoric-servers';
 const profileName = 'testnet';
 const CLIENT_PORT = 8000;
 const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
-const VerboseDebugEnv = 'SwingSet:vat,SwingSet:ls';
+
+const VerboseDebugEnv = 'agoric';
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
