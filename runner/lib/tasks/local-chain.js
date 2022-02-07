@@ -237,10 +237,9 @@ export const makeTasks = ({
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, ready]);
         launcherCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, ready]);
       },
     );
   };
@@ -471,9 +470,8 @@ export const makeTasks = ({
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, clientStarted, walletReady]);
         soloCp.kill();
+        await Promise.allSettled([done, clientStarted, walletReady]);
       },
     );
   };

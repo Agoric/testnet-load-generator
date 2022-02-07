@@ -449,10 +449,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, ready]);
         chainCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, ready]);
       },
     );
   };
@@ -559,10 +558,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, clientStarted, walletReady]);
         soloCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, clientStarted, walletReady]);
       },
     );
   };
