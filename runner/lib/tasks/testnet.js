@@ -1,4 +1,4 @@
-/* global process */
+/* global process Buffer */
 /* eslint-disable no-await-in-loop */
 
 import { join as joinPath } from 'path';
@@ -7,6 +7,7 @@ import { pipeline as pipelineCallback } from 'stream';
 
 import TOML from '@iarna/toml';
 
+import { makePromiseKit } from '../sdk/promise-kit.js';
 import {
   childProcessDone,
   makeSpawnWithPipedStream,
@@ -43,6 +44,7 @@ const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientSwingSetReadyRE = /start: swingset running$/;
 const clientWalletReadyRE =
   /(?:Deployed Wallet!|Don't need our provides: wallet)/;
+const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
 
 /**
  *
@@ -371,6 +373,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
       return 0;
     });
 
+    const stop = () => {
+      stopped = true;
+      chainCp.kill();
+    };
+
     chainDone
       .then(
         () => console.log('Chain exited successfully'),
@@ -392,14 +399,30 @@ ${chainName} chain does not yet know of address ${soloAddr}
       ],
       {
         waitEnd: false,
+        close: false,
       },
     );
 
-    const done = PromiseAllOrErrors([
-      slogPipeResult,
-      outputParsed,
-      chainDone,
-    ]).then(() => {});
+    /** @type {import('../sdk/promise-kit.js').PromiseRecord<void>} */
+    const doneKit = makePromiseKit();
+    const done = doneKit.promise;
+
+    PromiseAllOrErrors([slogPipeResult, outputParsed, chainDone]).then(() =>
+      doneKit.resolve(),
+    );
+
+    outputParsed.then(async () => {
+      for await (const line of /** @type {AsyncIterable<Buffer>} */ (
+        chainCombinedElidedOutput
+      )) {
+        if (line.subarray(0, 100).includes(chainConsensusFailureBuffer)) {
+          doneKit.reject(new Error('Consensus Failure'));
+          chainCombinedElidedOutput.destroy();
+          stop();
+          return;
+        }
+      }
+    });
 
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
@@ -442,11 +465,6 @@ ${chainName} chain does not yet know of address ${soloAddr}
         const processInfo = await getProcessInfo(
           /** @type {number} */ (chainCp.pid),
         );
-
-        const stop = () => {
-          stopped = true;
-          chainCp.kill();
-        };
 
         return harden({
           stop,

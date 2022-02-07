@@ -78,6 +78,7 @@ export const whenStreamSteps = (
  * @param {[unknown, import("stream").Readable, import("stream").Readable, ...unknown[]]} stdioIn
  * @param {[unknown, import("stream").Writable, import("stream").Writable, ...unknown[]]} stdioOut
  * @param {boolean} [elide]
+ * @returns {import("stream").Readable}
  */
 export const combineAndPipe = (stdioIn, stdioOut, elide = true) => {
   const combinedOutput = new PassThrough();
