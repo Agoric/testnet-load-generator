@@ -139,6 +139,9 @@ export const makeTasks = ({
       print: (cmd) => console.log(cmd),
     });
 
+    /** @type {Partial<Record<'chainStorageLocation' | 'clientStorageLocation', string>>} */
+    const storageLocations = {};
+
     console.log('Starting');
 
     if (testnetOriginOption) {
@@ -157,6 +160,8 @@ export const makeTasks = ({
      */ (await fetchAsJSON(`${testnetOrigin}/network-config`));
 
     if (withMonitor !== false) {
+      storageLocations.chainStorageLocation = chainStateDir;
+
       if (reset) {
         console.log('Resetting chain node');
         await childProcessDone(
@@ -206,6 +211,8 @@ export const makeTasks = ({
 
     // Make sure client is provisioned
     if (chainOnly !== true) {
+      storageLocations.clientStorageLocation = clientStateDir;
+
       if (reset) {
         console.log('Resetting client');
         await childProcessDone(
@@ -321,6 +328,8 @@ ${chainName} chain does not yet know of address ${soloAddr}
     }
 
     console.log('Done');
+
+    return harden(storageLocations);
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
@@ -449,10 +458,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, ready]);
         chainCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, ready]);
       },
     );
   };
@@ -559,10 +567,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, clientStarted, walletReady]);
         soloCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, clientStarted, walletReady]);
       },
     );
   };

@@ -94,11 +94,11 @@ export const makeTasks = ({
     }
   };
 
-  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, withMonitor?: boolean}}} options */
+  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean}}} options */
   const setupTasks = async ({
     stdout,
     stderr,
-    config: { reset, withMonitor } = {},
+    config: { reset, chainOnly, withMonitor } = {},
   }) => {
     const { console, stdio } = getConsoleAndStdio(
       'setup-tasks',
@@ -110,9 +110,14 @@ export const makeTasks = ({
       print: (cmd) => console.log(cmd),
     });
 
+    /** @type {Partial<Record<'chainStorageLocation' | 'clientStorageLocation', string>>} */
+    const storageLocations = {};
+
     console.log('Starting');
 
     if (withMonitor !== false) {
+      storageLocations.chainStorageLocation = chainStateDir;
+
       if (reset) {
         console.log('Resetting chain node');
         await childProcessDone(
@@ -121,13 +126,20 @@ export const makeTasks = ({
       }
     }
 
-    if (reset) {
-      console.log('Resetting client state');
-      await childProcessDone(
-        printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
-      );
+    if (chainOnly !== true) {
+      storageLocations.clientStorageLocation = clientStateDir;
+
+      if (reset) {
+        console.log('Resetting client state');
+        await childProcessDone(
+          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
+        );
+      }
     }
+
     console.log('Done');
+
+    return harden(storageLocations);
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
@@ -237,10 +249,9 @@ export const makeTasks = ({
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, ready]);
         launcherCp.kill();
         slogFifo.close();
+        await Promise.allSettled([done, ready]);
       },
     );
   };
@@ -471,9 +482,8 @@ export const makeTasks = ({
         });
       },
       async () => {
-        // Avoid unhandled rejections for promises that can no longer be handled
-        Promise.allSettled([done, clientStarted, walletReady]);
         soloCp.kill();
+        await Promise.allSettled([done, clientStarted, walletReady]);
       },
     );
   };

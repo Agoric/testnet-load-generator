@@ -13,6 +13,11 @@ export interface SDKBinaries {
   readonly cosmosHelper: string;
 }
 
+export type SetupTasksResult = {
+  readonly chainStorageLocation?: string;
+  readonly clientStorageLocation?: string;
+};
+
 export type TaskResult = {
   readonly stop: () => void;
   readonly done: Promise<void>;
@@ -22,7 +27,6 @@ export type TaskResult = {
 export type RunKernelInfo = {
   readonly slogLines: AsyncIterable<Buffer>;
   readonly processInfo: import('../helpers/process-info.js').ProcessInfo;
-  readonly storageLocation: string;
 };
 
 export type TaskEventStatus = Record<string, unknown> & {
@@ -66,7 +70,7 @@ export interface TaskBaseOptions {
 
 export interface OrchestratorTasks {
   getEnvInfo(options: TaskBaseOptions): Promise<EnvInfo>;
-  setupTasks(options: TaskBaseOptions): Promise<void>;
+  setupTasks(options: TaskBaseOptions): Promise<SetupTasksResult>;
   runChain(options: TaskBaseOptions): Promise<RunChainResult>;
   runClient(options: TaskBaseOptions): Promise<RunClientResult>;
   runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;

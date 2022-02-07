@@ -347,7 +347,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {unknown} config.loadgenConfig
    * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
-   * @param {boolean} config.saveStorage
+   * @param {string | void} config.chainStorageLocation
    */
   const runStage = async (config) => {
     const {
@@ -356,12 +356,8 @@ const main = async (progName, rawArgs, powers) => {
       loadgenConfig,
       loadgenWindDown,
       withMonitor,
-      saveStorage,
+      chainStorageLocation,
     } = config;
-    /** @type {string | void} */
-    let chainStorageLocation;
-    /** @type {string | void} */
-    let clientStorageLocation;
     currentStageTimeSource = timeSource.shift();
 
     const { out, err } = makeConsole(`stage-${currentStage}`);
@@ -397,7 +393,6 @@ const main = async (progName, rawArgs, powers) => {
       currentStageTimeSource = cpuTimeSource.shift(
         runChainResult.processInfo.startTimestamp,
       );
-      chainStorageLocation = runChainResult.storageLocation;
 
       const slogLinesStream = Readable.from(runChainResult.slogLines);
       const slogLines = new PassThrough({ objectMode: true });
@@ -451,12 +446,18 @@ const main = async (progName, rawArgs, powers) => {
         },
       };
 
-      const chainMonitor = makeChainMonitor(runChainResult, {
-        ...makeConsole('monitor-chain', out, err),
-        logPerfEvent,
-        cpuTimeSource,
-        dirDiskUsage,
-      });
+      const chainMonitor = makeChainMonitor(
+        {
+          processInfo: runChainResult.processInfo,
+          storageLocation: chainStorageLocation,
+        },
+        {
+          ...makeConsole('monitor-chain', out, err),
+          logPerfEvent,
+          cpuTimeSource,
+          dirDiskUsage,
+        },
+      );
       chainMonitor.start(monitorInterval);
 
       const slogMonitorDone = monitorSlog(
@@ -527,8 +528,6 @@ const main = async (progName, rawArgs, powers) => {
         clientExited = true;
         logPerfEvent('client-stopped');
       });
-
-      clientStorageLocation = runClientResult.storageLocation;
 
       const slogOutput = zlib.createGzip({
         level: zlib.constants.Z_BEST_COMPRESSION,
@@ -735,58 +734,22 @@ const main = async (progName, rawArgs, powers) => {
           stats.recordEnd(timeSource.getTime()),
         );
       },
-      async (...stageError) =>
-        aggregateTryFinally(
-          async () => {
-            const suffix = `-stage-${currentStage}`;
-            if (
-              !saveStorage &&
-              (stageError.length === 0 ||
-                /** @type {NodeJS.ErrnoException} */ (stageError[0]).code ===
-                  'ERR_SCRIPT_EXECUTION_INTERRUPTED')
-            ) {
-              return;
-            }
-            const backupResults = await Promise.all(
-              Object.entries({
-                chain: chainStorageLocation,
-                client: clientStorageLocation,
-              }).map(([type, location]) => {
-                if (location != null) {
-                  stageConsole.log(`Saving ${type} storage`);
-                  return backgroundCompressFolder(
-                    location,
-                    suffix,
-                    joinPath(outputDir, `${type}-storage${suffix}.tar.xz`),
-                  );
-                }
-                return undefined;
-              }),
-            );
+      async () => {
+        releaseInterrupt();
 
-            for (const result of backupResults) {
-              if (result) {
-                pendingBackups.push(result.done);
-              }
-            }
-          },
-          async () => {
-            releaseInterrupt();
-
-            logPerfEvent('stage-finish');
-            stageConsole.log('Live blocks stats:', {
-              ...((stats.blocksSummaries && stats.blocksSummaries.onlyLive) || {
-                blockCount: 0,
-              }),
-            });
-            stageConsole.log('Cycles stats:', {
-              ...((stats.cyclesSummaries && stats.cyclesSummaries.all) || {
-                cycleCount: 0,
-              }),
-            });
-            currentStageTimeSource = timeSource;
-          },
-        ),
+        logPerfEvent('stage-finish');
+        stageConsole.log('Live blocks stats:', {
+          ...((stats.blocksSummaries && stats.blocksSummaries.onlyLive) || {
+            blockCount: 0,
+          }),
+        });
+        stageConsole.log('Cycles stats:', {
+          ...((stats.cyclesSummaries && stats.cyclesSummaries.all) || {
+            cycleCount: 0,
+          }),
+        });
+        currentStageTimeSource = timeSource;
+      },
     );
   };
 
@@ -804,6 +767,10 @@ const main = async (progName, rawArgs, powers) => {
 
       const withMonitor = coerceBooleanOption(argv.monitor, true);
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
+      /** @type {string | void} */
+      let chainStorageLocation;
+      /** @type {string | void} */
+      let clientStorageLocation;
       {
         const { orInterrupt, releaseInterrupt } = makeInterrupterKit({
           console: initConsole,
@@ -817,19 +784,20 @@ const main = async (progName, rawArgs, powers) => {
           testnetOrigin,
         };
         logPerfEvent('setup-tasks-start', setupConfig);
-        await aggregateTryFinally(
-          // Do not short-circuit on interrupt, let the spawned setup process terminate
-          async () =>
-            setupTasks({
-              stdout: out,
-              stderr: err,
-              orInterrupt,
-              config: setupConfig,
-            }),
+        ({ chainStorageLocation, clientStorageLocation } =
+          await aggregateTryFinally(
+            // Do not short-circuit on interrupt, let the spawned setup process terminate
+            async () =>
+              setupTasks({
+                stdout: out,
+                stderr: err,
+                orInterrupt,
+                config: setupConfig,
+              }),
 
-          // This will throw if there was any interrupt, and prevent further execution
-          async () => releaseInterrupt(),
-        );
+            // This will throw if there was any interrupt, and prevent further execution
+            async () => releaseInterrupt(),
+          ));
         logPerfEvent('setup-tasks-finish');
       }
 
@@ -977,14 +945,57 @@ const main = async (progName, rawArgs, powers) => {
           : null;
 
         // eslint-disable-next-line no-await-in-loop
-        await runStage({
-          chainOnly,
-          durationConfig: duration,
-          loadgenConfig,
-          loadgenWindDown,
-          withMonitor,
-          saveStorage,
-        });
+        await aggregateTryFinally(
+          () =>
+            runStage({
+              chainOnly,
+              durationConfig: duration,
+              loadgenConfig,
+              loadgenWindDown,
+              withMonitor,
+              chainStorageLocation,
+            }),
+          async (...stageError) => {
+            const suffix = `-stage-${currentStage}`;
+            const hasError =
+              stageError.length > 0 &&
+              /** @type {NodeJS.ErrnoException} */ (stageError[0]).code !==
+                'ERR_SCRIPT_EXECUTION_INTERRUPTED';
+
+            if (!saveStorage && !hasError) {
+              return;
+            }
+
+            /** @type {Record<string, string | void>} */
+            const locations = {};
+            if (withMonitor || hasError) {
+              locations.chain = chainStorageLocation;
+            }
+            if (!chainOnly || hasError) {
+              locations.client = clientStorageLocation;
+            }
+
+            const backupResults = await Promise.all(
+              Object.entries(locations).map(([type, location]) => {
+                if (location != null) {
+                  initConsole.log(`Saving ${type} storage`);
+                  return backgroundCompressFolder(
+                    location,
+                    suffix,
+                    joinPath(outputDir, `${type}-storage${suffix}.tar.xz`),
+                  );
+                }
+                return undefined;
+              }),
+            );
+
+            for (const result of backupResults) {
+              if (result) {
+                pendingBackups.push(result.done);
+              }
+            }
+          },
+        );
       }
 
       runStats.recordEnd(timeSource.getTime());
