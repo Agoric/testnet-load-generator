@@ -43,6 +43,8 @@ const STAKING_DENOM = 'ubld';
 // Need to provision less than 50000 RUN as that's the most we can get from an old sdk genesis
 const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
 
+const VerboseDebugEnv = 'agoric';
+
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientSwingSetReadyRE = /start: swingset running$/;
@@ -129,7 +131,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 120 }) => {
+  const runChain = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -146,12 +148,13 @@ export const makeTasks = ({
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
     chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
+    chainEnv.DEBUG = VerboseDebugEnv;
 
-    const launcherCp = printerSpawn(
-      'agoric',
-      ['start', profileName, '--verbose'],
-      { stdio: ['ignore', 'pipe', 'pipe'], env: chainEnv, detached: true },
-    );
+    const launcherCp = printerSpawn('agoric', ['start', profileName], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: chainEnv,
+      detached: true,
+    });
 
     let stopped = false;
 
@@ -243,7 +246,7 @@ export const makeTasks = ({
   };
 
   /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 60 }) => {
+  const runClient = async ({ stdout, stderr, timeout = 180 }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -385,8 +388,9 @@ export const makeTasks = ({
 
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
+    clientEnv.DEBUG = VerboseDebugEnv;
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start', '--verbose'], {
+    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: clientStateDir,
       env: clientEnv,
