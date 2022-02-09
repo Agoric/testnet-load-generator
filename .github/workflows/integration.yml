@@ -74,4 +74,6 @@ jobs:
           SDK_SRC: ${{ github.workspace }}/agoric-sdk
         run: |
           ./start.sh --no-stage.save-storage --no-reset \
+            --loadgen.vault.interval=12 --loadgen.vault.limit=2 \
+            --loadgen.amm.interval=12 --loadgen.amm.wait=6 --loadgen.amm.limit=2 \
             --stages=3 --stage.duration=4
