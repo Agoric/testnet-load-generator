@@ -351,7 +351,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
-    chainEnv.DEBUG = VerboseDebugEnv;
+    // DO NOT enable any debug mode for a chain which doesn't have debug enabled
+    // That's because currently any DEBUG env set changes the way vats process console
+    // logs, which causes divergences with other nodes
+    // See https://github.com/Agoric/agoric-sdk/issues/4506
+    // chainEnv.DEBUG = VerboseDebugEnv;
 
     const chainCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
