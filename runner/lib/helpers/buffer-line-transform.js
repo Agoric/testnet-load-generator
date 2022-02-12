@@ -1,5 +1,5 @@
 /* global Buffer */
-/* eslint-disable no-underscore-dangle,no-nested-ternary,no-plusplus */
+/* eslint-disable no-underscore-dangle */
 
 import { Transform } from 'stream';
 

@@ -1,4 +1,4 @@
-/* eslint-disable no-undef,no-unused-vars */
+/* global Buffer, BufferEncoding */
 
 /// <reference types="node" />
 

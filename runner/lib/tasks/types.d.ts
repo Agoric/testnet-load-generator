@@ -1,5 +1,4 @@
 /* global Buffer */
-/* eslint-disable no-unused-vars,no-redeclare */
 
 import type { TimeValueS } from '../helpers/time.js';
 

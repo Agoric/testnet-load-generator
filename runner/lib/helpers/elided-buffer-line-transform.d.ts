@@ -1,4 +1,4 @@
-/* eslint-disable no-undef,no-unused-vars */
+/* global Buffer */
 
 import BufferLineTransform from './buffer-line-transform.js';
 import type { BufferLineTransformOptions } from './buffer-line-transform.js';

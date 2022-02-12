@@ -1,5 +1,3 @@
-/* eslint-disable prefer-object-spread */
-
 import {
   makeRawStats,
   cloneData,

@@ -1,5 +1,3 @@
-/* eslint-disable prefer-object-spread */
-
 import { makeBlockStatsSummary } from './blocks.js';
 import { makeCycleStatsSummary } from './cycles.js';
 import {
