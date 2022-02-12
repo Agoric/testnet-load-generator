@@ -1,4 +1,4 @@
-# See here for image contents: https://github.com/microsoft/vscode-dev-containers/blob/v0.209.3/containers/typescript-node/.devcontainer/Dockerfile
+# See here for image contents: https://github.com/microsoft/vscode-dev-containers/blob/v0.222.0/containers/typescript-node/.devcontainer/Dockerfile
 
 # [Choice] Node.js version (use -bullseye variants on local arm64/Apple Silicon): 16, 14, 12, 16-bullseye, 14-bullseye, 12-bullseye, 16-buster, 14-buster, 12-buster
 ARG VARIANT=16-bullseye
@@ -20,41 +20,41 @@ FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:${VARIANT} as dev-en
 
 ENV PATH /usr/local/go/bin:$PATH
 
-ENV GOLANG_VERSION 1.17.4
+ENV GOLANG_VERSION 1.17.7
 
 RUN set -eux; \
 	arch="$(dpkg --print-architecture)"; arch="${arch##*-}"; \
 	url=; \
 	case "$arch" in \
 		'amd64') \
-			url='https://dl.google.com/go/go1.17.4.linux-amd64.tar.gz'; \
-			sha256='adab2483f644e2f8a10ae93122f0018cef525ca48d0b8764dae87cb5f4fd4206'; \
+			url='https://dl.google.com/go/go1.17.7.linux-amd64.tar.gz'; \
+			sha256='02b111284bedbfa35a7e5b74a06082d18632eff824fd144312f6063943d49259'; \
 			;; \
 		'armel') \
 			export GOARCH='arm' GOARM='5' GOOS='linux'; \
 			;; \
 		'armhf') \
-			url='https://dl.google.com/go/go1.17.4.linux-armv6l.tar.gz'; \
-			sha256='f34d25f818007345b716b316908115ba462f3f0dbd4343073020b544b4ae2320'; \
+			url='https://dl.google.com/go/go1.17.7.linux-armv6l.tar.gz'; \
+			sha256='874774f078b182fa21ffcb3878467eb5cb7e78bbffa6343ea5f0fbe47983433b'; \
 			;; \
 		'arm64') \
-			url='https://dl.google.com/go/go1.17.4.linux-arm64.tar.gz'; \
-			sha256='617a46bd083e59877bb5680998571b3ddd4f6dcdaf9f8bf65ad4edc8f3eafb13'; \
+			url='https://dl.google.com/go/go1.17.7.linux-arm64.tar.gz'; \
+			sha256='a5aa1ed17d45ee1d58b4a4099b12f8942acbd1dd09b2e9a6abb1c4898043c5f5'; \
 			;; \
 		'i386') \
-			url='https://dl.google.com/go/go1.17.4.linux-386.tar.gz'; \
-			sha256='276bda8e8efa59482b0be87394566e02ff7a860b65e8b6ccc90c026dbcab1f74'; \
+			url='https://dl.google.com/go/go1.17.7.linux-386.tar.gz'; \
+			sha256='5d5472672a2e0252fe31f4ec30583d9f2b320f9b9296eda430f03cbc848400ce'; \
 			;; \
 		'mips64el') \
 			export GOARCH='mips64le' GOOS='linux'; \
 			;; \
 		'ppc64el') \
-			url='https://dl.google.com/go/go1.17.4.linux-ppc64le.tar.gz'; \
-			sha256='d185567480d9e335d4d9274804ef9fa796b01e53c7290a744871d0c0fac2f248'; \
+			url='https://dl.google.com/go/go1.17.7.linux-ppc64le.tar.gz'; \
+			sha256='2262fdee9147eb61fd1e719cfd19b9c035009c14890de02b5a77071b0a577405'; \
 			;; \
 		's390x') \
-			url='https://dl.google.com/go/go1.17.4.linux-s390x.tar.gz'; \
-			sha256='63e4e2065aa3139b4d9a203fa7e39a810f67e9f4753492726d485c17c37cd817'; \
+			url='https://dl.google.com/go/go1.17.7.linux-s390x.tar.gz'; \
+			sha256='24dd117581d592f52b4cf45d75ae68a6a1e42691a8671a2d3c2ddd739894a1e4'; \
 			;; \
 		*) echo >&2 "error: unsupported architecture '$arch' (likely packaging update needed)"; exit 1 ;; \
 	esac; \
@@ -62,8 +62,8 @@ RUN set -eux; \
 	if [ -z "$url" ]; then \
 # https://github.com/golang/go/issues/38536#issuecomment-616897960
 		build=1; \
-		url='https://dl.google.com/go/go1.17.4.src.tar.gz'; \
-		sha256='4bef3699381ef09e075628504187416565d710660fec65b057edf1ceb187fc4b'; \
+		url='https://dl.google.com/go/go1.17.7.src.tar.gz'; \
+		sha256='c108cd33b73b1911a02b697741df3dea43e01a5c4e08e409e8b3a0e3745d2b4d'; \
 		echo >&2; \
 		echo >&2 "warning: current architecture ($arch) does not have a compatible Go binary release; will be building from source"; \
 		echo >&2; \
@@ -127,7 +127,7 @@ RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 #WORKDIR $GOPATH
 
 ##############################
-# From https://github.com/microsoft/vscode-dev-containers/blob/v0.209.3/containers/go/.devcontainer/base.Dockerfile
+# From https://github.com/microsoft/vscode-dev-containers/blob/v0.222.0/containers/go/.devcontainer/base.Dockerfile
 
 COPY library-scripts/go-debian.sh /tmp/library-scripts/
 
