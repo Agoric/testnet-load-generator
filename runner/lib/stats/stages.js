@@ -30,6 +30,7 @@ import {
  *   'lastBlockHeight' |
  *   'startedAt' |
  *   'readyAt' |
+ *   'shutdownAt' |
  *   'endedAt' |
  *   'chainStartedAt' |
  *   'chainReadyAt' |
@@ -50,6 +51,7 @@ const rawStageStatsInit = {
   },
   startedAt: null,
   readyAt: null,
+  shutdownAt: null,
   endedAt: null,
   chainStartedAt: null,
   chainReadyAt: null,
@@ -165,8 +167,13 @@ export const getBlocksSummaries = (allBlocks) => {
     String(liveMode),
   );
 
+  const hasShutdownInfo = allBlocks[0].beforeShutdown != null;
+  const last100BeforeShutdown = allBlocks
+    .filter(({ beforeShutdown }) => !hasShutdownInfo || beforeShutdown)
+    .slice(-100);
+
   setBlocksSummary('all', generateBlocksSummary(allBlocks));
-  setBlocksSummary('last100', generateBlocksSummary(allBlocks.slice(-100)));
+  setBlocksSummary('last100', generateBlocksSummary(last100BeforeShutdown));
   setBlocksSummary('onlyLive', generateBlocksSummary(blocksByLiveMode.true));
   setBlocksSummary(
     'onlyCatchup',
@@ -272,6 +279,7 @@ export const makeStageStats = (data) => {
       {
         recordStart: privateSetters.startedAt,
         recordReady: privateSetters.readyAt,
+        recordShutdown: privateSetters.shutdownAt,
         recordEnd,
         recordChainStart: privateSetters.chainStartedAt,
         recordChainReady: privateSetters.chainReadyAt,

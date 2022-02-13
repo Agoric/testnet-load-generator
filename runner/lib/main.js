@@ -701,6 +701,7 @@ const main = async (progName, rawArgs, powers) => {
       stats.recordReady(timeSource.getTime());
       logPerfEvent('stage-ready');
       await nextStep(sleeping).finally(sleepCancel.resolve);
+      stats.recordShutdown(timeSource.getTime());
       logPerfEvent('stage-shutdown');
     };
 
