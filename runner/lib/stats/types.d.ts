@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars,no-redeclare */
-
 import type { TimeValueS } from '../helpers/time.js';
 
 export interface LogPerfEvent {
@@ -29,6 +27,7 @@ export interface BlockStats extends BlockStatsInitData {
   recordSlogLine(): void;
   recordDelivery(data: BlockDeliveryData): void;
   readonly liveMode: boolean | undefined;
+  readonly beforeShutdown: boolean | undefined;
   readonly beginAt: TimeValueS | undefined;
   readonly endStartAt: TimeValueS | undefined;
   readonly endFinishAt: TimeValueS | undefined;
@@ -120,6 +119,7 @@ export type StageBlocksSummaryType =
 export interface StageStats extends StageStatsInitData {
   recordStart(time: TimeValueS): void;
   recordReady(time: TimeValueS): void;
+  recordShutdown(time: TimeValueS): void;
   recordEnd(time: TimeValueS): void;
   recordChainStart(time: TimeValueS): void;
   recordChainReady(time: TimeValueS): void;
@@ -143,6 +143,7 @@ export interface StageStats extends StageStatsInitData {
   readonly lastBlockHeight: number | undefined;
   readonly startedAt: TimeValueS | undefined;
   readonly readyAt: TimeValueS | undefined;
+  readonly shutdownAt: TimeValueS | undefined;
   readonly endedAt: TimeValueS | undefined;
   readonly readyDuration: number | undefined;
   readonly duration: number | undefined;

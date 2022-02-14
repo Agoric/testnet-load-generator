@@ -1,5 +1,4 @@
 /* global setInterval clearInterval setTimeout clearTimeout */
-/* eslint-disable no-continue */
 
 import { performance } from 'perf_hooks';
 import http from 'http';

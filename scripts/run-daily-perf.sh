@@ -14,4 +14,4 @@ next_revision() {
 
 . $(dirname "$(readlink -f -- "$0")")/common-queue.sh
 
-start "daily-perf" next_revision "$@"
+start "daily-perf" next_revision --stages=12 --stage.duration=120 "$@"

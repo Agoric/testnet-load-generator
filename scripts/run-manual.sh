@@ -16,8 +16,10 @@ next_revision() {
 INPUT=$1
 shift
 
+DEFAULT_CONFIG="--stages=6 --stage.duration=30"
+
 if [ "x$INPUT" != "x-" ]; then
-  start "manual" next_revision "$@" 3<$INPUT
+  start "manual" next_revision $DEFAULT_CONFIG "$@" 3<$INPUT
 else
-  start "manual" next_revision "$@" 3<&0
+  start "manual" next_revision $DEFAULT_CONFIG "$@" 3<&0
 fi

@@ -1,5 +1,4 @@
 /* global Buffer */
-/* eslint-disable no-unused-vars,no-redeclare */
 
 import type { ChildProcessByStdio } from 'child_process';
 import type { Readable } from 'stream';

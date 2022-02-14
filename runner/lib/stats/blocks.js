@@ -1,5 +1,3 @@
-/* eslint-disable prefer-object-spread */
-
 import {
   makeRawStats,
   cloneData,
@@ -14,6 +12,7 @@ import {
 /**
  * @typedef {|
  *   'liveMode' |
+ *   'beforeShutdown' |
  *   'beginAt' |
  *   'endStartAt' |
  *   'endFinishAt' |
@@ -37,6 +36,7 @@ import {
 /** @type {import('./helpers.js').RawStatInit<BlockStats,RawBlockStatsProps>} */
 const rawBlockStatsInit = {
   liveMode: null,
+  beforeShutdown: null,
   beginAt: null,
   endStartAt: null,
   endFinishAt: null,
@@ -165,6 +165,7 @@ export const makeBlockStats = (data, stageStats) => {
     privateSetters.slogLines(0);
     if (stageStats) {
       privateSetters.liveMode(stageStats.chainReadyAt != null);
+      privateSetters.beforeShutdown(stageStats.shutdownAt == null);
     }
   };
 

@@ -1,4 +1,4 @@
-/* eslint-disable no-unused-vars,no-redeclare */
+/* eslint-disable no-redeclare */
 
 export type RawStatInitDescDefault<T> = {
   readonly default: T;

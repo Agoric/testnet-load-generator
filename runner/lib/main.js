@@ -46,7 +46,7 @@ const defaultLoadgenConfig = {
   amm: { wait: 6, interval: 12, limit: 10 },
 };
 const defaultMonitorIntervalMinutes = 5;
-const defaultStageDurationMinutes = 6 * 60;
+const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
 
 /**
@@ -701,6 +701,7 @@ const main = async (progName, rawArgs, powers) => {
       stats.recordReady(timeSource.getTime());
       logPerfEvent('stage-ready');
       await nextStep(sleeping).finally(sleepCancel.resolve);
+      stats.recordShutdown(timeSource.getTime());
       logPerfEvent('stage-shutdown');
     };
 
