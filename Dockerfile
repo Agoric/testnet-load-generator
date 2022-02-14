@@ -166,4 +166,13 @@ RUN mkdir -p $SDK_SRC $OUTPUT_DIR /home/node/.cache/yarn /go/pkg/mod && \
 
 USER $USER_UID
 
+# Expose the Prometheus metrics ports so that OpenTelemetry collector can detect
+# and scrape them
+# ag-chain-cosmos is using 9464 for Prometheus metrics
+EXPOSE 9464
+# ag-solo is using 9465 for Prometheus metrics
+EXPOSE 9465
+# cosmos-sdk is using 26660 for Prometheus metrics
+EXPOSE 26660
+
 ENTRYPOINT ["/tini", "--", "/app/start.sh", "--no-reset", "--test-data.docker"]

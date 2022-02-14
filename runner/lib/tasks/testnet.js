@@ -351,6 +351,8 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
+    chainEnv.OTEL_EXPORTER_PROMETHEUS_PORT = '9464';
+
     // DO NOT enable any debug mode for a chain which doesn't have debug enabled
     // That's because currently any DEBUG env set changes the way vats process console
     // logs, which causes divergences with other nodes
@@ -508,6 +510,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
     clientEnv.DEBUG = VerboseDebugEnv;
+    clientEnv.OTEL_EXPORTER_PROMETHEUS_PORT = '9465';
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],

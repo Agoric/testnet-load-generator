@@ -189,6 +189,10 @@ export const makeTasks = ({
         );
 
         await PromiseAllOrErrors([outputParsed, launcherDone]);
+
+        // TODO(mhofman): do `agoric start --no-restart`, then `agoric set-defaults
+        // --export-metrics ag-chain-cosmos <configdir>` where configdir is like
+        // `~/.agoric/config`, followed by `ag-chain-cosmos start --home=<homedir>`.
       }
     }
 
@@ -226,6 +230,7 @@ export const makeTasks = ({
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
     chainEnv.DEBUG = VerboseDebugEnv;
+    chainEnv.OTEL_EXPORTER_PROMETHEUS_PORT = '9464';
 
     const chainCp = printerSpawn(
       sdkBinaries.cosmosChain,
@@ -461,6 +466,7 @@ export const makeTasks = ({
     const clientEnv = Object.create(process.env);
     clientEnv.SOLO_SLOGFILE = slogFifo.path;
     clientEnv.DEBUG = VerboseDebugEnv;
+    clientEnv.OTEL_EXPORTER_PROMETHEUS_PORT = '9465';
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
