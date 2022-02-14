@@ -169,20 +169,13 @@ export const makeTasks = ({
     });
 
     let stopped = false;
+    const ignoreKill = {
+      signal: false,
+    };
 
-    // Chain exit with code 98 when killed
     const chainDone = childProcessDone(launcherCp, {
-      ignoreExitCode: true,
-    }).then((code) => {
-      const wasStopped = stopped;
-      stopped = true;
-
-      if (code !== 0 && (!wasStopped || code !== 98)) {
-        return Promise.reject(
-          new Error(`Chain exited with non-zero code: ${code}`),
-        );
-      }
-      return 0;
+      ignoreKill,
+      killedExitCode: 98,
     });
 
     chainDone
@@ -191,6 +184,7 @@ export const makeTasks = ({
         (error) => console.error('Chain exited with error', error),
       )
       .finally(() => {
+        stopped = true;
         if (slogFifo.pending) {
           slogLines.end();
           slogFifo.close();
@@ -235,6 +229,7 @@ export const makeTasks = ({
         const stop = () => {
           if (!stopped) {
             stopped = true;
+            ignoreKill.signal = true;
             process.kill(processInfo.pid);
           }
         };
@@ -414,7 +409,10 @@ export const makeTasks = ({
     };
 
     const soloCpReady = childProcessReady(soloCp);
-    const clientDone = childProcessDone(soloCp, { ignoreKill });
+    const clientDone = childProcessDone(soloCp, {
+      ignoreKill,
+      killedExitCode: 98,
+    });
 
     clientDone
       .then(

@@ -48,16 +48,16 @@ export const makeLoadgenTask = ({ spawn }) => {
       detached: true,
     });
 
-    let stopped = false;
+    const ignoreKill = {
+      signal: false,
+    };
+
     const stop = () => {
-      stopped = true;
+      ignoreKill.signal = true;
       launcherCp.kill();
     };
 
-    // Load gen exit with non-zero code when killed
-    const loadgenDone = childProcessDone(launcherCp).catch((err) =>
-      stopped ? 0 : Promise.reject(err),
-    );
+    const loadgenDone = childProcessDone(launcherCp, { ignoreKill });
 
     loadgenDone.then(
       () => console.log('Load gen app stopped successfully'),

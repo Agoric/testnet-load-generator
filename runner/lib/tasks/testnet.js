@@ -364,22 +364,22 @@ ${chainName} chain does not yet know of address ${soloAddr}
     });
 
     let stopped = false;
+    /** @type {{signal: undefined | 'SIGTERM'}} */
+    const ignoreKill = {
+      signal: undefined,
+    };
 
-    // Chain exit with code 98 when killed
     const chainDone = childProcessDone(chainCp, {
-      ignoreExitCode: true,
-    }).then((code) => {
-      if (code !== 0 && (!stopped || code !== 98)) {
-        return Promise.reject(
-          new Error(`Chain exited with non-zero code: ${code}`),
-        );
-      }
-      return 0;
+      ignoreKill,
+      killedExitCode: 98,
     });
 
     const stop = () => {
-      stopped = true;
-      chainCp.kill();
+      if (!stopped) {
+        stopped = true;
+        ignoreKill.signal = 'SIGTERM';
+        chainCp.kill(ignoreKill.signal);
+      }
     };
 
     chainDone
@@ -388,6 +388,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
         (error) => console.error('Chain exited with error', error),
       )
       .finally(() => {
+        stopped = true;
         if (slogFifo.pending) {
           slogLines.end();
           slogFifo.close();
@@ -521,7 +522,10 @@ ${chainName} chain does not yet know of address ${soloAddr}
     };
 
     const soloCpReady = childProcessReady(soloCp);
-    const clientDone = childProcessDone(soloCp, { ignoreKill });
+    const clientDone = childProcessDone(soloCp, {
+      ignoreKill,
+      killedExitCode: 98,
+    });
 
     clientDone
       .then(

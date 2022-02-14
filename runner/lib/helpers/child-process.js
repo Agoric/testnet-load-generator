@@ -9,11 +9,12 @@ import { asBuffer } from './stream.js';
  * @param {boolean} [options.ignoreExitCode] do not error on non-zero exit codes
  * @param {{signal: undefined | boolean | NodeJS.Signals} | boolean} [options.ignoreKill] do not error on null exit code
  *      If the value is an object, it's `signal`property can be updated and will be checked on exit
+ * @param {number} [options.killedExitCode] Exit code to consider like `null` if killed
  * @returns {Promise<number>} The exit code of the process
  */
 export const childProcessDone = (
   childProcess,
-  { ignoreExitCode = false, ignoreKill = false } = {},
+  { ignoreExitCode = false, ignoreKill = false, killedExitCode } = {},
 ) =>
   new Promise((resolve, reject) => {
     /**
@@ -21,12 +22,23 @@ export const childProcessDone = (
      * @param {NodeJS.Signals | null} signal
      */
     const onExit = (code, signal) => {
+      // When code is non-`null`, signal is always `null` even if the process got killed
+
       if (
         code === null &&
         ignoreKill &&
         (ignoreKill === true ||
           ignoreKill.signal === true ||
           ignoreKill.signal === signal)
+      ) {
+        code = 0;
+      }
+
+      if (
+        killedExitCode &&
+        code === killedExitCode &&
+        ignoreKill &&
+        (ignoreKill === true || ignoreKill.signal)
       ) {
         code = 0;
       }
