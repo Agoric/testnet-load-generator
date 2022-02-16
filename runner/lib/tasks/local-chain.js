@@ -1,5 +1,6 @@
 /* global process */
 
+import { join as joinPath } from 'path';
 import { promisify } from 'util';
 import { pipeline as pipelineCallback } from 'stream';
 
@@ -46,6 +47,7 @@ const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
 const VerboseDebugEnv = 'agoric';
 
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
+const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 const clientSwingSetReadyRE = /start: swingset running$/;
 const clientWalletReadyRE =
@@ -124,6 +126,70 @@ export const makeTasks = ({
           printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
         );
       }
+
+      const configDir = joinPath(chainStateDir, 'config');
+      const genesisPath = joinPath(configDir, 'genesis.json');
+
+      if (!(await fsExists(genesisPath))) {
+        console.log('Provisioning chain');
+
+        const chainEnv = Object.create(process.env);
+        chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
+
+        const launcherCp = printerSpawn(
+          'agoric',
+          ['start', profileName, '--no-restart'],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: chainEnv,
+          },
+        );
+
+        const ignoreKill = {
+          signal: false,
+        };
+
+        const launcherDone = childProcessDone(launcherCp, {
+          ignoreKill,
+          killedExitCode: 98,
+        });
+
+        launcherDone.then(
+          () => console.log('Chain setup exited successfully'),
+          (error) => console.error('Chain setup exited with error', error),
+        );
+
+        const launcherCombinedElidedOutput = combineAndPipe(
+          launcherCp.stdio,
+          stdio,
+        );
+
+        const [chainStarted, outputParsed] = whenStreamSteps(
+          launcherCombinedElidedOutput,
+          [{ matcher: chainStartRE }],
+        );
+
+        await chainStarted.then(
+          async () => {
+            // agoric-cli does not support `--no-restart`, kill the chain
+            console.log('Stopping chain setup');
+            const launcherInfo = await getProcessInfo(
+              /** @type {number} */ (launcherCp.pid),
+            );
+            const processInfo = await getChildMatchingArgv(
+              launcherInfo,
+              chainArgvMatcher,
+            );
+            ignoreKill.signal = true;
+            process.kill(processInfo.pid);
+          },
+          () => {
+            // agoric-cli supports `--no-restart`, so output is parsed without outputting step
+          },
+        );
+
+        await PromiseAllOrErrors([outputParsed, launcherDone]);
+      }
     }
 
     if (chainOnly !== true) {
@@ -159,24 +225,36 @@ export const makeTasks = ({
 
     const chainEnv = Object.create(process.env);
     chainEnv.SLOGFILE = slogFifo.path;
-    chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
     chainEnv.DEBUG = VerboseDebugEnv;
 
-    const launcherCp = printerSpawn('agoric', ['start', profileName], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: chainEnv,
-      detached: true,
-    });
+    const chainCp = printerSpawn(
+      sdkBinaries.cosmosChain,
+      ['start', `--home=${chainStateDir}`],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: chainEnv,
+        detached: true,
+      },
+    );
 
     let stopped = false;
+    /** @type {{signal: undefined | 'SIGTERM'}} */
     const ignoreKill = {
-      signal: false,
+      signal: undefined,
     };
 
-    const chainDone = childProcessDone(launcherCp, {
+    const chainDone = childProcessDone(chainCp, {
       ignoreKill,
       killedExitCode: 98,
     });
+
+    const stop = () => {
+      if (!stopped) {
+        stopped = true;
+        ignoreKill.signal = 'SIGTERM';
+        chainCp.kill(ignoreKill.signal);
+      }
+    };
 
     chainDone
       .then(
@@ -191,14 +269,11 @@ export const makeTasks = ({
         }
       });
 
-    const launcherCombinedElidedOutput = combineAndPipe(
-      launcherCp.stdio,
-      stdio,
-    );
-    const [chainStarted, firstBlock, outputParsed] = whenStreamSteps(
-      launcherCombinedElidedOutput,
+    const chainCombinedElidedOutput = combineAndPipe(chainCp.stdio, stdio);
+    const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
+      chainCombinedElidedOutput,
       [
-        { matcher: chainStartRE },
+        { matcher: chainSwingSetLaunchRE },
         { matcher: chainBlockBeginRE, resultIndex: -1 },
       ],
       {
@@ -217,22 +292,13 @@ export const makeTasks = ({
     return tryTimeout(
       timeout * 1000,
       async () => {
-        await chainStarted;
+        await swingSetLaunched;
 
         console.log('Chain running');
 
         const processInfo = await getProcessInfo(
-          /** @type {number} */ (launcherCp.pid),
-        ).then((launcherInfo) =>
-          getChildMatchingArgv(launcherInfo, chainArgvMatcher),
+          /** @type {number} */ (chainCp.pid),
         );
-        const stop = () => {
-          if (!stopped) {
-            stopped = true;
-            ignoreKill.signal = true;
-            process.kill(processInfo.pid);
-          }
-        };
 
         return harden({
           stop,
@@ -244,7 +310,7 @@ export const makeTasks = ({
         });
       },
       async () => {
-        launcherCp.kill();
+        chainCp.kill();
         slogFifo.close();
         await Promise.allSettled([done, ready]);
       },
