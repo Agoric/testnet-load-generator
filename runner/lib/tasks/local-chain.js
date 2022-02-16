@@ -190,9 +190,13 @@ export const makeTasks = ({
 
         await PromiseAllOrErrors([outputParsed, launcherDone]);
 
-        // TODO(mhofman): do `agoric start --no-restart`, then `agoric set-defaults
-        // --export-metrics ag-chain-cosmos <configdir>` where configdir is like
-        // `~/.agoric/config`, followed by `ag-chain-cosmos start --home=<homedir>`.
+        await childProcessDone(
+          printerSpawn(
+            'agoric',
+            ['set-defaults', '--export-metrics', 'ag-chain-cosmos', configDir],
+            { stdio },
+          ),
+        );
       }
     }
 
