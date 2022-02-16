@@ -108,6 +108,9 @@ export const combineAndPipe = (stdioIn, stdioOut, elide = true) => {
   };
   outLines.once('end', sourceEnd);
   errLines.once('end', sourceEnd);
+  combinedOutput.once('finish', () => {
+    combinedOutput.destroy();
+  });
   combinedOutput.once('close', () => {
     outLines.unpipe(combinedOutput);
     errLines.unpipe(combinedOutput);
