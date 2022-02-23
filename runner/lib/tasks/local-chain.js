@@ -117,6 +117,30 @@ export const makeTasks = ({
 
     console.log('Starting');
 
+    if (chainOnly !== true) {
+      storageLocations.clientStorageLocation = clientStateDir;
+
+      if (reset) {
+        console.log('Resetting client state');
+        await childProcessDone(
+          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
+        );
+      }
+
+      // Initialize the solo directory and key.
+      if (!(await fsExists(clientStateDir))) {
+        await childProcessDone(
+          printerSpawn(
+            sdkBinaries.agSolo,
+            ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
+            {
+              stdio,
+            },
+          ),
+        );
+      }
+    }
+
     if (withMonitor !== false) {
       storageLocations.chainStorageLocation = chainStateDir;
 
@@ -129,12 +153,20 @@ export const makeTasks = ({
 
       const configDir = joinPath(chainStateDir, 'config');
       const genesisPath = joinPath(configDir, 'genesis.json');
+      const soloAddrPath = joinPath(clientStateDir, 'ag-cosmos-helper-address');
 
       if (!(await fsExists(genesisPath))) {
         console.log('Provisioning chain');
 
         const chainEnv = Object.create(process.env);
         chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
+
+        if (await fsExists(soloAddrPath)) {
+          const soloAddr = (await fs.readFile(soloAddrPath, 'utf-8')).trimEnd();
+          chainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
+          chainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG =
+            '@agoric/vats/decentral-loadgen-config.json';
+        }
 
         const launcherCp = printerSpawn(
           'agoric',
@@ -189,17 +221,6 @@ export const makeTasks = ({
         );
 
         await PromiseAllOrErrors([outputParsed, launcherDone]);
-      }
-    }
-
-    if (chainOnly !== true) {
-      storageLocations.clientStorageLocation = clientStateDir;
-
-      if (reset) {
-        console.log('Resetting client state');
-        await childProcessDone(
-          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
-        );
       }
     }
 
@@ -331,19 +352,6 @@ export const makeTasks = ({
 
     if (!(await fsExists(gciFile))) {
       throw new Error('Chain not running');
-    }
-
-    // Initialize the solo directory and key.
-    if (!(await fsExists(clientStateDir))) {
-      await childProcessDone(
-        printerSpawn(
-          sdkBinaries.agSolo,
-          ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
-          {
-            stdio,
-          },
-        ),
-      );
     }
 
     const rpcAddr = `localhost:${CHAIN_PORT}`;
