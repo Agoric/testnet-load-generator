@@ -15,6 +15,7 @@ import {
 import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
 import { makePromiseKit } from './sdk/promise-kit.js';
+import { resolve as importMetaResolve } from './helpers/module.js';
 
 import {
   sleep,
@@ -47,6 +48,9 @@ const defaultLoadgenConfig = {
 const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
+
+const defaultLoadgenBootstrapConfig =
+  '@agoric/vats/decentral-loadgen-config.json';
 
 /**
  * @template {Record<string, unknown> | undefined} T
@@ -159,14 +163,13 @@ const getSDKBinaries = async () => {
     const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
     return cliHelpers.getSDKBinaries();
   } catch (err) {
-    const { resolve } = await import('./helpers/module.js');
     // Older SDKs were only at lib
-    const cliHelpersUrl = await resolve(libHelpers, import.meta.url);
+    const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
     // Prefer CJS as some versions have both and must use .cjs for RESM
     let agSolo = new URL('../../solo/src/entrypoint.cjs', cliHelpersUrl)
       .pathname;
     if (
-      !(await resolve(agSolo, import.meta.url).then(
+      !(await importMetaResolve(agSolo, import.meta.url).then(
         () => true,
         () => false,
       ))
@@ -292,7 +295,14 @@ const main = async (progName, rawArgs, powers) => {
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
   let currentStageTimeSource = timeSource;
 
-  const sdkBinaries = await getSDKBinaries();
+  const [sdkBinaries, loadgenBootstrapConfig] = await Promise.all([
+    getSDKBinaries(),
+    importMetaResolve(defaultLoadgenBootstrapConfig, import.meta.url).catch(
+      () => {
+        topConsole.warn('Loadgen bootstrap config missing, using default.');
+      },
+    ),
+  ]);
 
   const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
     {
@@ -301,6 +311,7 @@ const main = async (progName, rawArgs, powers) => {
       makeFIFO,
       getProcessInfo,
       sdkBinaries,
+      loadgenBootstrapConfig,
     },
   );
 

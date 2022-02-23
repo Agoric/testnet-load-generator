@@ -35,7 +35,7 @@ const keysDir = '_agstate/keys';
 const profileName = 'local-chain';
 const CLIENT_PORT = 8000;
 const CHAIN_PORT = 26657;
-const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
+const clientStateDir = `${stateDir}/${'local-solo'}-${CLIENT_PORT}`;
 const chainStateDir = `${stateDir}/${profileName}-${CHAIN_PORT}`;
 const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
@@ -69,6 +69,7 @@ const chainArgvMatcher = (argv) =>
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {string | void} powers.loadgenBootstrapConfig
  * @returns {import("./types.js").OrchestratorTasks}
  */
 export const makeTasks = ({
@@ -77,6 +78,7 @@ export const makeTasks = ({
   makeFIFO,
   getProcessInfo,
   sdkBinaries,
+  loadgenBootstrapConfig,
 }) => {
   const spawn = makeSpawnWithPipedStream({
     spawn: cpSpawn,
@@ -95,6 +97,9 @@ export const makeTasks = ({
       throw e;
     }
   };
+
+  /** @type {Record<string, string>} */
+  const additionChainEnv = {};
 
   /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean}}} options */
   const setupTasks = async ({
@@ -117,6 +122,30 @@ export const makeTasks = ({
 
     console.log('Starting');
 
+    if (chainOnly !== true) {
+      storageLocations.clientStorageLocation = clientStateDir;
+
+      if (reset) {
+        console.log('Resetting client state');
+        await childProcessDone(
+          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
+        );
+      }
+
+      // Initialize the solo directory and key.
+      if (!(await fsExists(clientStateDir))) {
+        await childProcessDone(
+          printerSpawn(
+            sdkBinaries.agSolo,
+            ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
+            {
+              stdio,
+            },
+          ),
+        );
+      }
+    }
+
     if (withMonitor !== false) {
       storageLocations.chainStorageLocation = chainStateDir;
 
@@ -129,12 +158,21 @@ export const makeTasks = ({
 
       const configDir = joinPath(chainStateDir, 'config');
       const genesisPath = joinPath(configDir, 'genesis.json');
+      const soloAddrPath = joinPath(clientStateDir, 'ag-cosmos-helper-address');
 
       if (!(await fsExists(genesisPath))) {
         console.log('Provisioning chain');
 
-        const chainEnv = Object.create(process.env);
-        chainEnv.CHAIN_PORT = `${CHAIN_PORT}`;
+        if (loadgenBootstrapConfig && (await fsExists(soloAddrPath))) {
+          const soloAddr = (await fs.readFile(soloAddrPath, 'utf-8')).trimEnd();
+          additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
+          additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
+        }
+
+        const chainEnv = Object.assign(Object.create(process.env), {
+          ...additionChainEnv,
+          CHAIN_PORT: `${CHAIN_PORT}`,
+        });
 
         const launcherCp = printerSpawn(
           'agoric',
@@ -192,17 +230,6 @@ export const makeTasks = ({
       }
     }
 
-    if (chainOnly !== true) {
-      storageLocations.clientStorageLocation = clientStateDir;
-
-      if (reset) {
-        console.log('Resetting client state');
-        await childProcessDone(
-          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
-        );
-      }
-    }
-
     console.log('Done');
 
     return harden(storageLocations);
@@ -223,9 +250,11 @@ export const makeTasks = ({
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
-    const chainEnv = Object.create(process.env);
-    chainEnv.SLOGFILE = slogFifo.path;
-    chainEnv.DEBUG = VerboseDebugEnv;
+    const chainEnv = Object.assign(Object.create(process.env), {
+      ...additionChainEnv,
+      SLOGFILE: slogFifo.path,
+      DEBUG: VerboseDebugEnv,
+    });
 
     const chainCp = printerSpawn(
       sdkBinaries.cosmosChain,
@@ -331,19 +360,6 @@ export const makeTasks = ({
 
     if (!(await fsExists(gciFile))) {
       throw new Error('Chain not running');
-    }
-
-    // Initialize the solo directory and key.
-    if (!(await fsExists(clientStateDir))) {
-      await childProcessDone(
-        printerSpawn(
-          sdkBinaries.agSolo,
-          ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
-          {
-            stdio,
-          },
-        ),
-      );
     }
 
     const rpcAddr = `localhost:${CHAIN_PORT}`;
