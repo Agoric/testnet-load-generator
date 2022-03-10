@@ -44,7 +44,7 @@ const STAKING_DENOM = 'ubld';
 // Need to provision less than 50000 RUN as that's the most we can get from an old sdk genesis
 const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
 
-const VerboseDebugEnv = 'agoric';
+const VerboseDebugEnv = 'agoric,SwingSet:vat,SwingSet:ls';
 
 const chainStartRE = /ag-chain-cosmos start --home=(.*)$/;
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
