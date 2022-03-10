@@ -178,7 +178,7 @@
   resolved "https://registry.yarnpkg.com/@agoric/nat/-/nat-4.1.0.tgz#102794e033ffc183a20b0f86031a2e76d204b9f6"
   integrity sha512-2oMoh3DMn0Fx8HChPPiH8irBNdT/33ttxAZJohhd3nU3gyBRQ1u+eEoOQWfSkrE6M02iMkQM7GE9MzGmjQ6bHg==
 
-"@agoric/notifier@^0.3.32":
+"@agoric/notifier@*", "@agoric/notifier@^0.3.32":
   version "0.3.32"
   resolved "https://registry.yarnpkg.com/@agoric/notifier/-/notifier-0.3.32.tgz#62be82f43564ec3ab986e6ea1c7d2021adbb5d51"
   integrity sha512-Z/1Azmis9V7pxSlMBCuJE7fXA0zXLc30S0tkJShp9WpyX0wZduLh6eeBqF1HS1JwE793BawIY1nvRNvGpJkr8Q==
