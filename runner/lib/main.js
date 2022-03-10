@@ -207,7 +207,11 @@ const main = async (progName, rawArgs, powers) => {
   const { stdout, stderr, fs, fsStream, spawn, tmpDir } = powers;
 
   // TODO: switch to full yargs for documenting output
-  const argv = yargsParser(rawArgs);
+  const argv = yargsParser(rawArgs, {
+    configuration: {
+      'duplicate-arguments-array': false,
+    },
+  });
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
