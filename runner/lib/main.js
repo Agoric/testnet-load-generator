@@ -44,6 +44,7 @@ const finished = promisify(finishedCallback);
 
 const defaultLoadgenConfig = {
   faucet: { interval: 12, limit: 10 },
+  amm: { wait: 6, interval: 12, limit: 10 },
 };
 const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 30;

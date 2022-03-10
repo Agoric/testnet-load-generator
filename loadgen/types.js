@@ -17,6 +17,17 @@ export {};
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
 /**
+ * @typedef {Object} AttenuatedAMM
+ * @property {(issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>} addPool
+ * add a new liquidity pool
+ * @property {() => Promise<Invitation>} makeSwapInInvitation make an invitation
+ * that allows one to do a swap in which the In amount is specified and the Out
+ * amount is calculated
+ * @property {() => Promise<Invitation>} makeAddLiquidityInvitation make an
+ * invitation that allows one to add liquidity to the pool.
+ */
+
+/**
  * @typedef {Object} AssetKit
  * @property {string} name
  * @property {Mint} [mint]
@@ -27,6 +38,7 @@ export {};
 
 /**
  * @typedef {Object} Home
+ * @property {ERef<NameHub>} agoricNames
  * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
  * @property {ERef<Spawner>} spawner

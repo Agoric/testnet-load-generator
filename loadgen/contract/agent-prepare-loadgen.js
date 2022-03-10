@@ -15,6 +15,7 @@ import { disp } from './display.js';
 /** @typedef {Awaited<ReturnType<typeof startAgent>>} LoadgenKit */
 /**
  * @typedef {{
+ *   agoricNames: ERef<NameHub>,
  *   faucet: ERef<any>,
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
@@ -30,7 +31,13 @@ const tokenBrandPetname = 'LGT';
 /**
  * @param {startParam} param
  */
-export default async function startAgent({ faucet, zoe, wallet, mintBundle }) {
+export default async function startAgent({
+  agoricNames,
+  faucet,
+  zoe,
+  wallet,
+  mintBundle,
+}) {
   const walletAdmin = E(wallet).getAdminFacet();
 
   // Get the RUN purse and initial balance from the wallet
@@ -156,7 +163,104 @@ export default async function startAgent({ faucet, zoe, wallet, mintBundle }) {
     });
   });
 
-  return harden(await allValues({ tokenKit, runKit }));
+  /** @type {ERef<Instance>} */
+  const ammInstance = Promise.allSettled([
+    E(agoricNames).lookup('instance', 'amm'),
+    E(agoricNames).lookup('instance', 'autoswap'),
+  ]).then(([ammResult, autoswapResult]) => {
+    if (ammResult.status === 'fulfilled') {
+      return ammResult.value;
+    } else if (autoswapResult.status === 'fulfilled') {
+      return autoswapResult.value;
+    } else {
+      assert.fail(
+        assert.details`Failed to get either amm (${ammResult.reason}) or autoswap (${autoswapResult.reason}) instances.`,
+      );
+    }
+  });
+  /** @type {ERef<import('../types.js').AttenuatedAMM>} */
+  const amm = E(zoe).getPublicFacet(ammInstance);
+
+  const fundingResult = E.when(runBalance, async (centralInitialBalance) => {
+    const { purse: centralPurse } = E.get(runKit);
+    const {
+      mint: secondaryMint,
+      issuer: secondaryIssuer,
+      brand: secondaryBrandP,
+      purse: secondaryPurse,
+    } = E.get(tokenKit);
+    const liquidityIssuer = E(amm).addPool(
+      secondaryIssuer,
+      issuerPetnames[tokenBrandPetname],
+    );
+    const liquidityBrandP = E(liquidityIssuer).getBrand();
+
+    if (AmountMath.isEmpty(centralInitialBalance)) {
+      throw Error(`no RUN, loadgen cannot proceed`);
+    }
+
+    /** @type {Amount<NatValue>} */
+    const centralAmount = AmountMath.make(
+      centralInitialBalance.brand,
+      centralInitialBalance.value / 2n,
+    );
+    const centralPerCycle = AmountMath.make(
+      centralAmount.brand,
+      centralAmount.value / 100n,
+    );
+    const centralPayment = E(centralPurse).withdraw(centralAmount);
+
+    // Each amm and vault cycle temporarily uses 1% of holdings
+    // The faucet task taps 100_000n of the loadgen token
+    // We want the faucet to represent a fraction (1% ?) of the traded amounts
+    // The computed amount will be used for both amm liquidity and initial purse funds
+    const secondaryBrand = await secondaryBrandP;
+    /** @type {Amount<NatValue>} */
+    const secondaryAmount = AmountMath.make(
+      secondaryBrand,
+      100n * 100n * 100_000n,
+    );
+    const secondaryPerCycle = AmountMath.make(
+      secondaryAmount.brand,
+      secondaryAmount.value / 100n,
+    );
+    const secondaryAMMPayment = E(secondaryMint).mintPayment(secondaryAmount);
+    const secondaryPursePayment = E(secondaryMint).mintPayment(secondaryAmount);
+
+    const depositInitialSecondaryResult = E.when(
+      secondaryPursePayment,
+      E(secondaryPurse).deposit,
+    );
+
+    console.error(
+      `prepare-loadgen: Adding AMM liquidity. Will trade about ${disp(
+        centralPerCycle,
+      )} RUN and ${disp(secondaryPerCycle)} ${tokenBrandPetname} per cycle`,
+    );
+
+    const liquidityBrand = await liquidityBrandP;
+
+    const proposal = harden({
+      want: { Liquidity: AmountMath.makeEmpty(liquidityBrand) },
+      give: { Secondary: secondaryAmount, Central: centralAmount },
+    });
+
+    const addLiquiditySeat = E(zoe).offer(
+      E(amm).makeAddLiquidityInvitation(),
+      proposal,
+      harden({
+        Secondary: secondaryAMMPayment,
+        Central: centralPayment,
+      }),
+    );
+
+    const addLiquidityResult = E(addLiquiditySeat).getOfferResult();
+
+    await Promise.all([depositInitialSecondaryResult, addLiquidityResult]);
+  });
+
+  await fundingResult;
+  return harden(await allValues({ tokenKit, runKit, amm }));
 
   // TODO: exit here?
 }

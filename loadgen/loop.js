@@ -11,7 +11,7 @@ import { deepEquals } from './firebase/admin/helpers.js';
 
 import { prepareLoadgen } from './prepare-loadgen.js';
 import { prepareFaucet } from './task-tap-faucet.js';
-// import { prepareAMMTrade } from './task-trade-amm.js';
+import { prepareAMMTrade } from './task-trade-amm.js';
 // import { prepareVaultCycle } from './task-create-vault.js';
 
 const sortAndFilterNullish = (obj) =>
@@ -31,7 +31,7 @@ let pushHandlerBroker;
 
 let currentConfig = sortAndFilterNullish({
   faucet: null, // e.g. { interval=60, limit=1, wait=0 }
-  // amm: null, // e.g. { interval: 120}
+  amm: null, // e.g. { interval: 120}
   // vault: null, // e.g. { interval: 120, wait: 60 }
 });
 
@@ -39,11 +39,8 @@ let pushHandler = null;
 let pushBroker = null;
 
 const tasks = {
-  // we must start the AMM task before other tasks:
-  // - AMM sets up Zoe fee purse
-  // - AMM exchanges some RUN for target token, and Vault measures the balances
   faucet: [prepareFaucet],
-  // amm: [prepareAMMTrade],
+  amm: [prepareAMMTrade],
   // vault: [prepareVaultCycle],
 };
 
