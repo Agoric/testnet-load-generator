@@ -12,6 +12,7 @@ const key = 'loadgenKit';
  * @param { ERef<Pick<import('./types').Home, UsedHomeCaps>> } home
  * @param { import('./types').DeployPowers } deployPowers
  * @typedef {|
+ *   'faucet' |
  *   'scratch' |
  *   'spawner' |
  *   'wallet' |
@@ -19,7 +20,7 @@ const key = 'loadgenKit';
  * never} UsedHomeCaps
  */
 export async function prepareLoadgen(home, deployPowers) {
-  const { scratch, spawner, wallet, zoe } = E.get(home);
+  const { faucet, scratch, spawner, wallet, zoe } = E.get(home);
 
   /** @type {import('./contract/agent-prepare-loadgen').LoadgenKit | undefined} */
   let loadgenKit = await E(scratch).get(key);
@@ -43,7 +44,7 @@ export async function prepareLoadgen(home, deployPowers) {
     // create a solo-side agent to setup everything
     const installerP = E(spawner).install(agentBundle);
     /** @type {import('./contract/agent-prepare-loadgen').startParam} */
-    const agentParam = harden({ wallet, zoe, mintBundle });
+    const agentParam = harden({ faucet, wallet, zoe, mintBundle });
     loadgenKit = await E(installerP).spawn(agentParam);
 
     await E(scratch).set(key, loadgenKit);

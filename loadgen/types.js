@@ -33,6 +33,7 @@ export {};
 
 /**
  * @typedef {Object} Home
+ * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
  * @property {ERef<Spawner>} spawner
  * @property {ERef<HomeWallet>} wallet
