@@ -1,43 +1,42 @@
+// @ts-check
+
+import { AmountMath } from '@agoric/ertp';
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 
-// This is loaded by the spawner into a new 'spawned' vat on the solo node.
-// The default export function is called with some args.
+import { disp } from './display.js';
 
-export default async function startAgent([key, home, faucetBundle]) {
-  const { zoe, scratch } = home;
-  console.error(` +++ agent installing bundle`);
-  const installation = await E(zoe).install(faucetBundle);
-  console.error(` +++ agent doing startInstance`);
-  const { creatorFacet, publicFacet } = await E(zoe).startInstance(
-    installation,
-  );
-  console.error(` +++ agent did startInstance, doing getTokenIssuer`);
-  const tokenIssuer = await E(publicFacet).getTokenIssuer();
-  console.error(` +++ agent doing makeEmptyPurse`);
-  // Bob makes a purse for tokens
-  const bobPurse = await E(tokenIssuer).makeEmptyPurse();
-  console.error(` +++ agent defining agent`);
+/** @template T @typedef {import('@agoric/eventual-send').ERef<T>} ERef */
+
+/**
+ * This is loaded by the spawner into a new 'spawned' vat on the solo node.
+ * The default export function is called with some args.
+ *
+ * @param {startParam} param
+ * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
+ * @typedef {{
+ *   tokenKit: import('../types').NatAssetKit,
+ * }} startParam
+ */
+export default async function startAgent({ tokenKit }) {
+  assert(tokenKit.mint, assert.details`Faucet task requires a mint`);
 
   const agent = Far('faucet agent', {
     async doFaucetCycle() {
-      // make ourselves an invitation
-      const invitationP = E(creatorFacet).makeInvitation();
-      // claim it
-      const seatP = E(zoe).offer(invitationP); // pipeline stall: bug #2846
-      const paymentP = E(seatP).getPayout('Token');
-      const payment = await paymentP;
-      await Promise.all([
-        E(bobPurse).deposit(payment),
-        E(seatP).getOfferResult(),
-      ]);
-      return E(bobPurse).getCurrentAmount();
+      console.error(`faucet: cycle start`);
+      const payment = await E(tokenKit.mint).mintPayment(
+        AmountMath.make(tokenKit.brand, 100_000n),
+      );
+      await E(tokenKit.purse).deposit(payment);
+      console.error(`faucet: cycle done`);
+      const amount = await E(tokenKit.purse).getCurrentAmount();
+      return {
+        amountDisplay: disp(amount, tokenKit.displayInfo.decimalPlaces),
+        faucetToken: tokenKit.name,
+      };
     },
   });
 
-  console.error(` +++ agent storing itself to scratch`);
-  // stash everything needed for each cycle under the key on the solo node
-  await E(scratch).set(key, agent);
-  console.error(`faucet ready for cycles`);
+  console.error(`faucet: ready for cycles`);
   return agent;
 }
