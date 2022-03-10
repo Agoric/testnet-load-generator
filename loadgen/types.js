@@ -19,6 +19,15 @@ export {};
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
 /**
+ * @typedef { Pick<
+ *   XYKAMMPublicFacet,
+ *   'makeSwapInInvitation' | 'makeAddLiquidityInvitation'
+ * > & {
+ *   addPool: (issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>
+ * } } AttenuatedAMM
+ */
+
+/**
  * @template {AssetKind} [K=AssetKind]
  * @typedef {Object} AssetKit
  * @property {string} name
@@ -33,6 +42,7 @@ export {};
 
 /**
  * @typedef {Object} Home
+ * @property {ERef<NameHub>} agoricNames
  * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
  * @property {ERef<Spawner>} spawner
