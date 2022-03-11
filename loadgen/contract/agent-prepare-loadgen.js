@@ -108,12 +108,14 @@ export default async function startAgent({
       `prepare-loadgen: depositing ${disp(thirdRunAmount)} into the fee purse`,
     );
     const runPurse = E.get(runKit).purse;
-    const feePayment = E(runPurse).withdraw(thirdRunAmount);
+    // Purse doesn't "lock" during withdrawal so we need to
+    // wait on payment before asking about balance
+    const feePayment = await E(runPurse).withdraw(thirdRunAmount);
 
     const remainingBalance = /** @type {Promise<Amount<NatValue>>} */ (
       E(runPurse).getCurrentAmount()
     );
-    await E.when(feePayment, E(feePurse).deposit);
+    await E(feePurse).deposit(feePayment);
 
     return remainingBalance;
   })();
