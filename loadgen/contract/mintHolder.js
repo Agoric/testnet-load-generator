@@ -2,8 +2,6 @@
 
 import { makeIssuerKit } from '@agoric/ertp';
 
-import '@agoric/zoe/exported.js';
-
 /**
  * This contract holds one mint.
  *

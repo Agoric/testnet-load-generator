@@ -4,8 +4,6 @@ import { AmountMath } from '@agoric/ertp';
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 
-import '@agoric/zoe/exported.js';
-
 /** @template T @typedef {import('@agoric/eventual-send').ERef<T>} ERef */
 
 /**
@@ -15,7 +13,7 @@ import '@agoric/zoe/exported.js';
  * @param {startParam} param
  * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
  * @typedef {{
- *   tokenKit: import('../types').AssetKit,
+ *   tokenKit: import('../types').NatAssetKit,
  * }} startParam
  */
 export default async function startAgent({ tokenKit }) {

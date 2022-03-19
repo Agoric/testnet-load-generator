@@ -1,50 +1,51 @@
+// @ts-check
+
 import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 import { AmountMath } from '@agoric/ertp';
 // import { allComparable } from '@agoric/same-structure';
 import * as contractSupport from '@agoric/zoe/src/contractSupport/index.js';
-import { pursePetnames, issuerPetnames } from './petnames.js';
 import { disp } from './display.js';
-import { allValues } from './allValues.js';
+import { fallback } from './fallback.js';
 
 const makeRatio = contractSupport.makeRatio;
 const multiplyBy =
-  contractSupport.floorMultiplyBy || contractSupport.multiplyBy;
+  contractSupport.floorMultiplyBy ||
+  // @ts-expect-error backwards compat
+  contractSupport.multiplyBy;
 
-// This is loaded by the spawner into a new 'spawned' vat on the solo node.
-// The default export function is called with some args.
+/** @param {Purse} purse */
+async function getPurseBalance(purse) {
+  return /** @type {Promise<Amount<'nat'>>} */ (E(purse).getCurrentAmount());
+}
 
-export default async function startAgent([key, home, collateralToken]) {
-  const { zoe, scratch, agoricNames, wallet } = home;
+/**
+ * This is loaded by the spawner into a new 'spawned' vat on the solo node.
+ * The default export function is called with some args.
+ *
+ * @param {startParam} param
+ * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
+ * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'name'>} AssetKit
+ * @typedef {{
+ *   runKit: AssetKit,
+ *   tokenKit: AssetKit,
+ *   vaultFactory: ERef<VaultFactoryPublicFacet>,
+ *   zoe: ERef<ZoeService>,
+ * }} startParam
+ */
+export default async function startAgent({
+  runKit: { brand: runBrand, purse: runPurse },
+  tokenKit: {
+    brand: collateralBrand,
+    purse: collateralPurse,
+    name: collateralToken,
+  },
+  vaultFactory,
+  zoe,
+}) {
+  console.error(`create-vault: setting up tools`);
 
-  console.error(`create-vault: building tools`);
-  const {
-    runBrand,
-    collateralBrand,
-    runPurse,
-    collateralPurse,
-    treasuryInstance,
-    vaultFactoryInstance,
-  } = await allValues({
-    runBrand: E(agoricNames).lookup('brand', issuerPetnames.RUN),
-    collateralBrand: E(
-      E(wallet).getIssuer(issuerPetnames[collateralToken]),
-    ).getBrand(),
-    runPurse: E(wallet).getPurse(pursePetnames.RUN),
-    collateralPurse: E(wallet).getPurse(pursePetnames[collateralToken]),
-    treasuryInstance: E(agoricNames)
-      .lookup('instance', 'Treasury')
-      .catch(() => {}),
-    vaultFactoryInstance: E(agoricNames)
-      .lookup('instance', 'VaultFactory')
-      .catch(() => {}),
-  });
-
-  const treasuryPublicFacet = E(zoe).getPublicFacet(
-    vaultFactoryInstance || treasuryInstance,
-  );
-
-  const collateralBalance = await E(collateralPurse).getCurrentAmount();
+  const collateralBalance = await getPurseBalance(collateralPurse);
   if (AmountMath.isEmpty(collateralBalance)) {
     throw Error(
       `create-vault: getCurrentAmount(${collateralToken}) broken (says 0)`,
@@ -63,13 +64,13 @@ export default async function startAgent([key, home, collateralToken]) {
 
   // we only withdraw half the value of the collateral, giving us 200%
   // collateralization
-  const collaterals = await E(treasuryPublicFacet).getCollaterals();
+  const collaterals = await E(vaultFactory).getCollaterals();
   const cdata = collaterals.find((c) => c.brand === collateralBrand);
   const priceRate = cdata.marketPrice;
   const half = makeRatio(BigInt(50), runBrand);
   const wantedRun = multiplyBy(multiplyBy(collateralToLock, priceRate), half);
 
-  console.error(`create-vault: tools installed`);
+  console.error(`create-vault: tools ready`);
 
   console.error(
     `create-vault: collateralToLock=${disp(
@@ -80,8 +81,8 @@ export default async function startAgent([key, home, collateralToken]) {
   // we fix the 1% 'collateralToLock' value at startup, and use it for all cycles
   // (we close over 'collateralToLock')
   async function openVault() {
-    console.error('create-vault: openVault');
-    const openInvitationP = E(treasuryPublicFacet).makeLoanInvitation();
+    console.error('create-vault: cycle: openVault');
+    const openInvitationP = E(vaultFactory).makeLoanInvitation();
     const proposal = harden({
       give: {
         Collateral: collateralToLock,
@@ -104,7 +105,7 @@ export default async function startAgent([key, home, collateralToken]) {
       E(runPurse).deposit(runPayout),
     ]);
     const offerResult = await E(seatP).getOfferResult();
-    console.error(`create-vault: vault opened`);
+    console.error(`create-vault: cycle: vault opened`);
     return offerResult.vault;
   }
 
@@ -131,23 +132,22 @@ export default async function startAgent([key, home, collateralToken]) {
       E(collateralPurse).deposit(collateralPayout),
       E(seatP).getOfferResult(),
     ]);
-    console.error(`create-vault: vault closed`);
+    console.error(`create-vault: cycle: vault closed`);
   }
 
   const agent = Far('vault agent', {
     async doVaultCycle() {
-      const vault = await openVault(collateralToLock);
+      const vault = await openVault();
       await closeVault(vault);
       const [newRunBalance, newCollateralBalance] = await Promise.all([
-        E(runPurse).getCurrentAmount(),
-        E(collateralPurse).getCurrentAmount(),
+        getPurseBalance(runPurse),
+        getPurseBalance(collateralPurse),
       ]);
-      console.error('create-vault: cycle done');
+      console.error('create-vault: cycle: done');
       return [newRunBalance, newCollateralBalance];
     },
   });
 
-  await E(scratch).set(key, agent);
   console.error('create-vault: ready for cycles');
   return agent;
 }

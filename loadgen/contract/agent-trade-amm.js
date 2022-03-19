@@ -4,13 +4,11 @@ import { E } from '@agoric/eventual-send';
 import { Far } from '@agoric/marshal';
 import { AmountMath, AssetKind } from '@agoric/ertp';
 
-import '@agoric/zoe/exported.js';
-
 /** @template T @typedef {import('@agoric/eventual-send').ERef<T>} ERef */
 
 /** @param {Purse} purse */
 async function getPurseBalance(purse) {
-  return /** @type {Promise<Amount<NatValue>>} */ (E(purse).getCurrentAmount());
+  return /** @type {Promise<Amount<'nat'>>} */ (E(purse).getCurrentAmount());
 }
 
 /**
@@ -19,7 +17,7 @@ async function getPurseBalance(purse) {
  *
  * @param {startParam} param
  * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
- * @typedef { Pick<import('../types').AssetKit, 'brand' | 'purse' | 'name'>} AssetKit
+ * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'name'>} AssetKit
  * @typedef {{
  *   runKit: AssetKit,
  *   tokenKit: AssetKit,

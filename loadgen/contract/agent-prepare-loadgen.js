@@ -3,12 +3,13 @@
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { E } from '@agoric/eventual-send';
 import { makeAsyncIterableFromNotifier } from '@agoric/notifier';
+import { makeRatio } from '@agoric/zoe/src/contractSupport';
 
 import { pursePetnames, issuerPetnames } from './petnames.js';
 import { allValues } from './allValues.js';
 
-import '@agoric/zoe/exported.js';
 import { disp } from './display.js';
+import { fallback } from './fallback.js';
 
 /** @template T @typedef {import('@agoric/eventual-send').ERef<T>} ERef */
 
@@ -16,7 +17,9 @@ import { disp } from './display.js';
 /**
  * @typedef {{
  *   agoricNames: ERef<NameHub>,
+ *   priceAuthorityAdminFacet: ERef<import('../types.js').PriceAuthorityRegistryAdmin | void>,
  *   faucet: ERef<any>,
+ *   vaultFactoryCreatorFacet: ERef<VaultFactory | void>,
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
  *   mintBundle: BundleSource,
@@ -24,6 +27,7 @@ import { disp } from './display.js';
  */
 
 const tokenBrandPetname = 'LGT';
+const BASIS_POINTS = 10000n;
 
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
@@ -34,6 +38,8 @@ const tokenBrandPetname = 'LGT';
 export default async function startAgent({
   agoricNames,
   faucet,
+  priceAuthorityAdminFacet,
+  vaultFactoryCreatorFacet,
   zoe,
   wallet,
   mintBundle,
@@ -64,14 +70,14 @@ export default async function startAgent({
       const runIssuer = E(wallet).getIssuer(issuerPetnames.RUN);
 
       return {
-        /** @type {Promise<import('../types.js').AssetKit>} */
+        /** @type {Promise<import('../types.js').NatAssetKit>} */
         runKit: allValues({
           issuer: runIssuer,
           brand: runPurseState.brand,
           purse: runPurseState.purse,
           name: 'RUN',
         }),
-        runBalance: /** @type {Amount<NatValue>} */ (
+        runBalance: /** @type {Amount<'nat'>} */ (
           AmountMath.make(
             runPurseState.brand,
             runPurseState.currentAmount.value,
@@ -112,7 +118,7 @@ export default async function startAgent({
     // wait on payment before asking about balance
     const feePayment = await E(runPurse).withdraw(thirdRunAmount);
 
-    const remainingBalance = /** @type {Promise<Amount<NatValue>>} */ (
+    const remainingBalance = /** @type {Promise<Amount<'nat'>>} */ (
       E(runPurse).getCurrentAmount()
     );
     await E(feePurse).deposit(feePayment);
@@ -122,7 +128,7 @@ export default async function startAgent({
 
   // Use Zoe to install mint for loadgen token, return kit
   // Needs fee purse to be provisioned
-  /** @type {Promise<import('../types.js').AssetKit>} */
+  /** @type {Promise<import('../types.js').NatAssetKit>} */
   const tokenKit = E.when(runBalance, () => {
     console.error(
       `prepare-loadgen: installing mint bundle and doing startInstance`,
@@ -166,20 +172,10 @@ export default async function startAgent({
   });
 
   /** @type {ERef<Instance>} */
-  const ammInstance = Promise.allSettled([
+  const ammInstance = fallback(
     E(agoricNames).lookup('instance', 'amm'),
     E(agoricNames).lookup('instance', 'autoswap'),
-  ]).then(([ammResult, autoswapResult]) => {
-    if (ammResult.status === 'fulfilled') {
-      return ammResult.value;
-    } else if (autoswapResult.status === 'fulfilled') {
-      return autoswapResult.value;
-    } else {
-      assert.fail(
-        assert.details`Failed to get either amm (${ammResult.reason}) or autoswap (${autoswapResult.reason}) instances.`,
-      );
-    }
-  });
+  );
   /** @type {ERef<import('../types.js').AttenuatedAMM>} */
   const amm = E(zoe).getPublicFacet(ammInstance);
 
@@ -201,7 +197,7 @@ export default async function startAgent({
       throw Error(`no RUN, loadgen cannot proceed`);
     }
 
-    /** @type {Amount<NatValue>} */
+    /** @type {Amount<'nat'>} */
     const centralAmount = AmountMath.make(
       centralInitialBalance.brand,
       centralInitialBalance.value / 2n,
@@ -217,7 +213,7 @@ export default async function startAgent({
     // We want the faucet to represent a fraction (1% ?) of the traded amounts
     // The computed amount will be used for both amm liquidity and initial purse funds
     const secondaryBrand = await secondaryBrandP;
-    /** @type {Amount<NatValue>} */
+    /** @type {Amount<'nat'>} */
     const secondaryAmount = AmountMath.make(
       secondaryBrand,
       100n * 100n * 100_000n,
@@ -261,8 +257,70 @@ export default async function startAgent({
     await Promise.all([depositInitialSecondaryResult, addLiquidityResult]);
   });
 
-  await fundingResult;
-  return harden(await allValues({ tokenKit, runKit, amm }));
+  /** @type {ERef<Instance>} */
+  const vaultFactoryInstance = fallback(
+    E(agoricNames).lookup('instance', 'VaultFactory'),
+    E(agoricNames).lookup('instance', 'Treasury'),
+  );
+  /** @type {ERef<VaultFactoryPublicFacet>} */
+  const vaultFactoryPublicFacet = E(zoe).getPublicFacet(vaultFactoryInstance);
+
+  const vaultManager = E.when(
+    Promise.all([
+      priceAuthorityAdminFacet,
+      vaultFactoryCreatorFacet,
+      fundingResult,
+    ]),
+    async ([priceAuthorityAdmin, vaultFactory]) => {
+      if (!priceAuthorityAdmin || !vaultFactory) {
+        console.error('Not available');
+        return null;
+      }
+
+      const { brand: collateralBrand, issuer: collateralIssuer } =
+        await tokenKit;
+      const { brand: centralBrand } = await runKit;
+
+      const { toCentral, fromCentral } = E.get(
+        E(amm).getPriceAuthorities(collateralBrand),
+      );
+
+      await Promise.all([
+        E(priceAuthorityAdmin).registerPriceAuthority(
+          toCentral,
+          collateralBrand,
+          centralBrand,
+        ),
+        E(priceAuthorityAdmin).registerPriceAuthority(
+          fromCentral,
+          centralBrand,
+          collateralBrand,
+        ),
+      ]);
+
+      const rates = {
+        liquidationMargin: makeRatio(105n, centralBrand),
+        interestRate: makeRatio(250n, centralBrand, BASIS_POINTS),
+        loanFee: makeRatio(200n, centralBrand, BASIS_POINTS),
+      };
+
+      return E(vaultFactory).addVaultType(
+        collateralIssuer,
+        issuerPetnames[tokenBrandPetname],
+        rates,
+      );
+    },
+  );
+
+  return harden(
+    await allValues({
+      tokenKit,
+      runKit,
+      amm,
+      vaultManager,
+      vaultFactory: vaultFactoryPublicFacet,
+    }),
+  );
 
   // TODO: exit here?
 }
