@@ -23,6 +23,7 @@ const statusLineFormat = /^([^:]+):[\s]+(.+)$/;
 
 /**
  * @typedef ProcessHelper
+ * @property {() => Promise<boolean>} isProcessInfoAvailable
  * @property {GetProcessInfo} getProcessInfo
  * @property {() => Promise<number>} getCPUTimeOffset
  */
@@ -257,5 +258,11 @@ export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
     return Math.round(uptimeMs - startMsOrigin - perfNow) / 1000;
   };
 
-  return harden({ getProcessInfo, getCPUTimeOffset });
+  const isProcessInfoAvailable = async () =>
+    Promise.all([startTicksOriginP, userHertzP]).then(
+      () => true,
+      () => false,
+    );
+
+  return harden({ getProcessInfo, getCPUTimeOffset, isProcessInfoAvailable });
 };

@@ -67,7 +67,7 @@ const chainArgvMatcher = (argv) =>
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
- * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @param {import("../helpers/procsfs.js").GetProcessInfo} [powers.getProcessInfo]
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @param {string | void} powers.loadgenBootstrapConfig
  * @returns {import("./types.js").OrchestratorTasks}
@@ -211,15 +211,22 @@ export const makeTasks = ({
           async () => {
             // agoric-cli does not support `--no-restart`, kill the chain
             console.log('Stopping chain setup');
-            const launcherInfo = await getProcessInfo(
-              /** @type {number} */ (launcherCp.pid),
-            );
-            const processInfo = await getChildMatchingArgv(
-              launcherInfo,
-              chainArgvMatcher,
-            );
-            ignoreKill.signal = true;
-            process.kill(processInfo.pid);
+            if (getProcessInfo) {
+              const launcherInfo = await getProcessInfo(
+                /** @type {number} */ (launcherCp.pid),
+              );
+              const processInfo = await getChildMatchingArgv(
+                launcherInfo,
+                chainArgvMatcher,
+              );
+              ignoreKill.signal = true;
+              process.kill(processInfo.pid);
+            } else {
+              // Do not set ignoreKill here as we need to fail
+              // since we can't trust the chain process actually exited
+              launcherCp.kill();
+              launcherCombinedElidedOutput.destroy();
+            }
           },
           () => {
             // agoric-cli supports `--no-restart`, so output is parsed without outputting step
@@ -325,9 +332,9 @@ export const makeTasks = ({
 
         console.log('Chain running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (chainCp.pid),
-        );
+        const processInfo =
+          getProcessInfo &&
+          (await getProcessInfo(/** @type {number} */ (chainCp.pid)));
 
         return harden({
           stop,
@@ -543,9 +550,9 @@ export const makeTasks = ({
 
         console.log('Client running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (soloCp.pid),
-        );
+        const processInfo =
+          getProcessInfo &&
+          (await getProcessInfo(/** @type {number} */ (soloCp.pid)));
 
         const stop = () => {
           ignoreKill.signal = 'SIGTERM';
