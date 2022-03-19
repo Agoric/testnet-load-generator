@@ -214,7 +214,8 @@ const main = async (progName, rawArgs, powers) => {
     },
   });
 
-  const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
+  const { getProcessInfo, getCPUTimeOffset, isProcessInfoAvailable } =
+    makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
     fs,
     fsStream,
@@ -296,7 +297,10 @@ const main = async (progName, rawArgs, powers) => {
   /** @type {Promise<void>[]} */
   const pendingBackups = [];
   const timeSource = makeTimeSource({ performance });
-  const cpuTimeOffset = await getCPUTimeOffset();
+
+  const processInfoAvailable = await isProcessInfoAvailable();
+
+  const cpuTimeOffset = processInfoAvailable ? await getCPUTimeOffset() : 0;
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
   let currentStageTimeSource = timeSource;
 
@@ -314,7 +318,7 @@ const main = async (progName, rawArgs, powers) => {
       spawn,
       fs,
       makeFIFO,
-      getProcessInfo,
+      getProcessInfo: processInfoAvailable ? getProcessInfo : undefined,
       sdkBinaries,
       loadgenBootstrapConfig,
     },
@@ -405,9 +409,11 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('chain-stopped');
       });
 
-      currentStageTimeSource = cpuTimeSource.shift(
-        runChainResult.processInfo.startTimestamp,
-      );
+      if (runChainResult.processInfo) {
+        currentStageTimeSource = cpuTimeSource.shift(
+          runChainResult.processInfo.startTimestamp,
+        );
+      }
 
       const slogLinesStream = Readable.from(runChainResult.slogLines);
       const slogLines = new PassThrough({ objectMode: true });
@@ -461,19 +467,23 @@ const main = async (progName, rawArgs, powers) => {
         },
       };
 
-      const chainMonitor = makeChainMonitor(
-        {
-          processInfo: runChainResult.processInfo,
-          storageLocation: chainStorageLocation,
-        },
-        {
-          ...makeConsole('monitor-chain', out, err),
-          logPerfEvent,
-          cpuTimeSource,
-          dirDiskUsage,
-        },
-      );
-      chainMonitor.start(monitorInterval);
+      const chainMonitor = runChainResult.processInfo
+        ? makeChainMonitor(
+            {
+              processInfo: runChainResult.processInfo,
+              storageLocation: chainStorageLocation,
+            },
+            {
+              ...makeConsole('monitor-chain', out, err),
+              logPerfEvent,
+              cpuTimeSource,
+              dirDiskUsage,
+            },
+          )
+        : undefined;
+      if (chainMonitor) {
+        chainMonitor.start(monitorInterval);
+      }
 
       const slogMonitorDone = monitorSlog(
         { slogLines },
@@ -511,7 +521,9 @@ const main = async (progName, rawArgs, powers) => {
         async () =>
           aggregateTryFinally(
             async () => {
-              chainMonitor.stop();
+              if (chainMonitor) {
+                chainMonitor.stop();
+              }
 
               if (!chainExited) {
                 stageConsole.log('Stopping chain');

@@ -52,7 +52,7 @@ const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
- * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
+ * @param {import("../helpers/procsfs.js").GetProcessInfo} [powers.getProcessInfo]
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
  * @returns {import("./types.js").OrchestratorTasks}
  */
@@ -467,9 +467,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
         console.log('Chain running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (chainCp.pid),
-        );
+        const processInfo =
+          getProcessInfo &&
+          (await getProcessInfo(/** @type {number} */ (chainCp.pid)));
 
         return harden({
           stop,
@@ -574,9 +574,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
         console.log('Client running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (soloCp.pid),
-        );
+        const processInfo =
+          getProcessInfo &&
+          (await getProcessInfo(/** @type {number} */ (soloCp.pid)));
 
         const stop = () => {
           ignoreKill.signal = 'SIGTERM';

@@ -25,7 +25,9 @@ export type TaskResult = {
 
 export type RunKernelInfo = {
   readonly slogLines: AsyncIterable<Buffer>;
-  readonly processInfo: import('../helpers/process-info.js').ProcessInfo;
+  readonly processInfo:
+    | import('../helpers/process-info.js').ProcessInfo
+    | undefined;
 };
 
 export type TaskEventStatus = Record<string, unknown> & {
