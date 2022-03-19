@@ -3,6 +3,7 @@
 import { AmountMath, AssetKind } from '@agoric/ertp';
 import { E } from '@agoric/eventual-send';
 import { makeAsyncIterableFromNotifier } from '@agoric/notifier';
+import { makeRatio } from '@agoric/zoe/src/contractSupport';
 
 import { pursePetnames, issuerPetnames } from './petnames.js';
 import { allValues } from './allValues.js';
@@ -16,7 +17,9 @@ import { fallback } from './fallback.js';
 /**
  * @typedef {{
  *   agoricNames: ERef<NameHub>,
+ *   priceAuthorityAdminFacet: ERef<import('../types.js').PriceAuthorityRegistryAdmin | void>,
  *   faucet: ERef<any>,
+ *   vaultFactoryCreatorFacet: ERef<VaultFactory | void>,
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
  *   mintBundle: BundleSource,
@@ -24,6 +27,7 @@ import { fallback } from './fallback.js';
  */
 
 const tokenBrandPetname = 'LGT';
+const BASIS_POINTS = 10000n;
 
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
@@ -117,6 +121,8 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 export default async function startAgent({
   agoricNames,
   faucet,
+  priceAuthorityAdminFacet,
+  vaultFactoryCreatorFacet,
   zoe,
   wallet,
   mintBundle,
@@ -328,8 +334,81 @@ export default async function startAgent({
     return false;
   });
 
-  await fundingResult;
-  return harden(await allValues({ tokenKit, runKit, amm }));
+  /** @type {ERef<Instance>} */
+  const vaultFactoryInstance = fallback(
+    E(agoricNames).lookup('instance', 'VaultFactory'),
+    E(agoricNames).lookup('instance', 'Treasury'),
+  );
+  // Use `when` as older versions of agoric-sdk cannot accept a promise
+  // See https://github.com/Agoric/agoric-sdk/issues/3837
+  /** @type {ERef<import('../types.js').VaultFactoryPublicFacet>} */
+  const vaultFactoryPublicFacet = E.when(
+    withFee(vaultFactoryInstance),
+    E(zoe).getPublicFacet,
+  );
+
+  const vaultManager = E.when(
+    Promise.all([
+      priceAuthorityAdminFacet,
+      vaultFactoryCreatorFacet,
+      fundingResult,
+    ]),
+    async ([priceAuthorityAdmin, vaultFactory, ammFunded]) => {
+      if (!priceAuthorityAdmin || !vaultFactory) {
+        console.error(
+          'prepare-loadgen: vaultFactoryCreator and priceAuthorityAdmin not available',
+        );
+        return null;
+      }
+
+      if (!ammFunded) {
+        return null;
+      }
+
+      const { brand: collateralBrand, issuer: collateralIssuer } =
+        await tokenKit;
+      const { brand: centralBrand } = await runKit;
+
+      const { toCentral, fromCentral } = E.get(
+        E(amm).getPriceAuthorities(collateralBrand),
+      );
+
+      await Promise.all([
+        E(priceAuthorityAdmin).registerPriceAuthority(
+          toCentral,
+          collateralBrand,
+          centralBrand,
+        ),
+        E(priceAuthorityAdmin).registerPriceAuthority(
+          fromCentral,
+          centralBrand,
+          collateralBrand,
+        ),
+      ]);
+
+      const rates = {
+        liquidationMargin: makeRatio(105n, centralBrand),
+        interestRate: makeRatio(250n, centralBrand, BASIS_POINTS),
+        loanFee: makeRatio(200n, centralBrand, BASIS_POINTS),
+      };
+
+      return E(vaultFactory).addVaultType(
+        collateralIssuer,
+        issuerPetnames[tokenBrandPetname],
+        rates,
+      );
+    },
+  );
+
+  return harden(
+    await allValues({
+      tokenKit,
+      runKit,
+      amm,
+      vaultManager,
+      vaultFactory: vaultFactoryPublicFacet,
+    }),
+  );
 
   // TODO: exit here?
 }

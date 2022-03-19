@@ -11,6 +11,8 @@ import '@agoric/wallet/api/exported.js';
 import '@agoric/wallet/api/src/internal-types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/zoe/src/contractFacet/types.js';
+// eslint-disable-next-line import/no-extraneous-dependencies
+import '@agoric/run-protocol/exported.js';
 
 export {};
 
@@ -18,10 +20,13 @@ export {};
 /** @typedef {ReturnType<typeof import('@agoric/spawner').makeSpawner>} Spawner */
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
+/** @typedef { import('@agoric/run-protocol/src/vaultFactory/vaultFactory').VaultFactoryContract['publicFacet']} VaultFactoryPublicFacet */
+/** @typedef { import('@agoric/zoe/tools/priceAuthorityRegistry').PriceAuthorityRegistryAdmin } PriceAuthorityRegistryAdmin */
+
 /**
  * @typedef { Pick<
  *   XYKAMMPublicFacet,
- *   'makeSwapInInvitation' | 'makeAddLiquidityInvitation'
+ *   'getPriceAuthorities' | 'makeSwapInInvitation' | 'makeAddLiquidityInvitation'
  * > & {
  *   addPool: (issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>
  * } } AttenuatedAMM
@@ -46,6 +51,8 @@ export {};
  * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
  * @property {ERef<Spawner>} spawner
+ * @property {ERef<VaultFactory>} [vaultFactoryCreatorFacet]
+ * @property {ERef<PriceAuthorityRegistryAdmin>} [priceAuthorityAdminFacet]
  * @property {ERef<HomeWallet>} wallet
  * @property {ERef<ZoeService>} zoe
  * @property {ERef<MyAddressNameAdmin>} myAddressNameAdmin

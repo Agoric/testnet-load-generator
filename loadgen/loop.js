@@ -12,7 +12,7 @@ import { deepEquals } from './firebase/admin/helpers.js';
 import { prepareLoadgen } from './prepare-loadgen.js';
 import { prepareFaucet } from './task-tap-faucet.js';
 import { prepareAMMTrade } from './task-trade-amm.js';
-// import { prepareVaultCycle } from './task-create-vault.js';
+import { prepareVaultCycle } from './task-create-vault.js';
 
 const sortAndFilterNullish = (obj) =>
   Object.fromEntries(
@@ -32,7 +32,7 @@ let pushHandlerBroker;
 let currentConfig = sortAndFilterNullish({
   faucet: null, // e.g. { interval=60, limit=1, wait=0 }
   amm: null, // e.g. { interval: 120}
-  // vault: null, // e.g. { interval: 120, wait: 60 }
+  vault: null, // e.g. { interval: 120, wait: 60 }
 });
 
 let pushHandler = null;
@@ -41,7 +41,7 @@ let pushBroker = null;
 const tasks = {
   faucet: [prepareFaucet],
   amm: [prepareAMMTrade],
-  // vault: [prepareVaultCycle],
+  vault: [prepareVaultCycle],
 };
 
 const runners = {}; // name -> { cycle, stop?, limit, pending }
