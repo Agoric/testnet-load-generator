@@ -33,15 +33,24 @@ export async function prepareVaultCycle(home, deployPowers) {
 
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    const { runKit, tokenKit, vaultFactory } = await loadgenKit;
-    /** @type {import('./contract/agent-create-vault').startParam} */
-    const startParam = { tokenKit, runKit, vaultFactory, zoe };
-    agent = await E(installerP).spawn(startParam);
-    await E(scratch).set(key, agent);
-    console.log(`create-vault: prepare: agent installed`);
+    const { runKit, vaultTokenKit: tokenKit, vaultFactory } = await loadgenKit;
+    if (runKit && tokenKit && vaultFactory) {
+      /** @type {import('./contract/agent-create-vault').startParam} */
+      const startParam = { tokenKit, runKit, vaultFactory, zoe };
+      agent = await E(installerP).spawn(startParam);
+      await E(scratch).set(key, agent);
+      console.log(`create-vault: prepare: agent installed`);
+    } else {
+      console.error(
+        `create-vault: prepare: couldn't install agent, missing prerequisites`,
+      );
+    }
   }
 
   async function vaultCycle() {
+    if (!agent) {
+      throw new Error('No agent available');
+    }
     const {
       newRunBalanceDisplay,
       newCollateralBalanceDisplay,

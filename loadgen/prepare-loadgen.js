@@ -4,6 +4,8 @@
 import path from 'path';
 import { E } from '@agoric/eventual-send';
 
+import { fallbackCollateralToken, fallbackTradeToken } from './config.js';
+
 const key = 'loadgenKit';
 
 /**
@@ -64,6 +66,8 @@ export async function prepareLoadgen(home, deployPowers) {
       wallet,
       zoe,
       mintBundle,
+      fallbackCollateralToken,
+      fallbackTradeToken,
     });
     loadgenKit = await E(installerP).spawn(agentParam);
 

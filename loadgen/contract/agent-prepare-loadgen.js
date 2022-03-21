@@ -23,6 +23,8 @@ import { fallback } from './fallback.js';
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
  *   mintBundle: BundleSource,
+ *   fallbackCollateralToken?: string | undefined,
+ *   fallbackTradeToken?: string | undefined,
  * }} startParam
  */
 
@@ -126,6 +128,8 @@ export default async function startAgent({
   zoe,
   wallet,
   mintBundle,
+  fallbackTradeToken,
+  fallbackCollateralToken,
 }) {
   const walletAdmin = E(wallet).getAdminFacet();
 
@@ -400,14 +404,53 @@ export default async function startAgent({
     },
   );
 
-  return harden(
-    await allValues({
-      tokenKit,
-      runKit,
-      amm,
-      vaultManager,
-      vaultFactory: vaultFactoryPublicFacet,
-    }),
+  return E.when(vaultManager, async (vaultManagerPresence) => {
+    const collateralTokenPetname =
+      fallbackCollateralToken || fallbackTradeToken;
+
+    if (vaultManagerPresence) {
+      return { vaultTokenKit: tokenKit, ammTokenKit: tokenKit };
+    } else if (collateralTokenPetname) {
+      // Make sure the finder knows about all purses by finding the
+      // LGT purse we created
+      await purseFinder.find({ brandPetname: tokenBrandPetname });
+
+      const { kit: vaultTokenKit } = E.get(
+        purseFinder.find({
+          brandPetname: collateralTokenPetname,
+          existingOnly: true,
+        }),
+      );
+
+      let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
+      if (
+        (fallbackTradeToken && fallbackTradeToken !== collateralTokenPetname) ||
+        !(await fundingResult)
+      ) {
+        ({ kit: ammTokenKit } = E.get(
+          purseFinder.find({
+            brandPetname: fallbackTradeToken,
+            existingOnly: true,
+          }),
+        ));
+      }
+
+      return { vaultTokenKit, ammTokenKit };
+    } else {
+      return { vaultTokenKit: null, ammTokenKit: null };
+    }
+  }).then(async ({ vaultTokenKit, ammTokenKit }) =>
+    harden(
+      await allValues({
+        tokenKit,
+        runKit,
+        amm,
+        ammTokenKit,
+        vaultManager,
+        vaultFactory: vaultFactoryPublicFacet,
+        vaultTokenKit,
+      }),
+    ),
   );
 
   // TODO: exit here?

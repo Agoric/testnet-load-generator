@@ -1,3 +1,3 @@
-export const collateralToken = 'USDC';
+export const fallbackCollateralToken = 'USDC';
 
-export const tradeToken = 'USDC';
+export const fallbackTradeToken = 'USDC';
