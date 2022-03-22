@@ -6,7 +6,6 @@ import { AmountMath } from '@agoric/ertp';
 // import { allComparable } from '@agoric/same-structure';
 import * as contractSupport from '@agoric/zoe/src/contractSupport/index.js';
 import { disp } from './display.js';
-import { fallback } from './fallback.js';
 
 const makeRatio = contractSupport.makeRatio;
 const multiplyBy =
@@ -118,10 +117,7 @@ export default async function startAgent({
 
   async function closeVault(vault) {
     console.error('create-vault: closeVault');
-    const runNeeded = await fallback(
-      E(vault).getCurrentDebt(),
-      E(vault).getDebtAmount(),
-    );
+    const runNeeded = await E(vault).getDebtAmount();
     const closeInvitationP = E(vault).makeCloseInvitation();
     const proposal = {
       give: {
