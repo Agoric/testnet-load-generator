@@ -50,10 +50,11 @@ const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
 
-const bootstrapConfigs = {
+const defaultBootstrapConfigs = {
   loadgen: '@agoric/vats/decentral-loadgen-config.json',
   demo: '@agoric/vats/decentral-demo-config.json',
   base: '@agoric/vats/decentral-config.json',
+  custom: undefined,
 };
 
 /**
@@ -303,29 +304,55 @@ const main = async (progName, rawArgs, powers) => {
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
   let currentStageTimeSource = timeSource;
 
+  const hasCustomBootstrapConfig = typeof argv.customBootstrap === 'string';
+  const withBootstrap = coerceBooleanOption(
+    argv.customBootstrap,
+    hasCustomBootstrapConfig || makeTasks === makeLocalChainTasks,
+    false,
+  );
+  const bootstrapConfigs = {
+    ...defaultBootstrapConfigs,
+    ...(hasCustomBootstrapConfig
+      ? {
+          custom: argv.customBootstrap,
+        }
+      : {}),
+  };
+
   const [sdkBinaries, loadgenBootstrapConfig] = await Promise.all([
     getSDKBinaries(),
-    Promise.all(
-      Object.entries(bootstrapConfigs).map(async ([name, identifier]) => [
-        name,
-        await importMetaResolve(identifier, import.meta.url).catch(() => {}),
-      ]),
-    ).then((entries) => {
-      /** @type {Record<keyof typeof bootstrapConfigs, string | undefined>} */
-      const { loadgen, demo, base } = Object.fromEntries(entries);
+    !withBootstrap
+      ? undefined
+      : Promise.all(
+          Object.entries(bootstrapConfigs).map(async ([name, identifier]) => [
+            name,
+            identifier &&
+              (await importMetaResolve(identifier, import.meta.url).catch(
+                () => {},
+              )),
+          ]),
+        ).then((entries) => {
+          /** @type {Record<keyof typeof defaultBootstrapConfigs, string | undefined>} */
+          const { custom, loadgen, demo, base } = Object.fromEntries(entries);
 
-      if (loadgen) {
-        return loadgen;
-      } else if (demo && !base) {
-        // Demo config is partially usable when the default config became the core one
-        // In https://github.com/Agoric/agoric-sdk/pull/4541
-        topConsole.warn('Loadgen bootstrap config missing, using demo.');
-        return demo;
-      } else {
-        topConsole.warn('Loadgen bootstrap config missing, using default.');
-        return undefined;
-      }
-    }),
+          if (custom) {
+            return custom;
+          } else if (hasCustomBootstrapConfig) {
+            throw new Error('Custom bootstrap config missing.');
+          }
+
+          if (loadgen) {
+            return loadgen;
+          } else if (demo && !base) {
+            // Demo config is partially usable when the default config became the core one
+            // In https://github.com/Agoric/agoric-sdk/pull/4541
+            topConsole.warn('Loadgen bootstrap config missing, using demo.');
+            return demo;
+          } else {
+            topConsole.warn('Loadgen bootstrap config missing, using default.');
+            return undefined;
+          }
+        }),
   ]);
 
   const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
