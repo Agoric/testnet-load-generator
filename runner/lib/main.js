@@ -517,13 +517,18 @@ const main = async (progName, rawArgs, powers) => {
           const firstEmptyBlockKit = makePromiseKit();
           resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
 
-          await tryTimeout(2 * 60 * 1000, () =>
-            Promise.race([
+          await tryTimeout(2 * 60 * 1000, async () => {
+            await Promise.race([
+              done,
               slogMonitorDone,
               orInterrupt(firstBlockDoneKit.promise),
-            ]),
-          );
-          await orInterrupt(firstEmptyBlockKit.promise);
+            ]);
+            await Promise.race([
+              done,
+              slogMonitorDone,
+              orInterrupt(firstEmptyBlockKit.promise),
+            ]);
+          });
 
           await nextStep(done);
         },

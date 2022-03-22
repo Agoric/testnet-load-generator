@@ -458,6 +458,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
           await sleep(5 * 1000);
         }
       }
+
+      // Rethrow any error if stopped before ready
+      await chainDone;
     });
 
     return tryTimeout(
