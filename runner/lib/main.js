@@ -15,6 +15,7 @@ import {
 import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
 import { makePromiseKit } from './sdk/promise-kit.js';
+import { resolve as importMetaResolve } from './helpers/module.js';
 
 import {
   sleep,
@@ -48,6 +49,13 @@ const defaultLoadgenConfig = {
 const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
+
+const defaultBootstrapConfigs = {
+  loadgen: '@agoric/vats/decentral-loadgen-config.json',
+  demo: '@agoric/vats/decentral-demo-config.json',
+  base: '@agoric/vats/decentral-config.json',
+  custom: undefined,
+};
 
 /**
  * @template {Record<string, unknown> | undefined} T
@@ -160,14 +168,13 @@ const getSDKBinaries = async () => {
     const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
     return cliHelpers.getSDKBinaries();
   } catch (err) {
-    const { resolve } = await import('./helpers/module.js');
     // Older SDKs were only at lib
-    const cliHelpersUrl = await resolve(libHelpers, import.meta.url);
+    const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
     // Prefer CJS as some versions have both and must use .cjs for RESM
     let agSolo = new URL('../../solo/src/entrypoint.cjs', cliHelpersUrl)
       .pathname;
     if (
-      !(await resolve(agSolo, import.meta.url).then(
+      !(await importMetaResolve(agSolo, import.meta.url).then(
         () => true,
         () => false,
       ))
@@ -205,7 +212,11 @@ const main = async (progName, rawArgs, powers) => {
   const { stdout, stderr, fs, fsStream, spawn, tmpDir } = powers;
 
   // TODO: switch to full yargs for documenting output
-  const argv = yargsParser(rawArgs);
+  const argv = yargsParser(rawArgs, {
+    configuration: {
+      'duplicate-arguments-array': false,
+    },
+  });
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
@@ -293,7 +304,56 @@ const main = async (progName, rawArgs, powers) => {
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
   let currentStageTimeSource = timeSource;
 
-  const sdkBinaries = await getSDKBinaries();
+  const hasCustomBootstrapConfig = typeof argv.customBootstrap === 'string';
+  const withBootstrap = coerceBooleanOption(
+    argv.customBootstrap,
+    hasCustomBootstrapConfig || makeTasks === makeLocalChainTasks,
+    false,
+  );
+  const bootstrapConfigs = {
+    ...defaultBootstrapConfigs,
+    ...(hasCustomBootstrapConfig
+      ? {
+          custom: argv.customBootstrap,
+        }
+      : {}),
+  };
+
+  const [sdkBinaries, loadgenBootstrapConfig] = await Promise.all([
+    getSDKBinaries(),
+    !withBootstrap
+      ? undefined
+      : Promise.all(
+          Object.entries(bootstrapConfigs).map(async ([name, identifier]) => [
+            name,
+            identifier &&
+              (await importMetaResolve(identifier, import.meta.url).catch(
+                () => {},
+              )),
+          ]),
+        ).then((entries) => {
+          /** @type {Record<keyof typeof defaultBootstrapConfigs, string | undefined>} */
+          const { custom, loadgen, demo, base } = Object.fromEntries(entries);
+
+          if (custom) {
+            return custom;
+          } else if (hasCustomBootstrapConfig) {
+            throw new Error('Custom bootstrap config missing.');
+          }
+
+          if (loadgen) {
+            return loadgen;
+          } else if (demo && !base) {
+            // Demo config is partially usable when the default config became the core one
+            // In https://github.com/Agoric/agoric-sdk/pull/4541
+            topConsole.warn('Loadgen bootstrap config missing, using demo.');
+            return demo;
+          } else {
+            topConsole.warn('Loadgen bootstrap config missing, using default.');
+            return undefined;
+          }
+        }),
+  ]);
 
   const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
     {
@@ -302,6 +362,7 @@ const main = async (progName, rawArgs, powers) => {
       makeFIFO,
       getProcessInfo,
       sdkBinaries,
+      loadgenBootstrapConfig,
     },
   );
 
@@ -483,13 +544,18 @@ const main = async (progName, rawArgs, powers) => {
           const firstEmptyBlockKit = makePromiseKit();
           resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
 
-          await tryTimeout(2 * 60 * 1000, () =>
-            Promise.race([
+          await tryTimeout(2 * 60 * 1000, async () => {
+            await Promise.race([
+              done,
               slogMonitorDone,
               orInterrupt(firstBlockDoneKit.promise),
-            ]),
-          );
-          await orInterrupt(firstEmptyBlockKit.promise);
+            ]);
+            await Promise.race([
+              done,
+              slogMonitorDone,
+              orInterrupt(firstEmptyBlockKit.promise),
+            ]);
+          });
 
           await nextStep(done);
         },

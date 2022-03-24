@@ -8,7 +8,7 @@ set -x
 
 next_revision() {
   read -r REPLY <&3
-  echo $REPLY
+  echo ${REPLY%% *}
 }
 
 . $(dirname "$(readlink -f -- "$0")")/common-queue.sh

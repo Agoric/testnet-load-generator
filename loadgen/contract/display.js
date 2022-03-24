@@ -1,7 +1,9 @@
 import { stringifyNat } from '@agoric/ui-components/src/display/natValue/stringifyNat.js';
 
-// TODO: const { decimalPlaces } = await E(brand).getDisplayInfo(); // or E(issuer)
-
-export function disp(amount) {
-  return stringifyNat(amount.value, 6, 6);
+/**
+ * @param {Amount<'nat'>} amount
+ * @param {number} [decimalPlaces]
+ */
+export function disp(amount, decimalPlaces = 6) {
+  return stringifyNat(amount.value, decimalPlaces, 6);
 }

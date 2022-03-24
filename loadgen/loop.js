@@ -9,9 +9,10 @@ import { makeAuthBroker } from './firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from './firebase/client.js';
 import { deepEquals } from './firebase/admin/helpers.js';
 
-import { prepareAMMTrade } from './task-trade-amm';
-import { prepareVaultCycle } from './task-create-vault';
-import { prepareFaucet } from './task-tap-faucet';
+import { prepareLoadgen } from './prepare-loadgen.js';
+import { prepareFaucet } from './task-tap-faucet.js';
+import { prepareAMMTrade } from './task-trade-amm.js';
+import { prepareVaultCycle } from './task-create-vault.js';
 
 const sortAndFilterNullish = (obj) =>
   Object.fromEntries(
@@ -38,12 +39,9 @@ let pushHandler = null;
 let pushBroker = null;
 
 const tasks = {
-  // we must start the AMM task before other tasks:
-  // - AMM sets up Zoe fee purse
-  // - AMM exchanges some RUN for target token, and Vault measures the balances
+  faucet: [prepareFaucet],
   amm: [prepareAMMTrade],
   vault: [prepareVaultCycle],
-  faucet: [prepareFaucet],
 };
 
 const runners = {}; // name -> { cycle, stop?, limit, pending }
@@ -259,6 +257,11 @@ async function startServer() {
   });
 }
 
+/**
+ *
+ * @param { ERef<import('./types').Home> } homePromise
+ * @param { import('./types').DeployPowers } deployPowers
+ */
 export default async function runCycles(homePromise, deployPowers) {
   // const home = await homePromise;
   // console.log(`got home`);
@@ -267,13 +270,15 @@ export default async function runCycles(homePromise, deployPowers) {
   // console.log(`got chain time:`, time);
   // return;
 
+  await prepareLoadgen(homePromise, deployPowers);
+
   for (const [name, [prepare]] of Object.entries(tasks)) {
     // eslint-disable-next-line no-await-in-loop
     const cycle = await prepare(homePromise, deployPowers);
     runners[name] = { cycle, limit: 0, pending: 0, stop: undefined };
     status[name] = { active: 0, succeeded: 0, failed: 0, next: 0 };
   }
-  const { myAddressNameAdmin } = await homePromise;
+  const { myAddressNameAdmin } = E.get(homePromise);
   const myAddr = await E(myAddressNameAdmin).getMyAddress();
   const connectionHandlerFactory = makeClientConnectionHandlerFactory(myAddr);
   pushHandlerBroker = makeAuthBroker(connectionHandlerFactory);

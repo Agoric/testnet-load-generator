@@ -2,6 +2,7 @@
 
 set -m
 
+DOCKER_IMAGE="${DOCKER_IMAGE:-loadgen-runner}"
 DOCKER_ID=
 SLEEP_PID=
 
@@ -41,7 +42,7 @@ start() {
       -e SDK_REVISION=${SDK_REVISION} \
       -e SDK_REPO=${SDK_REPO} \
       --name "${OUTPUT_DIR}" \
-      loadgen-runner \
+      "${DOCKER_IMAGE}" \
       --test-data.test-type=${TEST_TYPE} "$@" \
     ) || exit $?
     docker start ${DOCKER_ID}

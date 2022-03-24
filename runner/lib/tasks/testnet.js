@@ -54,6 +54,7 @@ const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream
  * @param {import("../helpers/procsfs.js").GetProcessInfo} powers.getProcessInfo
  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {string | void} powers.loadgenBootstrapConfig
  * @returns {import("./types.js").OrchestratorTasks}
  */
 export const makeTasks = ({
@@ -62,6 +63,7 @@ export const makeTasks = ({
   makeFIFO,
   getProcessInfo,
   sdkBinaries,
+  loadgenBootstrapConfig,
 }) => {
   const spawn = makeSpawnWithPipedStream({
     spawn: cpSpawn,
@@ -117,6 +119,9 @@ export const makeTasks = ({
   );
 
   let testnetOrigin = 'https://testnet.agoric.net';
+
+  /** @type {Record<string, string>} */
+  const additionChainEnv = {};
 
   /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string}}} options */
   const setupTasks = async ({
@@ -208,6 +213,10 @@ export const makeTasks = ({
         configP2p.addr_book_strict = false;
         delete config.log_level;
         await fs.writeFile(configPath, TOML.stringify(config));
+      }
+
+      if (loadgenBootstrapConfig) {
+        additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
       }
     }
 
@@ -327,6 +336,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
       };
 
       await tryTimeout(timeout * 1000, untilProvisioned);
+
+      // TODO: Figure out how to plumb address of other loadgen client
+      if (soloAddr) {
+        additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
+      }
     }
 
     console.log('Done');
@@ -349,8 +363,10 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
-    const chainEnv = Object.create(process.env);
-    chainEnv.SLOGFILE = slogFifo.path;
+    const chainEnv = Object.assign(Object.create(process.env), {
+      ...additionChainEnv,
+      SLOGFILE: slogFifo.path,
+    });
     // DO NOT enable any debug mode for a chain which doesn't have debug enabled
     // That's because currently any DEBUG env set changes the way vats process console
     // logs, which causes divergences with other nodes
@@ -458,6 +474,9 @@ ${chainName} chain does not yet know of address ${soloAddr}
           await sleep(5 * 1000);
         }
       }
+
+      // Rethrow any error if stopped before ready
+      await chainDone;
     });
 
     return tryTimeout(

@@ -15,6 +15,7 @@
     "@agoric/ertp": "*",
     "@agoric/eventual-send": "*",
     "@agoric/marshal": "*",
+    "@agoric/notifier": "*",
     "@agoric/ui-components": "*",
     "@agoric/zoe": "*"
   },
