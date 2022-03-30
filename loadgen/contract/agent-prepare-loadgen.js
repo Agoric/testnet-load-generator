@@ -391,6 +391,7 @@ export default async function startAgent({
       ]);
 
       const rates = {
+        debtLimit: AmountMath.make(centralBrand, 1_000_000_000n),
         liquidationMargin: makeRatio(105n, centralBrand),
         interestRate: makeRatio(250n, centralBrand, BASIS_POINTS),
         loanFee: makeRatio(200n, centralBrand, BASIS_POINTS),
