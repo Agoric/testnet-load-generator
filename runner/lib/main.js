@@ -213,8 +213,11 @@ const main = async (progName, rawArgs, powers) => {
 
   // TODO: switch to full yargs for documenting output
   const argv = yargsParser(rawArgs, {
+    array: ['trace'],
     configuration: {
       'duplicate-arguments-array': false,
+      'flatten-duplicate-arrays': false,
+      'greedy-arrays': true,
     },
   });
 
@@ -267,8 +270,8 @@ const main = async (progName, rawArgs, powers) => {
 
   const { console: topConsole } = makeConsole();
 
-  const outputDir = String(argv.outputDir || `results/run-${Date.now()}`);
-  topConsole.log(`Outputting to ${resolvePath(outputDir)}`);
+  const outputDir = resolvePath(argv.outputDir || `results/run-${Date.now()}`);
+  topConsole.log(`Outputting to ${outputDir}`);
   await fs.mkdir(outputDir, { recursive: true });
 
   /** @type {typeof makeLocalChainTasks | typeof makeTestnetTasks} */
@@ -402,6 +405,50 @@ const main = async (progName, rawArgs, powers) => {
     outputStream.write('\n');
   };
 
+  /** @type {import('./tasks/types.js').CosmicSwingSetTracingKeys[]} */
+  const allowedTracingOptions = ['xsnap', 'kvstore', 'swingstore'];
+  /** @type {import('./tasks/types.js').CosmicSwingSetTracingKeys[]} */
+  const tracing = [];
+
+  if (argv.trace) {
+    // If `--trace` is specified without values, enable all
+    if (!argv.trace.length) {
+      argv.trace = allowedTracingOptions;
+    }
+
+    // `--no-trace` results in `[ false ]`
+    if (argv.trace.length === 0 && argv.trace[0] === false) {
+      argv.trace = [];
+    }
+
+    if (!Array.isArray(argv.trace)) {
+      throw new Error(`Invalid 'trace' option: ${argv.trace}`);
+    }
+
+    for (const val of argv.trace) {
+      if (!allowedTracingOptions.includes(val)) {
+        topConsole.log(`Ignoring 'trace' option value "${val}"`);
+      } else {
+        tracing.push(val);
+      }
+    }
+  }
+
+  /**
+   * @param {'client' | 'chain'} role
+   * @returns {import('./tasks/types.js').TaskSwingSetOptions['trace']}
+   */
+  const makeTraceOption = (role) => {
+    return Object.fromEntries(
+      tracing
+        .filter((val) => role === 'chain' || val !== 'kvstore')
+        .map((val) => [
+          val,
+          `${outputDir}/${role}-stage-${currentStage}-${val}-trace`,
+        ]),
+    );
+  };
+
   /**
    * @param {Object} config
    * @param {boolean} config.chainOnly
@@ -442,7 +489,11 @@ const main = async (progName, rawArgs, powers) => {
     const spawnChain = async (nextStep) => {
       stageConsole.log('Running chain');
       logPerfEvent('run-chain-start');
-      const runChainResult = await runChain({ stdout: out, stderr: err });
+      const runChainResult = await runChain({
+        stdout: out,
+        stderr: err,
+        trace: makeTraceOption('chain'),
+      });
       logPerfEvent('run-chain-finish');
       stats.recordChainStart(timeSource.getTime());
 
@@ -586,7 +637,11 @@ const main = async (progName, rawArgs, powers) => {
     const spawnClient = async (nextStep) => {
       stageConsole.log('Running client');
       logPerfEvent('run-client-start');
-      const runClientResult = await runClient({ stdout: out, stderr: err });
+      const runClientResult = await runClient({
+        stdout: out,
+        stderr: err,
+        trace: makeTraceOption('client'),
+      });
       logPerfEvent('run-client-finish');
       stats.recordClientStart(timeSource.getTime());
 
@@ -1044,13 +1099,13 @@ const main = async (progName, rawArgs, powers) => {
             }
 
             const backupResults = await Promise.all(
-              Object.entries(locations).map(([type, location]) => {
+              Object.entries(locations).map(([role, location]) => {
                 if (location != null) {
-                  initConsole.log(`Saving ${type} storage`);
+                  initConsole.log(`Saving ${role} storage`);
                   return backgroundCompressFolder(
                     location,
                     suffix,
-                    joinPath(outputDir, `${type}-storage${suffix}.tar.xz`),
+                    joinPath(outputDir, `${role}${suffix}-storage.tar.xz`),
                   );
                 }
                 return undefined;

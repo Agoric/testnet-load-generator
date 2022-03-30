@@ -161,3 +161,29 @@ export const getConsoleAndStdio = (prefix, stdout, stderr) => {
   });
   return { console, stdio: [undefined, out, err] };
 };
+
+/**
+ *
+ * @param {Pick<import('./types.js').TaskSwingSetOptions, 'trace'>} options
+ * @param {string} [envPrefix]
+ */
+export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
+  /** @type {Record<string, string>} */
+  const env = {};
+  /** @type {string[]} */
+  const args = [];
+
+  if (trace.xsnap) {
+    env[`${envPrefix}XSNAP_TEST_RECORD`] = trace.xsnap;
+  }
+
+  if (trace.swingstore) {
+    env[`${envPrefix}SWING_STORE_TRACE`] = trace.swingstore;
+  }
+
+  if (trace.kvstore) {
+    args.push(`--trace-store=${trace.kvstore}`);
+  }
+
+  return { env, args };
+};

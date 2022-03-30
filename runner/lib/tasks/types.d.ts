@@ -67,10 +67,17 @@ export interface TaskBaseOptions {
   readonly config?: unknown;
 }
 
+export type CosmicSwingSetTracingKeys = 'xsnap' | 'kvstore' | 'swingstore';
+export interface TaskSwingSetOptions extends TaskBaseOptions {
+  readonly trace?:
+    | Partial<Record<CosmicSwingSetTracingKeys, string>>
+    | undefined;
+}
+
 export interface OrchestratorTasks {
   getEnvInfo(options: TaskBaseOptions): Promise<EnvInfo>;
   setupTasks(options: TaskBaseOptions): Promise<SetupTasksResult>;
-  runChain(options: TaskBaseOptions): Promise<RunChainResult>;
-  runClient(options: TaskBaseOptions): Promise<RunClientResult>;
+  runChain(options: TaskSwingSetOptions): Promise<RunChainResult>;
+  runClient(options: TaskSwingSetOptions): Promise<RunClientResult>;
   runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
 }

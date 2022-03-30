@@ -24,6 +24,7 @@ import {
   wrapArgvMatcherIgnoreEnvShebang,
   getConsoleAndStdio,
   cleanAsyncIterable,
+  getExtraEnvArgs,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
@@ -235,8 +236,8 @@ export const makeTasks = ({
     return harden(storageLocations);
   };
 
-  /** @param {import("./types.js").TaskBaseOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 180 }) => {
+  /** @param {import("./types.js").TaskSwingSetOptions} options */
+  const runChain = async ({ stdout, stderr, timeout = 180, trace }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -250,15 +251,18 @@ export const makeTasks = ({
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
+    const { env: traceEnv, args: traceArgs } = getExtraEnvArgs({ trace });
+
     const chainEnv = Object.assign(Object.create(process.env), {
       ...additionChainEnv,
+      ...traceEnv,
       SLOGFILE: slogFifo.path,
       DEBUG: VerboseDebugEnv,
     });
 
     const chainCp = printerSpawn(
       sdkBinaries.cosmosChain,
-      ['start', `--home=${chainStateDir}`],
+      ['start', `--home=${chainStateDir}`, ...traceArgs],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: chainEnv,
@@ -346,8 +350,8 @@ export const makeTasks = ({
     );
   };
 
-  /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 180 }) => {
+  /** @param {import("./types.js").TaskSwingSetOptions} options */
+  const runClient = async ({ stdout, stderr, timeout = 180, trace }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -474,9 +478,13 @@ export const makeTasks = ({
       slogLines.writableEnded ? undefined : pipeline(slogFifo, slogLines),
     );
 
-    const clientEnv = Object.create(process.env);
-    clientEnv.SOLO_SLOGFILE = slogFifo.path;
-    clientEnv.DEBUG = VerboseDebugEnv;
+    const { env: traceEnv } = getExtraEnvArgs({ trace }, 'SOLO_');
+
+    const clientEnv = Object.assign(Object.create(process.env), {
+      ...traceEnv,
+      SOLO_SLOGFILE: slogFifo.path,
+      DEBUG: VerboseDebugEnv,
+    });
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
