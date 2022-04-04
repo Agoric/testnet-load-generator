@@ -45,8 +45,10 @@ export const childProcessDone = (
 
       if (code === 0 || ignoreExitCode) {
         resolve(code != null ? code : -1);
-      } else {
+      } else if (code) {
         reject(new Error(`Process exited with non-zero code: ${code}`));
+      } else {
+        reject(new Error(`Process exited with null code, signal ${signal}`));
       }
     };
 
