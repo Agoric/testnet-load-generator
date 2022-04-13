@@ -89,7 +89,7 @@ export default async function startAgent({
   // (we close over 'collateralToLock')
   async function openVault() {
     console.error('create-vault: cycle: openVault');
-    const openInvitationP = E(vaultFactory).makeLoanInvitation();
+    const openInvitationP = E(vaultFactory).makeVaultInvitation();
     const proposal = harden({
       give: {
         Collateral: collateralToLock,
