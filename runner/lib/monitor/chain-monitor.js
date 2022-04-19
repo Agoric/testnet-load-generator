@@ -34,12 +34,22 @@ export const makeChainMonitor = (
   let vatUpdated = Promise.resolve();
 
   const updateVatInfos = async () => {
-    console.log('Updating vat infos');
-    const childrenInfos = new Set(
-      await kernelProcessInfo.getChildren().catch(() => []),
+    const childrenInfos = new Map(
+      await kernelProcessInfo.getChildren().then(
+        (infos) =>
+          Promise.all(
+            infos.map(
+              async (info) =>
+                /** @type {const} */ ([
+                  info,
+                  await info.getArgv().catch(() => {}),
+                ]),
+            ),
+          ),
+        () => [],
+      ),
     );
-    for (const info of childrenInfos) {
-      const vatArgv = await info.getArgv(); // eslint-disable-line no-await-in-loop
+    for (const [info, vatArgv] of childrenInfos.entries()) {
       if (!vatArgv || basename(vatArgv[0]).slice(0, 2) !== 'xs') continue;
       const vatIdentifierMatches = vatIdentifierRE.exec(vatArgv[1]);
       if (!vatIdentifierMatches) continue;
@@ -53,7 +63,7 @@ export const makeChainMonitor = (
         // TODO: warn found vat process without create event
         console.warn(
           `found vat ${vatID}${
-            vatName ? ` ${vatName}` : ''
+            vatName ? ` "${vatName}"` : ''
           } process before create event`,
           'pid=',
           info.pid,
@@ -64,34 +74,35 @@ export const makeChainMonitor = (
       }
 
       if (vatInfo.processInfo !== info) {
-        // TODO: warn if replacing with new processInfo ?
+        const level = vatInfo.started && !vatInfo.processInfo ? 'log' : 'warn';
+        const msg = [`found process ${info.pid} for vat ${vatID}`];
+        if (vatInfo.vatName) msg.push(`"${vatInfo.vatName}"`);
+        if (!vatInfo.started) msg.push('(before vat start event)');
+        if (vatInfo.processInfo)
+          msg.push(`(replacing process ${vatInfo.processInfo.pid})`);
+        console[level](msg.join(' '));
       }
 
       vatInfo.processInfo = info;
-
-      // if (!vatInfo.started) {
-      //   monitorConsole.warn(
-      //     `found vat ${vatID}${
-      //       vatInfo.vatName ? ` ${vatInfo.vatName}` : ''
-      //     } process before vat start event`,
-      //     'pid=',
-      //     info.pid,
-      //   );
-      // }
     }
     for (const [vatID, vatInfo] of vatInfos) {
       if (vatInfo.processInfo && !childrenInfos.has(vatInfo.processInfo)) {
+        const level = !vatInfo.started ? 'log' : 'warn';
+        const msg = [`process ${vatInfo.processInfo.pid} for vat ${vatID}`];
+        if (vatInfo.vatName) msg.push(`"${vatInfo.vatName}"`);
+        msg.push('exited');
+        if (vatInfo.started) msg.push('(before terminate event)');
+        console[level](msg.join(' '));
+
         vatInfo.processInfo = null;
       }
 
-      if (vatInfo.started && !vatInfo.local && !vatInfo.processInfo) {
-        // Either the vat started but the process doesn't exist yet (undefined)
-        // or the vat process exited but the vat didn't stop yet (null)
-        console.warn(
-          `Vat ${vatID} started but process ${
-            vatInfo.processInfo === null ? 'exited early' : "doesn't exist yet"
-          }`,
-        );
+      if (
+        vatInfo.started &&
+        !vatInfo.local &&
+        vatInfo.processInfo === undefined
+      ) {
+        console.warn(`Vat ${vatID} started but process doesn't exist yet`);
       }
     }
   };
@@ -121,7 +132,7 @@ export const makeChainMonitor = (
           processInfo: kernelProcessInfo,
         },
         ...[...vatInfos]
-          .filter(([, { local }]) => !local)
+          .filter(([, { local, started }]) => !local && started)
           .map(([vatID, { processInfo, vatName }]) => ({
             eventData: {
               processType: 'vat',
@@ -205,13 +216,19 @@ export const makeChainMonitor = (
   /**
    *
    * @param {string} vatID
+   * @param {boolean} started
    */
-  const updateVat = (vatID) => {
+  const updateVat = (vatID, started) => {
     const vatInfo = vatInfos.get(vatID);
     if (!vatInfo) {
       // TODO: warn unknown vat
-    } else if (!vatInfo.processInfo) {
-      ensureVatInfoUpdated();
+    } else {
+      const wasStarted = vatInfo.started;
+      vatInfo.started = started;
+      const running = !!vatInfo.processInfo;
+      if (wasStarted !== started || running !== started) {
+        ensureVatInfoUpdated();
+      }
     }
   };
 
