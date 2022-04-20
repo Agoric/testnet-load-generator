@@ -23,6 +23,7 @@ import { warnOnRejection } from '../helpers/async.js';
  *   time: TimeValueS,
  *   type: |
  *     'vat-startup-finish' |
+ *     'terminate' |
  *     'replay-transcript-start' | // Renamed to 'start-replay'
  *     'start-replay',
  *   vatID: string
@@ -104,6 +105,7 @@ import { warnOnRejection } from '../helpers/async.js';
 const vatSlogEventTypes = [
   'create-vat',
   'vat-startup-finish',
+  'terminate',
   'replay-transcript-start',
   'start-replay',
 ];
@@ -216,7 +218,14 @@ export const monitorSlog = async (
       case 'start-replay': {
         if (chainMonitor) {
           const { vatID } = event;
-          chainMonitor.updateVat(vatID);
+          chainMonitor.updateVat(vatID, true);
+        }
+        break;
+      }
+      case 'terminate': {
+        if (chainMonitor) {
+          const { vatID } = event;
+          chainMonitor.updateVat(vatID, false);
         }
         break;
       }
