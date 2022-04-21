@@ -373,6 +373,7 @@ const main = async (progName, rawArgs, powers) => {
   await fsStreamReady(outputStream);
 
   const envInfo = await getEnvInfo({ stdout, stderr });
+  topConsole.log(envInfo);
 
   const runStats = makeRunStats({
     metadata: {
