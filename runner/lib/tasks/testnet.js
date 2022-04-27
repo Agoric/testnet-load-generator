@@ -26,6 +26,7 @@ import {
   getConsoleAndStdio,
   fetchAsJSON,
   cleanAsyncIterable,
+  getExtraEnvArgs,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
@@ -348,8 +349,8 @@ ${chainName} chain does not yet know of address ${soloAddr}
     return harden(storageLocations);
   };
 
-  /** @param {import("./types.js").TaskBaseOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 180 }) => {
+  /** @param {import("./types.js").TaskSwingSetOptions} options */
+  const runChain = async ({ stdout, stderr, timeout = 180, trace }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -363,8 +364,11 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
+    const { env: traceEnv, args: traceArgs } = getExtraEnvArgs({ trace });
+
     const chainEnv = Object.assign(Object.create(process.env), {
       ...additionChainEnv,
+      ...traceEnv,
       SLOGFILE: slogFifo.path,
     });
     // DO NOT enable any debug mode for a chain which doesn't have debug enabled
@@ -373,11 +377,15 @@ ${chainName} chain does not yet know of address ${soloAddr}
     // See https://github.com/Agoric/agoric-sdk/issues/4506
     // chainEnv.DEBUG = VerboseDebugEnv;
 
-    const chainCp = printerSpawn(sdkBinaries.cosmosChain, ['start'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: chainEnv,
-      detached: true,
-    });
+    const chainCp = printerSpawn(
+      sdkBinaries.cosmosChain,
+      ['start', ...traceArgs],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: chainEnv,
+        detached: true,
+      },
+    );
 
     let stopped = false;
     /** @type {{signal: undefined | 'SIGTERM'}} */
@@ -507,8 +515,8 @@ ${chainName} chain does not yet know of address ${soloAddr}
     );
   };
 
-  /** @param {import("./types.js").TaskBaseOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 180 }) => {
+  /** @param {import("./types.js").TaskSwingSetOptions} options */
+  const runClient = async ({ stdout, stderr, timeout = 180, trace }) => {
     const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -524,9 +532,13 @@ ${chainName} chain does not yet know of address ${soloAddr}
       slogLines.writableEnded ? undefined : pipeline(slogFifo, slogLines),
     );
 
-    const clientEnv = Object.create(process.env);
-    clientEnv.SOLO_SLOGFILE = slogFifo.path;
-    clientEnv.DEBUG = VerboseDebugEnv;
+    const { env: traceEnv } = getExtraEnvArgs({ trace }, 'SOLO_');
+
+    const clientEnv = Object.assign(Object.create(process.env), {
+      ...traceEnv,
+      SOLO_SLOGFILE: slogFifo.path,
+      DEBUG: VerboseDebugEnv,
+    });
 
     const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
       stdio: ['ignore', 'pipe', 'pipe'],
