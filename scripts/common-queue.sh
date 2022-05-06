@@ -35,11 +35,14 @@ start() {
     done
     echo "processing ${SDK_REVISION}"
     mkdir "${OUTPUT_DIR}"
+    mkdir "${OUTPUT_DIR}/src"
+    mkdir "${OUTPUT_DIR}/tmp"
     DOCKER_ID=$(docker create \
       -v loadgen-go-pkg-mod:/go/pkg/mod \
       -v loadgen-yarn-cache:/home/node/.cache/yarn \
       -v "$(pwd)/${OUTPUT_DIR}:/out" \
-      -v loadgen-tmp:/tmp \
+      -v "$(pwd)/${OUTPUT_DIR}/src:/src" \
+      -v "$(pwd)/${OUTPUT_DIR}/tmp:/tmp" \
       --ulimit core=-1 \
       -e SDK_REVISION=${SDK_REVISION} \
       -e SDK_REPO=${SDK_REPO} \
