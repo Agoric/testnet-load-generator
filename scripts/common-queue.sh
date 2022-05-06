@@ -39,6 +39,8 @@ start() {
       -v loadgen-go-pkg-mod:/go/pkg/mod \
       -v loadgen-yarn-cache:/home/node/.cache/yarn \
       -v "$(pwd)/${OUTPUT_DIR}:/out" \
+      -v loadgen-tmp:/tmp \
+      --ulimit core=-1 \
       -e SDK_REVISION=${SDK_REVISION} \
       -e SDK_REPO=${SDK_REPO} \
       --name "${OUTPUT_DIR}" \
