@@ -1,5 +1,10 @@
 // @ts-check
 
+/**
+ * @template T
+ * @param {Promise<T>[]} args
+ * @returns {Promise<T>}
+ */
 export const fallback = (...args) =>
   Promise.allSettled(args).then((results) => {
     for (const result of results) {

@@ -168,11 +168,28 @@ export default async function startAgent({
 
   const purseFinder = makePurseFinder({ wallet, walletAdmin });
 
+  const stableBrandP = fallback(
+    ...['IST', 'RUN'].map(
+      async (symbol) =>
+        /** @type {const} */ ([
+          symbol,
+          /** @type {Brand} */ (await E(agoricNames).lookup('brand', symbol)),
+        ]),
+    ),
+  );
+
   // Get the stable token purse and initial balance from the wallet
   // This shouldn't require, on its own, any requests to the chain as
   // it just waits until the wallet bootstrap is sufficiently advanced
   const { kit: stableKit, balance: initialStableBalance } = E.get(
-    purseFinder.find({ symbolPetname: 'RUN' }),
+    E.when(stableBrandP, ([symbol, stableBrand]) =>
+      purseFinder.find({
+        purseMatcher: ({ brand, pursePetname, value }) =>
+          brand === stableBrand && pursePetname.indexOf('Zoe') < 0 && value > 0
+            ? symbol
+            : undefined,
+      }),
+    ),
   );
 
   // Setup the fee purse if necessary and get the remaining stable token balance

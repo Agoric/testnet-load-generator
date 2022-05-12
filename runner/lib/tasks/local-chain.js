@@ -40,10 +40,13 @@ const clientStateDir = `${stateDir}/${'local-solo'}-${CLIENT_PORT}`;
 const chainStateDir = `${stateDir}/${profileName}-${CHAIN_PORT}`;
 const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
-const CENTRAL_DENOM = 'urun';
+const STABLE_DENOMS = ['uist', 'urun'];
 const STAKING_DENOM = 'ubld';
+
 // Need to provision less than 50000 RUN as that's the most we can get from an old sdk genesis
-const SOLO_COINS = `75000000${STAKING_DENOM},40000000000${CENTRAL_DENOM}`;
+/** @param {string} stableDenom */
+const getSoloCoins = (stableDenom) =>
+  `75000000${STAKING_DENOM},40000000000${stableDenom}`;
 
 const VerboseDebugEnv = 'agoric,SwingSet:vat,SwingSet:ls';
 
@@ -390,73 +393,93 @@ export const makeTasks = ({
       { ignoreExitCode: true },
     );
     if (checkAddrStatus !== 0) {
+      /** @param {string} denom */
+      const provCoins = (denom) => [
+        'tx',
+        'bank',
+        'send',
+        ...keysSharedArgs,
+        '--keyring-backend=test',
+        '--gas=auto',
+        `--gas-adjustment=${GAS_ADJUSTMENT}`,
+        '--broadcast-mode=block',
+        '--yes',
+        'provision',
+        soloAddr,
+        getSoloCoins(denom),
+      ];
       const provCmds = [
         // We need to provision our address.
         [
-          'tx',
-          'swingset',
-          'provision-one',
-          ...keysSharedArgs,
-          '--keyring-backend=test',
-          '--from=provision',
-          '--gas=auto',
-          `--gas-adjustment=${GAS_ADJUSTMENT}`,
-          '--broadcast-mode=block',
-          '--yes',
-          `local-solo-${CLIENT_PORT}`,
-          soloAddr,
+          [
+            'tx',
+            'swingset',
+            'provision-one',
+            ...keysSharedArgs,
+            '--keyring-backend=test',
+            '--from=provision',
+            '--gas=auto',
+            `--gas-adjustment=${GAS_ADJUSTMENT}`,
+            '--broadcast-mode=block',
+            '--yes',
+            `local-solo-${CLIENT_PORT}`,
+            soloAddr,
+          ],
         ],
         // Then send it some coins.
-        [
-          'tx',
-          'bank',
-          'send',
-          ...keysSharedArgs,
-          '--keyring-backend=test',
-          '--gas=auto',
-          `--gas-adjustment=${GAS_ADJUSTMENT}`,
-          '--broadcast-mode=block',
-          '--yes',
-          'provision',
-          soloAddr,
-          SOLO_COINS,
-        ],
+        STABLE_DENOMS.map(provCoins),
       ];
       for (let i = 0; i < provCmds.length; i += 1) {
-        const cmd = provCmds[i];
-        const cmdCp = printerSpawn(
-          sdkBinaries.cosmosHelper,
-          [...outputArgs, ...cmd],
-          {
-            stdio: ['ignore', 'pipe', 'pipe'],
-          },
-        );
-        // eslint-disable-next-line no-await-in-loop
-        const [out, err, cmdStatus] = await PromiseAllOrErrors([
-          asBuffer(cmdCp.stdout),
-          asBuffer(cmdCp.stderr),
-          childProcessDone(cmdCp, {
-            ignoreExitCode: true,
-          }),
-        ]);
-
-        if (cmdStatus !== 0) {
-          if (/unknown flag: --output/g.test(err.toString('utf-8'))) {
-            outputArgs.pop();
-            i -= 1; // Redo
-            continue; // eslint-disable-line no-continue
-          }
-          stdio[2].write(err);
-          throw new Error(
-            `Client provisioning command failed with status ${cmdStatus}`,
+        const altCmds = provCmds[i];
+        for (let j = 0; j < altCmds.length; j += 1) {
+          const cmd = altCmds[j];
+          const cmdCp = printerSpawn(
+            sdkBinaries.cosmosHelper,
+            [...outputArgs, ...cmd],
+            {
+              stdio: ['ignore', 'pipe', 'pipe'],
+            },
           );
-        }
+          // eslint-disable-next-line no-await-in-loop
+          const [out, err, cmdStatus] = await PromiseAllOrErrors([
+            asBuffer(cmdCp.stdout),
+            asBuffer(cmdCp.stderr),
+            childProcessDone(cmdCp, {
+              ignoreExitCode: true,
+            }),
+          ]);
 
-        const json = out.toString('utf-8').replace(/^gas estimate: \d+$/m, '');
-        const res = JSON.parse(json);
-        console.log(...cmd.slice(0, 3), 'result', res);
-        if (res.code !== 0) {
-          throw new Error('Client provisioning command failed');
+          if (cmdStatus !== 0) {
+            if (/unknown flag: --output/g.test(err.toString('utf-8'))) {
+              outputArgs.pop();
+              i -= 1; // Redo
+              break;
+            }
+            const errorMsg = `Client provisioning command failed with status ${cmdStatus}`;
+            if (j === altCmds.length - 1) {
+              stdio[2].write(err);
+              throw new Error(errorMsg);
+            } else {
+              console.error(errorMsg);
+              continue; // eslint-disable-line no-continue
+            }
+          }
+
+          const json = out
+            .toString('utf-8')
+            .replace(/^gas estimate: \d+$/m, '');
+          const res = JSON.parse(json);
+          console.log(...cmd.slice(0, 3), 'result', res);
+          if (res.code !== 0) {
+            const errorMsg = 'Client provisioning command failed';
+            if (j === altCmds.length - 1) {
+              throw new Error(errorMsg);
+            } else {
+              console.error(errorMsg);
+            }
+          } else {
+            break;
+          }
         }
       }
     }
