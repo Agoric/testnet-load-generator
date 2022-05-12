@@ -23,47 +23,48 @@ const onePercent = (amount) =>
  *
  * @param {startParam} param
  * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
- * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'name' | 'displayInfo'>} AssetKit
+ * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'symbol' | 'displayInfo'>} AssetKit
  * @typedef {{
- *   runKit: AssetKit,
+ *   stableKit: AssetKit,
  *   tokenKit: AssetKit,
  *   amm: ERef<import('../types').AttenuatedAMM>,
  *   zoe: ERef<ZoeService>,
  * }} startParam
  */
 export default async function startAgent({
-  runKit: {
-    brand: runBrand,
-    purse: runPurse,
-    displayInfo: { decimalPlaces: runDecimalPlaces },
+  stableKit: {
+    brand: stableBrand,
+    purse: stablePurse,
+    symbol: stableSymbol,
+    displayInfo: { decimalPlaces: stableDecimalPlaces },
   },
   tokenKit: {
     brand: targetBrand,
     purse: targetPurse,
-    name: targetToken,
+    symbol: targetSymbol,
     displayInfo: { decimalPlaces: targetDecimalPlaces },
   },
   amm: publicFacet,
   zoe,
 }) {
   await Promise.all([
-    getPurseBalance(runPurse),
+    getPurseBalance(stablePurse),
     getPurseBalance(targetPurse),
-  ]).then(([runBalance, targetBalance]) => {
+  ]).then(([stableBalance, targetBalance]) => {
     console.error(
       `trade-amm: will trade about ${disp(
-        onePercent(runBalance),
-        runDecimalPlaces,
-      )} RUN and ${disp(
+        onePercent(stableBalance),
+        stableDecimalPlaces,
+      )} ${stableSymbol} and ${disp(
         onePercent(targetBalance),
         targetDecimalPlaces,
-      )} ${targetToken} per cycle`,
+      )} ${targetSymbol} per cycle`,
     );
   });
 
-  async function buyRunWithTarget(targetOffered) {
+  async function buyStableWithTarget(targetOffered) {
     const proposal = harden({
-      want: { Out: AmountMath.makeEmpty(runBrand, AssetKind.NAT) },
+      want: { Out: AmountMath.makeEmpty(stableBrand, AssetKind.NAT) },
       give: { In: targetOffered },
     });
     const payment = harden({ In: E(targetPurse).withdraw(targetOffered) });
@@ -78,17 +79,17 @@ export default async function startAgent({
     ]);
     await Promise.all([
       E(targetPurse).deposit(refundPayout),
-      E(runPurse).deposit(payout),
+      E(stablePurse).deposit(payout),
       E(seatP).getOfferResult(),
     ]);
   }
 
-  async function buyTargetWithRun(runOffered) {
+  async function buyTargetWithStable(stableOffered) {
     const proposal = harden({
       want: { Out: AmountMath.makeEmpty(targetBrand, AssetKind.NAT) },
-      give: { In: runOffered },
+      give: { In: stableOffered },
     });
-    const payment = harden({ In: E(runPurse).withdraw(runOffered) });
+    const payment = harden({ In: E(stablePurse).withdraw(stableOffered) });
     const seatP = E(zoe).offer(
       E(publicFacet).makeSwapInInvitation(),
       proposal,
@@ -99,7 +100,7 @@ export default async function startAgent({
       E(seatP).getPayout('Out'),
     ]);
     await Promise.all([
-      E(runPurse).deposit(refundPayout),
+      E(stablePurse).deposit(refundPayout),
       E(targetPurse).deposit(payout),
       E(seatP).getOfferResult(),
     ]);
@@ -107,25 +108,26 @@ export default async function startAgent({
 
   const agent = Far('AMM agent', {
     async doAMMCycle() {
-      console.error(`trade-amm: cycle: ${targetToken}->RUN`);
+      console.error(`trade-amm: cycle: ${targetSymbol}->${stableSymbol}`);
       const target = await getPurseBalance(targetPurse);
       const targetOffered = onePercent(target);
-      await buyRunWithTarget(targetOffered);
+      await buyStableWithTarget(targetOffered);
 
-      console.error(`trade-amm: cycle: RUN->${targetToken}`);
-      const run = await getPurseBalance(runPurse);
-      const runOffered = onePercent(run);
-      await buyTargetWithRun(runOffered);
+      console.error(`trade-amm: cycle: ${stableSymbol}->${targetSymbol}`);
+      const stable = await getPurseBalance(stablePurse);
+      const stableOffered = onePercent(stable);
+      await buyTargetWithStable(stableOffered);
 
-      const [newRunBalance, newTargetBalance] = await Promise.all([
-        getPurseBalance(runPurse),
+      const [newStableBalance, newTargetBalance] = await Promise.all([
+        getPurseBalance(stablePurse),
         getPurseBalance(targetPurse),
       ]);
       console.error('trade-amm: cycle: done');
       return {
-        newRunBalanceDisplay: disp(newRunBalance, runDecimalPlaces),
+        newStableBalanceDisplay: disp(newStableBalance, stableDecimalPlaces),
         newTargetBalanceDisplay: disp(newTargetBalance, targetDecimalPlaces),
-        targetToken,
+        stableSymbol,
+        targetSymbol,
       };
     },
   });
