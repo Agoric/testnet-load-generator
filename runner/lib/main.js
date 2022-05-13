@@ -718,6 +718,11 @@ const main = async (progName, rawArgs, powers) => {
         logPerfEvent('loadgen-stopped');
       });
 
+      /** @type {Error | null} */
+      let loadgenTaskFailed = null;
+      /** @type {import('./sdk/promise-kit.js').PromiseRecord<void>} */
+      const stopLoadgenKit = makePromiseKit();
+
       const notifier = {
         currentCount: 0,
         /** @param {number} count */
@@ -726,6 +731,14 @@ const main = async (progName, rawArgs, powers) => {
           if (!count && notifier.idleCallback) {
             notifier.idleCallback();
           }
+        },
+        /**
+         * @param {string} task
+         * @param {number} seq
+         */
+        taskFailure(task, seq) {
+          loadgenTaskFailed = new Error(`Loadgen ${task} task ${seq} failed`);
+          stopLoadgenKit.resolve();
         },
         /** @type {null | (() => void)} */
         idleCallback: null,
@@ -757,9 +770,9 @@ const main = async (progName, rawArgs, powers) => {
             await runLoadgenResult.updateConfig(loadgenConfig);
           }
 
-          await nextStep(done);
+          await nextStep(Promise.race([done, stopLoadgenKit.promise]));
 
-          if (loadgenWindDown && notifier.currentCount) {
+          if (loadgenWindDown && notifier.currentCount && !loadgenTaskFailed) {
             /** @type {Promise<void>} */
             const idle = new Promise((resolve) => {
               notifier.idleCallback = resolve;
@@ -792,6 +805,10 @@ const main = async (progName, rawArgs, powers) => {
           }
 
           await monitorLoadgenDone;
+
+          if (loadgenTaskFailed) {
+            throw loadgenTaskFailed;
+          }
         },
       );
     };
