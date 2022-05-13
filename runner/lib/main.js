@@ -406,7 +406,7 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /** @type {import('./tasks/types.js').CosmicSwingSetTracingKeys[]} */
-  const allowedTracingOptions = ['xsnap', 'kvstore', 'swingstore'];
+  const allowedTracingOptions = ['xsnap', 'kvstore', 'swingstore', 'rr'];
   /** @type {import('./tasks/types.js').CosmicSwingSetTracingKeys[]} */
   const tracing = [];
 

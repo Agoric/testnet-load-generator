@@ -173,6 +173,9 @@ export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
   /** @type {string[]} */
   const args = [];
 
+  /** @type {string[] | null} */
+  let cmd = null;
+
   if (trace.xsnap) {
     env[`${envPrefix}XSNAP_TEST_RECORD`] = trace.xsnap;
   }
@@ -185,5 +188,10 @@ export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
     args.push(`--trace-store=${trace.kvstore}`);
   }
 
-  return { env, args };
+  if (trace.rr) {
+    cmd = ['rr', 'record'];
+    env[`_RR_TRACE_DIR`] = trace.rr; // eslint-disable-line
+  }
+
+  return { env, args, cmd };
 };

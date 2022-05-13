@@ -67,7 +67,11 @@ export interface TaskBaseOptions {
   readonly config?: unknown;
 }
 
-export type CosmicSwingSetTracingKeys = 'xsnap' | 'kvstore' | 'swingstore';
+export type CosmicSwingSetTracingKeys =
+  | 'xsnap'
+  | 'kvstore'
+  | 'swingstore'
+  | 'rr';
 export interface TaskSwingSetOptions extends TaskBaseOptions {
   readonly trace?:
     | Partial<Record<CosmicSwingSetTracingKeys, string>>

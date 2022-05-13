@@ -251,7 +251,11 @@ export const makeTasks = ({
     const slogLines = new BufferLineTransform();
     const slogPipeResult = pipeline(slogFifo, slogLines);
 
-    const { env: traceEnv, args: traceArgs } = getExtraEnvArgs({ trace });
+    const {
+      env: traceEnv,
+      args: traceArgs,
+      cmd: traceCmd,
+    } = getExtraEnvArgs({ trace });
 
     const chainEnv = Object.assign(Object.create(process.env), {
       ...additionChainEnv,
@@ -260,18 +264,24 @@ export const makeTasks = ({
       DEBUG: VerboseDebugEnv,
     });
 
-    const chainCp = printerSpawn(
-      sdkBinaries.cosmosChain,
-      ['start', `--home=${chainStateDir}`, ...traceArgs],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: chainEnv,
-        detached: true,
-      },
-    );
+    const cmd = traceCmd
+      ? /** @type {string} */ (traceCmd.shift())
+      : sdkBinaries.cosmosChain;
+    const args = [
+      ...(traceCmd ? [...traceCmd, sdkBinaries.cosmosChain] : []),
+      'start',
+      `--home=${chainStateDir}`,
+      ...traceArgs,
+    ];
+
+    const chainCp = printerSpawn(cmd, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: chainEnv,
+      detached: true,
+    });
 
     let stopped = false;
-    /** @type {{signal: undefined | 'SIGTERM'}} */
+    /** @type {{signal: undefined | true}} */
     const ignoreKill = {
       signal: undefined,
     };
@@ -280,14 +290,6 @@ export const makeTasks = ({
       ignoreKill,
       killedExitCode: 98,
     });
-
-    const stop = () => {
-      if (!stopped) {
-        stopped = true;
-        ignoreKill.signal = 'SIGTERM';
-        chainCp.kill(ignoreKill.signal);
-      }
-    };
 
     chainDone
       .then(
@@ -329,9 +331,23 @@ export const makeTasks = ({
 
         console.log('Chain running');
 
-        const processInfo = await getProcessInfo(
+        const baseProcessInfoP = getProcessInfo(
           /** @type {number} */ (chainCp.pid),
         );
+
+        const processInfo = await (!traceCmd
+          ? baseProcessInfoP
+          : baseProcessInfoP.then((launcherInfo) =>
+              getChildMatchingArgv(launcherInfo, chainArgvMatcher),
+            ));
+
+        const stop = () => {
+          if (!stopped) {
+            stopped = true;
+            ignoreKill.signal = true;
+            process.kill(processInfo.pid);
+          }
+        };
 
         return harden({
           stop,

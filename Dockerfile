@@ -143,6 +143,14 @@ ENV TINI_VERSION v0.19.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 
+COPY --from=rr /rr-5.5.0-* /tmp/
+
+RUN set -eux; \
+		cd /tmp; \
+		rr_target="rr-5.5.0-Linux-$(uname -m).deb"; \
+		[ -f "${rr_target}" ] || wget "https://github.com/rr-debugger/rr/releases/download/5.5.0/${rr_target}"; \
+		sudo dpkg -i "${rr_target}";
+
 ##############################
 FROM dev-env
 

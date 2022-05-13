@@ -44,6 +44,7 @@ start() {
       -v "$(pwd)/${OUTPUT_DIR}/src:/src" \
       -v "$(pwd)/${OUTPUT_DIR}/tmp:/tmp" \
       --ulimit core=-1 \
+      --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --security-opt seccomp=unconfined \
       -e SDK_REVISION=${SDK_REVISION} \
       -e SDK_REPO=${SDK_REPO} \
       --name "${OUTPUT_DIR}" \
