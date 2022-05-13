@@ -71,6 +71,8 @@ export default async function startAgent({
     collateralBalance.value / BigInt(100),
   );
 
+  const stableKeyword = stableSymbol === 'RUN' ? 'RUN' : 'Minted';
+
   // we only withdraw half the value of the collateral, giving us 200%
   // collateralization
   const collaterals = await E(vaultFactory).getCollaterals();
@@ -107,7 +109,7 @@ export default async function startAgent({
         Collateral: collateralToLock,
       },
       want: {
-        [stableSymbol]: wantedStable,
+        [stableKeyword]: wantedStable,
       },
     });
     const payment = harden({
@@ -117,7 +119,7 @@ export default async function startAgent({
     await seatP;
     const [collateralPayout, stablePayout] = await Promise.all([
       E(seatP).getPayout('Collateral'),
-      E(seatP).getPayout(stableSymbol),
+      E(seatP).getPayout(stableKeyword),
     ]);
     await Promise.all([
       E(collateralPurse).deposit(collateralPayout),
@@ -137,18 +139,18 @@ export default async function startAgent({
     const closeInvitationP = E(vault).makeCloseInvitation();
     const proposal = {
       give: {
-        [stableSymbol]: stableNeeded,
+        [stableKeyword]: stableNeeded,
       },
       want: {
         Collateral: AmountMath.makeEmpty(collateralBrand),
       },
     };
     const payment = harden({
-      [stableSymbol]: E(stablePurse).withdraw(stableNeeded),
+      [stableKeyword]: E(stablePurse).withdraw(stableNeeded),
     });
     const seatP = E(zoe).offer(closeInvitationP, proposal, payment);
     const [stablePayout, collateralPayout] = await Promise.all([
-      E(seatP).getPayout(stableSymbol),
+      E(seatP).getPayout(stableKeyword),
       E(seatP).getPayout('Collateral'),
     ]);
     await Promise.all([
