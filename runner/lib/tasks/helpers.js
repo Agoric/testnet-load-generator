@@ -189,7 +189,12 @@ export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
   }
 
   if (trace.rr) {
-    cmd = ['rr', 'record'];
+    cmd = [
+      'rr',
+      'record',
+      '--disable-cpuid-features-ext',
+      '0xfc230000,0x2c42,0xc',
+    ];
     env[`_RR_TRACE_DIR`] = trace.rr; // eslint-disable-line
   }
 
