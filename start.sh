@@ -68,7 +68,11 @@ fi
 
 cd "$SDK_SRC"
 if [ "x$SDK_BUILD" != "x0" ]; then
-    npm_config_debug="true" yarn install --frozen-lockfile
+    export npm_config_debug="true"
+    export npm_config_build_from_source="true"
+    export GYP_DEBUG="--debug"
+    export GO_DEBUG="1"
+    yarn install --frozen-lockfile
     yarn build
     make -C packages/cosmic-swingset
 fi

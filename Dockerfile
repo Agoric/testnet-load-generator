@@ -151,6 +151,21 @@ RUN set -eux; \
 		[ -f "${rr_target}" ] || wget "https://github.com/rr-debugger/rr/releases/download/5.5.0/${rr_target}"; \
 		sudo dpkg -i "${rr_target}";
 
+COPY --from=node-debug /node-* /tmp/
+
+RUN set -eux; \
+		node_target="/tmp/node-$(node -v).tgz"; \
+		if [ -f "${node_target}" ] ; then \
+		  tar -C /opt -xzf ${node_target} ; \
+			node_src_target="/tmp/node-src-$(node -v).tgz"; \
+			[ -f "${node_src_target}" ] && tar -C /opt -xzf ${node_src_target}; \
+			echo 'export PATH=/opt/node/bin:$PATH' > /etc/profile.d/01-node-debug.sh ; \
+			chmod a+x /etc/profile.d/01-node-debug.sh; \
+		fi ; \
+		rm /tmp/node-*.tgz;
+
+ENV PATH /opt/node/bin:$PATH
+
 ##############################
 FROM dev-env
 
