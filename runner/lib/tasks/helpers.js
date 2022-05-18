@@ -107,6 +107,13 @@ export const wrapArgvMatcherIgnoreEnvShebang = (argvMatcher) => (argv) =>
   argvMatcher(argv) || (/env$/.test(argv[0]) && argvMatcher(argv.slice(1)));
 
 /**
+ * @param {ArgvMatcher} argvMatcher
+ * @returns {ArgvMatcher}
+ */
+export const wrapArgvMatcherIgnoreDashDash = (argvMatcher) => (argv) =>
+  argvMatcher(argv) || argvMatcher(argv.filter((arg) => !arg.startsWith('--')));
+
+/**
  * @param {import('../helpers/process-info.js').ProcessInfo} launcherInfo
  * @param {ArgvMatcher} argvMatcher
  * @param {number} [retries]
@@ -194,6 +201,13 @@ export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
       'record',
       '--disable-cpuid-features-ext',
       '0xfc230000,0x2c42,0xc',
+      'node',
+      '--prof',
+      '--prof-sampling-interval=1000000',
+      '--jitless',
+      '--no-expose_wasm',
+      '--expose-gc',
+      '--no-compilation-cache',
     ];
     env[`_RR_TRACE_DIR`] = trace.rr; // eslint-disable-line
   }

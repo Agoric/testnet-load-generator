@@ -25,6 +25,7 @@ import {
   getConsoleAndStdio,
   cleanAsyncIterable,
   getExtraEnvArgs,
+  wrapArgvMatcherIgnoreDashDash,
 } from './helpers.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
@@ -338,7 +339,10 @@ export const makeTasks = ({
         const processInfo = await (!traceCmd
           ? baseProcessInfoP
           : baseProcessInfoP.then((launcherInfo) =>
-              getChildMatchingArgv(launcherInfo, chainArgvMatcher),
+              getChildMatchingArgv(
+                launcherInfo,
+                wrapArgvMatcherIgnoreDashDash(chainArgvMatcher),
+              ),
             ));
 
         const stop = () => {
