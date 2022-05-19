@@ -181,6 +181,10 @@ export const getExtraEnvArgs = ({ trace = {} }, envPrefix = '') => {
     env[`${envPrefix}SWING_STORE_TRACE`] = trace.swingstore;
   }
 
+  if (trace.swingstore && trace.xsnap) {
+    env[`${envPrefix}XSNAP_KEEP_SNAPSHOTS`] = '1';
+  }
+
   if (trace.kvstore) {
     args.push(`--trace-store=${trace.kvstore}`);
   }
