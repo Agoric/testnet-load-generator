@@ -257,9 +257,9 @@ export default async function startAgent({
       brand: secondaryBrandP,
       purse: secondaryPurse,
     } = E.get(tokenKit);
-    const liquidityIssuer = E(amm).addPool(
-      secondaryIssuer,
-      issuerPetnames[tokenBrandPetname],
+    const liquidityIssuer = fallback(
+      E(amm).addIssuer(secondaryIssuer, issuerPetnames[tokenBrandPetname]),
+      E(amm).addPool(secondaryIssuer, issuerPetnames[tokenBrandPetname]),
     );
     const liquidityBrandP = E(liquidityIssuer).getBrand();
 
@@ -312,7 +312,7 @@ export default async function startAgent({
     });
 
     const addLiquiditySeat = E(zoe).offer(
-      E(amm).makeAddLiquidityInvitation(),
+      fallback(E(amm).addPoolInvitation(), E(amm).makeAddLiquidityInvitation()),
       proposal,
       harden({
         Secondary: secondaryAMMPayment,
