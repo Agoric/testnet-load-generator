@@ -28,7 +28,9 @@ export {};
  *   XYKAMMPublicFacet,
  *   'getPriceAuthorities' | 'makeSwapInInvitation' | 'makeAddLiquidityInvitation'
  * > & {
- *   addPool: (issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>
+ *   addPool?: (issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>;
+ *   addIssuer?: (issuer: ERef<Issuer>, keyword: Keyword) => Promise<Issuer>;
+ *   addPoolInvitation?: () => Promise<Invitation>;
  * } } AttenuatedAMM
  */
 
