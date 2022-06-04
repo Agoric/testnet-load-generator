@@ -38,7 +38,7 @@ const profileName = 'testnet';
 const CLIENT_PORT = 8000;
 const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
 
-const VerboseDebugEnv = 'agoric';
+const VerboseDebugEnv = 'agoric,SwingSet:vat,SwingSet:ls';
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
@@ -370,12 +370,12 @@ ${chainName} chain does not yet know of address ${soloAddr}
       ...additionChainEnv,
       ...traceEnv,
       SLOGFILE: slogFifo.path,
+      // Comment out if running against an older chain which doesn't have debug enabled
+      // That's because previously any DEBUG env set changed the way vats processed console
+      // logs, which caused divergences with other nodes
+      // See https://github.com/Agoric/agoric-sdk/issues/4506
+      DEBUG: VerboseDebugEnv,
     });
-    // DO NOT enable any debug mode for a chain which doesn't have debug enabled
-    // That's because currently any DEBUG env set changes the way vats process console
-    // logs, which causes divergences with other nodes
-    // See https://github.com/Agoric/agoric-sdk/issues/4506
-    // chainEnv.DEBUG = VerboseDebugEnv;
 
     const chainCp = printerSpawn(
       sdkBinaries.cosmosChain,
