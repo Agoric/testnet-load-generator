@@ -10,6 +10,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef {{
  *   time: TimeValueS,
+ *   monotime?: number,
  *   type: 'create-vat',
  *   vatID: string,
  *   name?: string,
@@ -21,6 +22,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef {({
  *   time: TimeValueS,
+ *   monotime?: number,
  *   type: |
  *     'vat-startup-finish' |
  *     'terminate' |
@@ -45,6 +47,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef {{
  *   time: TimeValueS,
+ *   monotime?: number,
  *   type: SlogCosmicSwingsetBlockEventTypes,
  *   blockHeight?: number,
  *   blockTime: TimeValueS
@@ -54,6 +57,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef {{
  *   time: TimeValueS,
+ *   monotime?: number,
  *   type: 'deliver',
  *   crankNum: number,
  *   vatID: string,
@@ -64,6 +68,7 @@ import { warnOnRejection } from '../helpers/async.js';
 /**
  * @typedef {{
  *   time: TimeValueS,
+ *   monotime?: number,
  *   type: 'deliver-result',
  *   crankNum: number,
  *   vatID: string,
@@ -128,7 +133,9 @@ const swingsetActiveSlogEventTypes = ['deliver', 'deliver-result'];
 
 /** @param {SlogSupportedEventTypes[]} eventTypes */
 const filterSlogEvent = (eventTypes) =>
-  new RegExp(`^{"time":\\d+(?:\\.\\d+),"type":"(?:${eventTypes.join('|')})"`);
+  new RegExp(
+    `^{(?:"time":\\d+(?:\\.\\d+),)?"type":"(?:${eventTypes.join('|')})"`,
+  );
 
 const startEventRE = filterSlogEvent([
   ...vatSlogEventTypes,
