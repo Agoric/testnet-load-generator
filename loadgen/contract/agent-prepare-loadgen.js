@@ -48,11 +48,13 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
   return harden({
     /**
+     * @template {boolean} [T=false]
      * @param {Object} param0
      * @param {string} param0.brandPetname
-     * @param {boolean} [param0.existingOnly]
+     * @param {T} [param0.existingOnly]
+     * @returns {Promise<{kit: Promise<import('../types.js').NatAssetKit>, balance: Amount<'nat'>} | (true extends T ? {kit: undefined, balance: undefined} : never)>}
      */
-    async find({ brandPetname, existingOnly = false }) {
+    async find({ brandPetname, existingOnly = /** @type {T} */ (false) }) {
       /** @type {PursesFullState | undefined} */
       let foundPurseState;
 
@@ -81,6 +83,7 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
       if (!foundPurseState) {
         if (existingOnly) {
+          // @ts-ignore
           return { kit: undefined, balance: undefined };
         }
 
@@ -93,12 +96,12 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
         // pursesStatesUpdates is an infinite iterable so
         // the above loop will not exit until it finds a purse
+        assert(foundPurseState);
       }
 
       const issuer = E(wallet).getIssuer(issuerPetnames[brandPetname]);
 
       return {
-        /** @type {Promise<import('../types.js').NatAssetKit>} */
         kit: allValues({
           issuer,
           brand: foundPurseState.brand,
@@ -106,11 +109,9 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
           name: brandPetname,
           displayInfo: foundPurseState.displayInfo,
         }),
-        balance: /** @type {Amount<'nat'>} */ (
-          AmountMath.make(
-            foundPurseState.brand,
-            foundPurseState.currentAmount.value,
-          )
+        balance: AmountMath.make(
+          foundPurseState.brand,
+          foundPurseState.currentAmount.value,
         ),
       };
     },
@@ -191,7 +192,7 @@ export default async function startAgent({
 
   // Use Zoe to install mint for loadgen token, return kit
   // Needs fee purse to be provisioned
-  /** @type {Promise<import('../types.js').NatAssetKit>} */
+  /** @type {Promise<Required<import('../types.js').NatAssetKit>>} */
   const tokenKit = E.when(withFee(), () => {
     console.error(
       `prepare-loadgen: installing mint bundle and doing startInstance`,
@@ -437,6 +438,7 @@ export default async function startAgent({
           }),
         );
 
+        /** @type {Promise<import('../types.js').NatAssetKit | undefined>} */
         let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
         if (
           (fallbackTradeToken &&
@@ -445,7 +447,7 @@ export default async function startAgent({
         ) {
           ({ kit: ammTokenKit } = E.get(
             purseFinder.find({
-              brandPetname: fallbackTradeToken,
+              brandPetname: /** @type {string} */ (fallbackTradeToken),
               existingOnly: true,
             }),
           ));

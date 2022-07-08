@@ -15,7 +15,7 @@ import { getLoadgenKit } from './prepare-loadgen.js';
 export async function prepareFaucet(home, deployPowers) {
   const key = 'fungible';
   const { scratch, spawner } = E.get(home);
-  /** @type {ERef<import('./contract/agent-tap-faucet.js').Agent> | undefined} */
+  /** @type {ERef<import('./contract/agent-tap-faucet.js').Agent>} */
   let agent = await E(scratch).get(key);
   if (!agent) {
     const loadgenKit = getLoadgenKit(home);

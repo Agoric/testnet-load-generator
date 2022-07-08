@@ -74,6 +74,7 @@ export default async function startAgent({
   // collateralization
   const collaterals = await E(vaultFactory).getCollaterals();
   const cdata = collaterals.find((c) => c.brand === collateralBrand);
+  assert(cdata);
   const priceRate = cdata.marketPrice;
   const half = makeRatio(BigInt(50), runBrand);
   const wantedRun = multiplyBy(multiplyBy(collateralToLock, priceRate), half);
