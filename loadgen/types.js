@@ -21,6 +21,7 @@ export {};
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
 /** @typedef { import('@agoric/run-protocol/src/vaultFactory/vaultFactory').VaultFactoryContract['publicFacet']} VaultFactoryPublicFacet */
+/** @typedef { import('@agoric/run-protocol/src/vaultFactory/vaultManager').CollateralManager} VaultCollateralManager */
 /** @typedef { import('@agoric/zoe/tools/priceAuthorityRegistry').PriceAuthorityRegistryAdmin } PriceAuthorityRegistryAdmin */
 
 /**

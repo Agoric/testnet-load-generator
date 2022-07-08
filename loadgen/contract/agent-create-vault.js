@@ -30,6 +30,7 @@ async function getPurseBalance(purse) {
  *   runKit: AssetKit,
  *   tokenKit: AssetKit,
  *   vaultFactory: ERef<import('../types').VaultFactoryPublicFacet>,
+ *   vaultCollateralManager: ERef<import('../types').VaultCollateralManager> | null,
  *   zoe: ERef<ZoeService>,
  * }} startParam
  */
@@ -46,6 +47,7 @@ export default async function startAgent({
     name: collateralToken,
   },
   vaultFactory,
+  vaultCollateralManager,
   zoe,
 }) {
   console.error(`create-vault: setting up tools`);
@@ -89,7 +91,9 @@ export default async function startAgent({
   // (we close over 'collateralToLock')
   async function openVault() {
     console.error('create-vault: cycle: openVault');
-    const openInvitationP = E(vaultFactory).makeLoanInvitation();
+    const openInvitationP = vaultCollateralManager
+      ? E(vaultCollateralManager).makeVaultInvitation()
+      : E(vaultFactory).makeLoanInvitation();
     const proposal = harden({
       give: {
         Collateral: collateralToLock,

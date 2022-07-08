@@ -406,42 +406,61 @@ export default async function startAgent({
     },
   );
 
-  return E.when(vaultManager, async (vaultManagerPresence) => {
-    const collateralTokenPetname =
-      fallbackCollateralToken || fallbackTradeToken;
+  return E.when(
+    Promise.all([vaultManager, vaultFactoryPublicFacet]),
+    async ([vaultManagerPresence, vaultFactory]) => {
+      const collateralTokenPetname =
+        fallbackCollateralToken || fallbackTradeToken;
 
-    if (vaultManagerPresence) {
-      return { vaultTokenKit: tokenKit, ammTokenKit: tokenKit };
-    } else if (collateralTokenPetname) {
-      // Make sure the finder knows about all purses by finding the
-      // LGT purse we created
-      await purseFinder.find({ brandPetname: tokenBrandPetname });
+      /** @type {ERef<import('../types.js').VaultCollateralManager | null>} */
+      let vaultCollateralManager = null;
 
-      const { kit: vaultTokenKit } = E.get(
-        purseFinder.find({
-          brandPetname: collateralTokenPetname,
-          existingOnly: true,
-        }),
-      );
+      if (vaultManagerPresence) {
+        vaultCollateralManager = E.when(tokenKit, ({ brand }) =>
+          // @ts-ignore
+          E(vaultFactory).getCollateralManager(brand),
+        ).catch(() => null);
+        return {
+          vaultTokenKit: tokenKit,
+          ammTokenKit: tokenKit,
+          vaultCollateralManager,
+        };
+      } else if (collateralTokenPetname) {
+        // Make sure the finder knows about all purses by finding the
+        // LGT purse we created
+        await purseFinder.find({ brandPetname: tokenBrandPetname });
 
-      let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
-      if (
-        (fallbackTradeToken && fallbackTradeToken !== collateralTokenPetname) ||
-        !(await fundingResult)
-      ) {
-        ({ kit: ammTokenKit } = E.get(
+        const { kit: vaultTokenKit } = E.get(
           purseFinder.find({
-            brandPetname: fallbackTradeToken,
+            brandPetname: collateralTokenPetname,
             existingOnly: true,
           }),
-        ));
-      }
+        );
 
-      return { vaultTokenKit, ammTokenKit };
-    } else {
-      return { vaultTokenKit: null, ammTokenKit: null };
-    }
-  }).then(async ({ vaultTokenKit, ammTokenKit }) =>
+        let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
+        if (
+          (fallbackTradeToken &&
+            fallbackTradeToken !== collateralTokenPetname) ||
+          !(await fundingResult)
+        ) {
+          ({ kit: ammTokenKit } = E.get(
+            purseFinder.find({
+              brandPetname: fallbackTradeToken,
+              existingOnly: true,
+            }),
+          ));
+        }
+
+        return { vaultTokenKit, ammTokenKit, vaultCollateralManager };
+      } else {
+        return {
+          vaultTokenKit: null,
+          ammTokenKit: null,
+          vaultCollateralManager,
+        };
+      }
+    },
+  ).then(async ({ vaultTokenKit, ammTokenKit, vaultCollateralManager }) =>
     harden(
       await allValues({
         tokenKit,
@@ -451,6 +470,7 @@ export default async function startAgent({
         vaultManager,
         vaultFactory: vaultFactoryPublicFacet,
         vaultTokenKit,
+        vaultCollateralManager,
       }),
     ),
   );
