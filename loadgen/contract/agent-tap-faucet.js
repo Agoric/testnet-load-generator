@@ -19,12 +19,13 @@ import { disp } from './display.js';
  * }} startParam
  */
 export default async function startAgent({ tokenKit }) {
-  assert(tokenKit.mint, assert.details`Faucet task requires a mint`);
+  const tokenMint = tokenKit.mint;
+  assert(tokenMint, assert.details`Faucet task requires a mint`);
 
   const agent = Far('faucet agent', {
     async doFaucetCycle() {
       console.error(`faucet: cycle start`);
-      const payment = await E(tokenKit.mint).mintPayment(
+      const payment = await E(tokenMint).mintPayment(
         AmountMath.make(tokenKit.brand, 100_000n),
       );
       await E(tokenKit.purse).deposit(payment);

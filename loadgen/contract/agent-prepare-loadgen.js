@@ -48,11 +48,13 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
   return harden({
     /**
+     * @template {boolean} [T=false]
      * @param {Object} param0
      * @param {string} param0.brandPetname
-     * @param {boolean} [param0.existingOnly]
+     * @param {T} [param0.existingOnly]
+     * @returns {Promise<{kit: Promise<import('../types.js').NatAssetKit>, balance: Amount<'nat'>} | (true extends T ? {kit: undefined, balance: undefined} : never)>}
      */
-    async find({ brandPetname, existingOnly = false }) {
+    async find({ brandPetname, existingOnly = /** @type {T} */ (false) }) {
       /** @type {PursesFullState | undefined} */
       let foundPurseState;
 
@@ -81,6 +83,7 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
       if (!foundPurseState) {
         if (existingOnly) {
+          // @ts-ignore
           return { kit: undefined, balance: undefined };
         }
 
@@ -93,12 +96,12 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
 
         // pursesStatesUpdates is an infinite iterable so
         // the above loop will not exit until it finds a purse
+        assert(foundPurseState);
       }
 
       const issuer = E(wallet).getIssuer(issuerPetnames[brandPetname]);
 
       return {
-        /** @type {Promise<import('../types.js').NatAssetKit>} */
         kit: allValues({
           issuer,
           brand: foundPurseState.brand,
@@ -106,11 +109,9 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
           name: brandPetname,
           displayInfo: foundPurseState.displayInfo,
         }),
-        balance: /** @type {Amount<'nat'>} */ (
-          AmountMath.make(
-            foundPurseState.brand,
-            foundPurseState.currentAmount.value,
-          )
+        balance: AmountMath.make(
+          foundPurseState.brand,
+          foundPurseState.currentAmount.value,
         ),
       };
     },
@@ -191,7 +192,7 @@ export default async function startAgent({
 
   // Use Zoe to install mint for loadgen token, return kit
   // Needs fee purse to be provisioned
-  /** @type {Promise<import('../types.js').NatAssetKit>} */
+  /** @type {Promise<Required<import('../types.js').NatAssetKit>>} */
   const tokenKit = E.when(withFee(), () => {
     console.error(
       `prepare-loadgen: installing mint bundle and doing startInstance`,
@@ -406,42 +407,62 @@ export default async function startAgent({
     },
   );
 
-  return E.when(vaultManager, async (vaultManagerPresence) => {
-    const collateralTokenPetname =
-      fallbackCollateralToken || fallbackTradeToken;
+  return E.when(
+    Promise.all([vaultManager, vaultFactoryPublicFacet]),
+    async ([vaultManagerPresence, vaultFactory]) => {
+      const collateralTokenPetname =
+        fallbackCollateralToken || fallbackTradeToken;
 
-    if (vaultManagerPresence) {
-      return { vaultTokenKit: tokenKit, ammTokenKit: tokenKit };
-    } else if (collateralTokenPetname) {
-      // Make sure the finder knows about all purses by finding the
-      // LGT purse we created
-      await purseFinder.find({ brandPetname: tokenBrandPetname });
+      /** @type {ERef<import('../types.js').VaultCollateralManager | null>} */
+      let vaultCollateralManager = null;
 
-      const { kit: vaultTokenKit } = E.get(
-        purseFinder.find({
-          brandPetname: collateralTokenPetname,
-          existingOnly: true,
-        }),
-      );
+      if (vaultManagerPresence) {
+        vaultCollateralManager = E.when(tokenKit, ({ brand }) =>
+          // @ts-ignore
+          E(vaultFactory).getCollateralManager(brand),
+        ).catch(() => null);
+        return {
+          vaultTokenKit: tokenKit,
+          ammTokenKit: tokenKit,
+          vaultCollateralManager,
+        };
+      } else if (collateralTokenPetname) {
+        // Make sure the finder knows about all purses by finding the
+        // LGT purse we created
+        await purseFinder.find({ brandPetname: tokenBrandPetname });
 
-      let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
-      if (
-        (fallbackTradeToken && fallbackTradeToken !== collateralTokenPetname) ||
-        !(await fundingResult)
-      ) {
-        ({ kit: ammTokenKit } = E.get(
+        const { kit: vaultTokenKit } = E.get(
           purseFinder.find({
-            brandPetname: fallbackTradeToken,
+            brandPetname: collateralTokenPetname,
             existingOnly: true,
           }),
-        ));
-      }
+        );
 
-      return { vaultTokenKit, ammTokenKit };
-    } else {
-      return { vaultTokenKit: null, ammTokenKit: null };
-    }
-  }).then(async ({ vaultTokenKit, ammTokenKit }) =>
+        /** @type {Promise<import('../types.js').NatAssetKit | undefined>} */
+        let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
+        if (
+          (fallbackTradeToken &&
+            fallbackTradeToken !== collateralTokenPetname) ||
+          !(await fundingResult)
+        ) {
+          ({ kit: ammTokenKit } = E.get(
+            purseFinder.find({
+              brandPetname: /** @type {string} */ (fallbackTradeToken),
+              existingOnly: true,
+            }),
+          ));
+        }
+
+        return { vaultTokenKit, ammTokenKit, vaultCollateralManager };
+      } else {
+        return {
+          vaultTokenKit: null,
+          ammTokenKit: null,
+          vaultCollateralManager,
+        };
+      }
+    },
+  ).then(async ({ vaultTokenKit, ammTokenKit, vaultCollateralManager }) =>
     harden(
       await allValues({
         tokenKit,
@@ -451,6 +472,7 @@ export default async function startAgent({
         vaultManager,
         vaultFactory: vaultFactoryPublicFacet,
         vaultTokenKit,
+        vaultCollateralManager,
       }),
     ),
   );
