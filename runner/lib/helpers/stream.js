@@ -12,7 +12,7 @@ import BufferLineTransform from './buffer-line-transform.js';
 const finished = promisify(finishedCallback);
 
 /**
- * @typedef {Object} StepConfig
+ * @typedef {object} StepConfig
  * @property {RegExp} matcher
  * @property {number} [resultIndex=1] the index in the match result to use as resolution
  */
@@ -20,7 +20,7 @@ const finished = promisify(finishedCallback);
 /**
  * @param {import("stream").Readable} stream
  * @param {StepConfig[]} steps
- * @param {Object} [options]
+ * @param {object} [options]
  * @param {boolean} [options.waitEnd=true]
  * @param {boolean} [options.close=true]
  */

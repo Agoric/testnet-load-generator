@@ -49,7 +49,7 @@ const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
 
 /**
  *
- * @param {Object} powers
+ * @param {object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("../helpers/fs.js").MakeFIFO} powers.makeFIFO Make a FIFO file readable stream

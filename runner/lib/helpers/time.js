@@ -15,7 +15,7 @@ export const makeRounder = (resolution = 6, inputAdjustment = 0) => {
 };
 
 /**
- * @param {Object} param0
+ * @param {object} param0
  * @param {Pick<Performance, 'timeOrigin' | 'now'>} param0.performance
  * @param {number} [param0.resolution] number of decimal digits
  * @param {TimeValueS} [param0.offset] origin offset to apply

@@ -150,7 +150,7 @@ const activeEventRE = filterSlogEvent([
 
 /**
  * @param {Pick<import("../tasks/types.js").RunKernelInfo, 'slogLines'>} chainInfo
- * @param {Object} param1
+ * @param {object} param1
  * @param {StageStats} param1.stats
  * @param {{blockDone(block: BlockStats): void}} [param1.notifier]
  * @param {ReturnType<import("./chain-monitor").makeChainMonitor>} [param1.chainMonitor]

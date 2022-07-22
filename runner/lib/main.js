@@ -113,7 +113,7 @@ const coerceBooleanOption = (
 };
 
 /**
- * @param {Object} param0
+ * @param {object} param0
  * @param {Console} param0.console
  */
 const makeInterrupterKit = ({ console }) => {
@@ -200,7 +200,7 @@ const getSDKBinaries = async () => {
  *
  * @param {string} progName
  * @param {string[]} rawArgs
- * @param {Object} powers
+ * @param {object} powers
  * @param {import("stream").Writable} powers.stdout
  * @param {import("stream").Writable} powers.stderr
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
@@ -450,7 +450,7 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /**
-   * @param {Object} config
+   * @param {object} config
    * @param {boolean} config.chainOnly
    * @param {number} config.durationConfig
    * @param {number} config.cycleCount

@@ -5,7 +5,7 @@ import { asBuffer } from './stream.js';
 
 /**
  * @param {import("child_process").ChildProcess} childProcess
- * @param {Object} [options]
+ * @param {object} [options]
  * @param {boolean} [options.ignoreExitCode] do not error on non-zero exit codes
  * @param {{signal: undefined | boolean | NodeJS.Signals} | boolean} [options.ignoreKill] do not error on null exit code
  *      If the value is an object, it's `signal`property can be updated and will be checked on exit
@@ -92,7 +92,7 @@ export const childProcessOutput =
  * Makes a spawn that support non fd backed stdio streams
  * Automatically creates a pipe stdio and pipes the stream
  *
- * @param {Object} options
+ * @param {object} options
  * @param {import("child_process").spawn} options.spawn Node.js spawn
  * @param {boolean} [options.end] Pipe option to automatically forward stream end
  * @returns {import("child_process").spawn}
@@ -166,7 +166,7 @@ export const makeSpawnWithPipedStream = ({ spawn, end }) => {
  * Makes a verbose spawn that prints out the executed command
  *
  * @template {import("child_process").spawn} S
- * @param {Object} options
+ * @param {object} options
  * @param {S} options.spawn Node.js spawn
  * @param {(cmd: string) => void} options.print
  * @returns {S}

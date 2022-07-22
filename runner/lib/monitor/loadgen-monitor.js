@@ -2,7 +2,7 @@
 
 /**
  * @param {import("../tasks/types.js").RunLoadgenInfo} loadgenInfo
- * @param {Object} param1
+ * @param {object} param1
  * @param {StageStats} param1.stats
  * @param {object} [param1.notifier]
  * @param {(task: string, seq: number) => void} [param1.notifier.start]
