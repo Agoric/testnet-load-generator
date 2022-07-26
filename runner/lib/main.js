@@ -832,6 +832,14 @@ const main = async (progName, rawArgs, powers) => {
           if (loadgenTaskFailed) {
             throw loadgenTaskFailed;
           }
+
+          if (
+            loadgenWindDown &&
+            Number.isFinite(cycleCount) &&
+            notifier.totalCycles - notifier.currentCount < cycleCount
+          ) {
+            throw new Error('Not all requested cycles completed');
+          }
         },
       );
     };
