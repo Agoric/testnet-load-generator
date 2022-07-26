@@ -745,13 +745,15 @@ const main = async (progName, rawArgs, powers) => {
          * @param {boolean} success
          */
         finish(task, seq, success) {
-          const count = notifier.currentCount - 1;
-          notifier.currentCount = count;
-          if (!success) {
+          const newCount = notifier.currentCount - 1;
+          notifier.currentCount = newCount;
+          if (success) {
+            if (newCount === 0 && notifier.idleCallback) {
+              notifier.idleCallback();
+            }
+          } else {
             loadgenTaskFailed = new Error(`Loadgen ${task} task ${seq} failed`);
             stopLoadgenKit.resolve();
-          } else if (!count && notifier.idleCallback) {
-            notifier.idleCallback();
           }
         },
         /** @type {null | (() => void)} */
