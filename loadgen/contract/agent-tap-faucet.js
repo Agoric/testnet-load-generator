@@ -33,7 +33,7 @@ export default async function startAgent({ tokenKit }) {
       const amount = await E(tokenKit.purse).getCurrentAmount();
       return {
         amountDisplay: disp(amount, tokenKit.displayInfo.decimalPlaces),
-        faucetToken: tokenKit.name,
+        faucetToken: tokenKit.symbol,
       };
     },
   });

@@ -28,11 +28,29 @@ import { fallback } from './fallback.js';
  * }} startParam
  */
 
-const tokenBrandPetname = 'LGT';
+const tokenSymbolPetname = 'LGT';
 const BASIS_POINTS = 10000n;
 
 // This is loaded by the spawner into a new 'spawned' vat on the solo node.
 // The default export function is called with some args.
+
+/**
+ * @callback PurseMatcher
+ * @param {PursesFullState} state
+ * @returns {string | undefined} A symbol petname to use if found
+ */
+
+/**
+ * @param {string} symbol
+ * @returns {PurseMatcher}
+ */
+const getSymbolPetnameMatcher =
+  (symbol) =>
+  ({ brandPetname: candidateBrand, pursePetname: candidatePurse }) =>
+    candidateBrand === issuerPetnames[symbol] &&
+    candidatePurse === pursePetnames[symbol]
+      ? symbol
+      : undefined;
 
 /**
  * @param {Object} param0
@@ -50,24 +68,37 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
     /**
      * @template {boolean} [T=false]
      * @param {Object} param0
-     * @param {string} param0.brandPetname
+     * @param {string} [param0.symbolPetname]
+     * @param {PurseMatcher} [param0.purseMatcher]
      * @param {T} [param0.existingOnly]
      * @returns {Promise<{kit: Promise<import('../types.js').NatAssetKit>, balance: Amount<'nat'>} | (true extends T ? {kit: undefined, balance: undefined} : never)>}
      */
-    async find({ brandPetname, existingOnly = /** @type {T} */ (false) }) {
+    async find({
+      symbolPetname,
+      purseMatcher,
+      existingOnly = /** @type {T} */ (false),
+    }) {
+      const matcher =
+        purseMatcher ||
+        getSymbolPetnameMatcher((assert(symbolPetname), symbolPetname));
+
       /** @type {PursesFullState | undefined} */
       let foundPurseState;
+      /** @type {string | undefined} */
+      let foundPurseSymbol;
 
       /** @param {PursesFullState[]} pursesStates */
       const findPurse = (pursesStates) => {
-        foundPurseState = pursesStates.find(
-          ({ brandPetname: candidateBrand, pursePetname: candidatePurse }) =>
-            candidateBrand === issuerPetnames[brandPetname] &&
-            candidatePurse === pursePetnames[brandPetname],
-        );
+        for (const state of pursesStates) {
+          foundPurseSymbol = matcher(state);
+          if (foundPurseSymbol != null) {
+            foundPurseState = state;
+            break;
+          }
+        }
         if (foundPurseState) {
           console.error(
-            `prepare-loadgen: Found ${brandPetname} purse`,
+            `prepare-loadgen: Found ${foundPurseSymbol} purse`,
             foundPurseState,
           );
           return true;
@@ -98,15 +129,16 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
         // the above loop will not exit until it finds a purse
         assert(foundPurseState);
       }
+      assert(foundPurseSymbol);
 
-      const issuer = E(wallet).getIssuer(issuerPetnames[brandPetname]);
+      const issuer = E(wallet).getIssuer(foundPurseState.brandPetname);
 
       return {
         kit: allValues({
           issuer,
           brand: foundPurseState.brand,
           purse: foundPurseState.purse,
-          name: brandPetname,
+          symbol: foundPurseSymbol,
           displayInfo: foundPurseState.displayInfo,
         }),
         balance: AmountMath.make(
@@ -136,15 +168,32 @@ export default async function startAgent({
 
   const purseFinder = makePurseFinder({ wallet, walletAdmin });
 
-  // Get the RUN purse and initial balance from the wallet
-  // This shouldn't require, on its own, any requests to the chain as
-  // it just waits until the wallet bootstrap is sufficiently advanced
-  const { kit: runKit, balance: initialRunBalance } = E.get(
-    purseFinder.find({ brandPetname: 'RUN' }),
+  const stableBrandP = fallback(
+    ...['IST', 'RUN'].map(
+      async (symbol) =>
+        /** @type {const} */ ([
+          symbol,
+          /** @type {Brand} */ (await E(agoricNames).lookup('brand', symbol)),
+        ]),
+    ),
   );
 
-  // Setup the fee purse if necessary and get the remaining RUN balance
-  const runBalance = (async () => {
+  // Get the stable token purse and initial balance from the wallet
+  // This shouldn't require, on its own, any requests to the chain as
+  // it just waits until the wallet bootstrap is sufficiently advanced
+  const { kit: stableKit, balance: initialStableBalance } = E.get(
+    E.when(stableBrandP, ([symbol, stableBrand]) =>
+      purseFinder.find({
+        purseMatcher: ({ brand, pursePetname, value }) =>
+          brand === stableBrand && pursePetname.indexOf('Zoe') < 0 && value > 0
+            ? symbol
+            : undefined,
+      }),
+    ),
+  );
+
+  // Setup the fee purse if necessary and get the remaining stable token balance
+  const stableBalance = (async () => {
     const feePurse = await E(faucet)
       .getFeePurse()
       .catch((err) => {
@@ -156,26 +205,31 @@ export default async function startAgent({
       });
 
     if (!feePurse) {
-      return initialRunBalance;
+      return initialStableBalance;
     }
 
-    const run = await initialRunBalance;
-    const thirdRunAmount = AmountMath.make(run.brand, run.value / 3n);
+    const balance = await initialStableBalance;
+    const thirdBalanceAmount = AmountMath.make(
+      balance.brand,
+      balance.value / 3n,
+    );
 
-    if (AmountMath.isEmpty(run)) {
-      throw Error(`no RUN, loadgen cannot proceed`);
+    if (AmountMath.isEmpty(balance)) {
+      throw Error(`empty stable token balance, loadgen cannot proceed`);
     }
 
     console.error(
-      `prepare-loadgen: depositing ${disp(thirdRunAmount)} into the fee purse`,
+      `prepare-loadgen: depositing ${disp(
+        thirdBalanceAmount,
+      )} into the fee purse`,
     );
-    const runPurse = E.get(runKit).purse;
+    const stablePurse = E.get(stableKit).purse;
     // Purse doesn't "lock" during withdrawal so we need to
     // wait on payment before asking about balance
-    const feePayment = await E(runPurse).withdraw(thirdRunAmount);
+    const feePayment = await E(stablePurse).withdraw(thirdBalanceAmount);
 
     const remainingBalance = /** @type {Promise<Amount<'nat'>>} */ (
-      E(runPurse).getCurrentAmount()
+      E(stablePurse).getCurrentAmount()
     );
     await E(feePurse).deposit(feePayment);
 
@@ -188,7 +242,7 @@ export default async function startAgent({
    */
   const withFee = async (
     promise = /** @type {Promise<any>} */ (Promise.resolve()),
-  ) => Promise.all([promise, runBalance]).then(([value]) => value);
+  ) => Promise.all([promise, stableBalance]).then(([value]) => value);
 
   // Use Zoe to install mint for loadgen token, return kit
   // Needs fee purse to be provisioned
@@ -207,7 +261,7 @@ export default async function startAgent({
     const customTerms = {
       assetKind: AssetKind.NAT,
       displayInfo,
-      keyword: tokenBrandPetname,
+      keyword: tokenSymbolPetname,
     };
 
     const installation = E(zoe).install(mintBundle);
@@ -223,14 +277,14 @@ export default async function startAgent({
       E.get(startInstanceResult);
 
     return allValues({
-      name: tokenBrandPetname,
+      symbol: tokenSymbolPetname,
       displayInfo,
       mint,
       issuer,
       brand: E(issuer).getBrand(),
       purse: (async () => {
-        const issuerPetname = issuerPetnames[tokenBrandPetname];
-        const pursePetname = pursePetnames[tokenBrandPetname];
+        const issuerPetname = issuerPetnames[tokenSymbolPetname];
+        const pursePetname = pursePetnames[tokenSymbolPetname];
         await E(walletAdmin).addIssuer(issuerPetname, await issuer);
         await E(walletAdmin).makeEmptyPurse(issuerPetname, pursePetname);
         return E(wallet).getPurse(pursePetname);
@@ -250,8 +304,8 @@ export default async function startAgent({
 
   /** @type {(() => Promise<Amount<'nat'>>)[]} */
   const recoverFunding = [];
-  const fundingResult = E.when(runBalance, async (centralInitialBalance) => {
-    const { purse: centralPurse } = E.get(runKit);
+  const fundingResult = E.when(stableBalance, async (centralInitialBalance) => {
+    const { purse: centralPurse, symbol: stableSymbolP } = E.get(stableKit);
     const {
       mint: secondaryMint,
       issuer: secondaryIssuer,
@@ -259,13 +313,13 @@ export default async function startAgent({
       purse: secondaryPurse,
     } = E.get(tokenKit);
     const liquidityIssuer = fallback(
-      E(amm).addIssuer(secondaryIssuer, issuerPetnames[tokenBrandPetname]),
-      E(amm).addPool(secondaryIssuer, issuerPetnames[tokenBrandPetname]),
+      E(amm).addIssuer(secondaryIssuer, issuerPetnames[tokenSymbolPetname]),
+      E(amm).addPool(secondaryIssuer, issuerPetnames[tokenSymbolPetname]),
     );
     const liquidityBrandP = E(liquidityIssuer).getBrand();
 
     if (AmountMath.isEmpty(centralInitialBalance)) {
-      throw Error(`no RUN, loadgen cannot proceed`);
+      throw Error(`no stable token balance, loadgen cannot proceed`);
     }
 
     /** @type {Amount<'nat'>} */
@@ -282,7 +336,10 @@ export default async function startAgent({
     // The faucet task taps 100_000n of the loadgen token
     // We want the faucet to represent a fraction (1% ?) of the traded amounts
     // The computed amount will be used for both amm liquidity and initial purse funds
-    const secondaryBrand = await secondaryBrandP;
+    const [secondaryBrand, stableSymbol] = await Promise.all([
+      secondaryBrandP,
+      stableSymbolP,
+    ]);
     /** @type {Amount<'nat'>} */
     const secondaryAmount = AmountMath.make(
       secondaryBrand,
@@ -302,7 +359,7 @@ export default async function startAgent({
     console.error(
       `prepare-loadgen: Adding AMM liquidity: ${disp(
         centralAmount,
-      )} RUN and ${disp(secondaryAmount)} ${tokenBrandPetname}`,
+      )} ${stableSymbol} and ${disp(secondaryAmount)} ${tokenSymbolPetname}`,
     );
 
     const liquidityBrand = await liquidityBrandP;
@@ -372,7 +429,7 @@ export default async function startAgent({
 
       const { brand: collateralBrand, issuer: collateralIssuer } =
         await tokenKit;
-      const { brand: centralBrand } = await runKit;
+      const { brand: centralBrand } = await stableKit;
 
       const { toCentral, fromCentral } = E.get(
         E(amm).getPriceAuthorities(collateralBrand),
@@ -401,7 +458,7 @@ export default async function startAgent({
 
       return E(vaultFactory).addVaultType(
         collateralIssuer,
-        issuerPetnames[tokenBrandPetname],
+        issuerPetnames[tokenSymbolPetname],
         rates,
       );
     },
@@ -410,7 +467,7 @@ export default async function startAgent({
   return E.when(
     Promise.all([vaultManager, vaultFactoryPublicFacet]),
     async ([vaultManagerPresence, vaultFactory]) => {
-      const collateralTokenPetname =
+      const collateralSymbolPetname =
         fallbackCollateralToken || fallbackTradeToken;
 
       /** @type {ERef<import('../types.js').VaultCollateralManager | null>} */
@@ -426,14 +483,14 @@ export default async function startAgent({
           ammTokenKit: tokenKit,
           vaultCollateralManager,
         };
-      } else if (collateralTokenPetname) {
+      } else if (collateralSymbolPetname) {
         // Make sure the finder knows about all purses by finding the
         // LGT purse we created
-        await purseFinder.find({ brandPetname: tokenBrandPetname });
+        await purseFinder.find({ symbolPetname: tokenSymbolPetname });
 
         const { kit: vaultTokenKit } = E.get(
           purseFinder.find({
-            brandPetname: collateralTokenPetname,
+            symbolPetname: collateralSymbolPetname,
             existingOnly: true,
           }),
         );
@@ -442,12 +499,12 @@ export default async function startAgent({
         let ammTokenKit = vaultTokenKit.then((value) => value || tokenKit);
         if (
           (fallbackTradeToken &&
-            fallbackTradeToken !== collateralTokenPetname) ||
+            fallbackTradeToken !== collateralSymbolPetname) ||
           !(await fundingResult)
         ) {
           ({ kit: ammTokenKit } = E.get(
             purseFinder.find({
-              brandPetname: /** @type {string} */ (fallbackTradeToken),
+              symbolPetname: /** @type {string} */ (fallbackTradeToken),
               existingOnly: true,
             }),
           ));
@@ -466,7 +523,7 @@ export default async function startAgent({
     harden(
       await allValues({
         tokenKit,
-        runKit,
+        stableKit,
         amm,
         ammTokenKit,
         vaultManager,

@@ -25,9 +25,9 @@ async function getPurseBalance(purse) {
  *
  * @param {startParam} param
  * @typedef {Awaited<ReturnType<typeof startAgent>>} Agent
- * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'displayInfo' | 'name'>} AssetKit
+ * @typedef { Pick<import('../types').NatAssetKit, 'brand' | 'purse' | 'displayInfo' | 'symbol'>} AssetKit
  * @typedef {{
- *   runKit: AssetKit,
+ *   stableKit: AssetKit,
  *   tokenKit: AssetKit,
  *   vaultFactory: ERef<import('../types').VaultFactoryPublicFacet>,
  *   vaultCollateralManager: ERef<import('../types').VaultCollateralManager> | null,
@@ -35,16 +35,17 @@ async function getPurseBalance(purse) {
  * }} startParam
  */
 export default async function startAgent({
-  runKit: {
-    brand: runBrand,
-    purse: runPurse,
-    displayInfo: { decimalPlaces: runDecimalPlaces },
+  stableKit: {
+    brand: stableBrand,
+    purse: stablePurse,
+    symbol: stableSymbol,
+    displayInfo: { decimalPlaces: stableDecimalPlaces },
   },
   tokenKit: {
     brand: collateralBrand,
     purse: collateralPurse,
     displayInfo: { decimalPlaces: collateralDecimalPlaces },
-    name: collateralToken,
+    symbol: collateralSymbol,
   },
   vaultFactory,
   vaultCollateralManager,
@@ -55,14 +56,14 @@ export default async function startAgent({
   const collateralBalance = await getPurseBalance(collateralPurse);
   if (AmountMath.isEmpty(collateralBalance)) {
     throw Error(
-      `create-vault: getCurrentAmount(${collateralToken}) broken (says 0)`,
+      `create-vault: getCurrentAmount(${collateralSymbol}) broken (says 0)`,
     );
   }
   console.error(
     `create-vault: initial balance: ${disp(
       collateralBalance,
       collateralDecimalPlaces,
-    )} ${collateralToken}`,
+    )} ${collateralSymbol}`,
   );
   // put 1% into the vault
   const collateralToLock = AmountMath.make(
@@ -70,14 +71,19 @@ export default async function startAgent({
     collateralBalance.value / BigInt(100),
   );
 
+  const stableKeyword = stableSymbol === 'RUN' ? 'RUN' : 'Minted';
+
   // we only withdraw half the value of the collateral, giving us 200%
   // collateralization
   const collaterals = await E(vaultFactory).getCollaterals();
   const cdata = collaterals.find((c) => c.brand === collateralBrand);
   assert(cdata);
   const priceRate = cdata.marketPrice;
-  const half = makeRatio(BigInt(50), runBrand);
-  const wantedRun = multiplyBy(multiplyBy(collateralToLock, priceRate), half);
+  const half = makeRatio(BigInt(50), stableBrand);
+  const wantedStable = multiplyBy(
+    multiplyBy(collateralToLock, priceRate),
+    half,
+  );
 
   console.error(`create-vault: tools ready`);
 
@@ -85,7 +91,10 @@ export default async function startAgent({
     `create-vault: collateralToLock=${disp(
       collateralToLock,
       collateralDecimalPlaces,
-    )} ${collateralToken}, wantedRun=${disp(wantedRun, runDecimalPlaces)}`,
+    )} ${collateralSymbol}, wantedStable=${disp(
+      wantedStable,
+      stableDecimalPlaces,
+    )} ${stableSymbol}`,
   );
 
   // we fix the 1% 'collateralToLock' value at startup, and use it for all cycles
@@ -100,7 +109,7 @@ export default async function startAgent({
         Collateral: collateralToLock,
       },
       want: {
-        RUN: wantedRun,
+        [stableKeyword]: wantedStable,
       },
     });
     const payment = harden({
@@ -108,13 +117,13 @@ export default async function startAgent({
     });
     const seatP = E(zoe).offer(openInvitationP, proposal, payment);
     await seatP;
-    const [collateralPayout, runPayout] = await Promise.all([
+    const [collateralPayout, stablePayout] = await Promise.all([
       E(seatP).getPayout('Collateral'),
-      E(seatP).getPayout('RUN'),
+      E(seatP).getPayout(stableKeyword),
     ]);
     await Promise.all([
       E(collateralPurse).deposit(collateralPayout),
-      E(runPurse).deposit(runPayout),
+      E(stablePurse).deposit(stablePayout),
     ]);
     const offerResult = await E(seatP).getOfferResult();
     console.error(`create-vault: cycle: vault opened`);
@@ -123,27 +132,29 @@ export default async function startAgent({
 
   async function closeVault(vault) {
     console.error('create-vault: closeVault');
-    const runNeeded = await fallback(
+    const stableNeeded = await fallback(
       E(vault).getCurrentDebt(),
       E(vault).getDebtAmount(),
     );
     const closeInvitationP = E(vault).makeCloseInvitation();
     const proposal = {
       give: {
-        RUN: runNeeded,
+        [stableKeyword]: stableNeeded,
       },
       want: {
         Collateral: AmountMath.makeEmpty(collateralBrand),
       },
     };
-    const payment = harden({ RUN: E(runPurse).withdraw(runNeeded) });
+    const payment = harden({
+      [stableKeyword]: E(stablePurse).withdraw(stableNeeded),
+    });
     const seatP = E(zoe).offer(closeInvitationP, proposal, payment);
-    const [runPayout, collateralPayout] = await Promise.all([
-      E(seatP).getPayout('RUN'),
+    const [stablePayout, collateralPayout] = await Promise.all([
+      E(seatP).getPayout(stableKeyword),
       E(seatP).getPayout('Collateral'),
     ]);
     await Promise.all([
-      E(runPurse).deposit(runPayout),
+      E(stablePurse).deposit(stablePayout),
       E(collateralPurse).deposit(collateralPayout),
       E(seatP).getOfferResult(),
     ]);
@@ -154,18 +165,19 @@ export default async function startAgent({
     async doVaultCycle() {
       const vault = await openVault();
       await closeVault(vault);
-      const [newRunBalance, newCollateralBalance] = await Promise.all([
-        getPurseBalance(runPurse),
+      const [newStableBalance, newCollateralBalance] = await Promise.all([
+        getPurseBalance(stablePurse),
         getPurseBalance(collateralPurse),
       ]);
       console.error('create-vault: cycle: done');
       return {
-        newRunBalanceDisplay: disp(newRunBalance, runDecimalPlaces),
+        newStableBalanceDisplay: disp(newStableBalance, stableDecimalPlaces),
         newCollateralBalanceDisplay: disp(
           newCollateralBalance,
           collateralDecimalPlaces,
         ),
-        collateralToken,
+        stableSymbol,
+        collateralSymbol,
       };
     },
   });

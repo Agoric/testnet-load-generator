@@ -26,10 +26,10 @@ export async function prepareAMMTrade(home, deployPowers) {
 
     // create the solo-side agent to drive each cycle, let it handle zoe
     const installerP = E(spawner).install(agentBundle);
-    const { runKit, ammTokenKit: tokenKit, amm } = await loadgenKit;
-    if (runKit && tokenKit && amm) {
+    const { stableKit, ammTokenKit: tokenKit, amm } = await loadgenKit;
+    if (stableKit && tokenKit && amm) {
       /** @type {import('./contract/agent-trade-amm').startParam} */
-      const startParam = { tokenKit, runKit, amm, zoe };
+      const startParam = { tokenKit, stableKit, amm, zoe };
       agent = await E(installerP).spawn(startParam);
       await E(scratch).set(key, agent);
       console.log(`trade-amm: prepare: agent installed`);
@@ -44,10 +44,14 @@ export async function prepareAMMTrade(home, deployPowers) {
     if (!agent) {
       throw new Error('No agent available');
     }
-    const { newRunBalanceDisplay, newTargetBalanceDisplay, targetToken } =
-      await E(agent).doAMMCycle();
+    const {
+      newStableBalanceDisplay,
+      newTargetBalanceDisplay,
+      stableSymbol,
+      targetSymbol,
+    } = await E(agent).doAMMCycle();
     console.log(
-      `trade-amm: new purse balances: RUN=${newRunBalanceDisplay} ${targetToken}=${newTargetBalanceDisplay}`,
+      `trade-amm: new purse balances: ${stableSymbol}=${newStableBalanceDisplay} ${targetSymbol}=${newTargetBalanceDisplay}`,
     );
   }
   console.log(`trade-amm: prepare: ready for cycles`);

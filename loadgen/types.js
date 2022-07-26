@@ -38,7 +38,7 @@ export {};
 /**
  * @template {AssetKind} [K=AssetKind]
  * @typedef {Object} AssetKit
- * @property {string} name
+ * @property {string} symbol
  * @property {Mint<K>} [mint]
  * @property {Issuer<K>} issuer
  * @property {Brand<K>} brand
