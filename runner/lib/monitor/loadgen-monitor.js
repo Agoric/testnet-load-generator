@@ -5,13 +5,13 @@
  * @param {Object} param1
  * @param {StageStats} param1.stats
  * @param {object} [param1.notifier]
- * @param {(count: number) => void} [param1.notifier.updateActive]
- * @param {(task: string, seq: number) => void} [param1.notifier.taskFailure]
+ * @param {(task: string, seq: number) => void} [param1.notifier.start]
+ * @param {(task: string, seq: number, success: boolean) => void} [param1.notifier.finish]
  * @param {Console} param1.console
  */
 export const monitorLoadgen = async (
   { taskEvents },
-  { stats, notifier: { updateActive, taskFailure } = {}, console },
+  { stats, notifier, console },
 ) => {
   /** @type {Set<import('../stats/types.js').CycleStats>} */
   const activeCycles = new Set();
@@ -23,20 +23,20 @@ export const monitorLoadgen = async (
         const { task, seq } = event;
         console.log('start', task, seq);
         const cycle = stats.getOrMakeCycle({ task, seq });
-        cycle.recordStart(time);
-        activeCycles.add(cycle);
-        updateActive && updateActive(activeCycles.size);
+        if (!activeCycles.has(cycle)) {
+          cycle.recordStart(time);
+          activeCycles.add(cycle);
+          notifier?.start?.(task, seq);
+        }
         break;
       }
       case 'finish': {
         const { task, seq, success } = event;
         console.log('finish', event.task, event.seq);
         const cycle = stats.getOrMakeCycle({ task, seq });
-        cycle.recordEnd(time, success);
-        activeCycles.delete(cycle);
-        updateActive && updateActive(activeCycles.size);
-        if (!success && taskFailure) {
-          taskFailure(task, seq);
+        if (activeCycles.delete(cycle)) {
+          cycle.recordEnd(time, success);
+          notifier?.finish?.(task, seq, success);
         }
         break;
       }

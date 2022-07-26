@@ -76,4 +76,4 @@ jobs:
           ./start.sh --no-stage.save-storage --no-reset \
             --stage.loadgen.vault.interval=12 --stage.loadgen.vault.limit=2 \
             --stage.loadgen.amm.interval=12 --stage.loadgen.amm.wait=6 --stage.loadgen.amm.limit=2 \
-            --stages=3 --stage.duration=4
+            --stages=3 --stage.duration=10 --stage.loadgen.cycles=4
