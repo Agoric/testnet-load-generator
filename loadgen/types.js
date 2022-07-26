@@ -12,7 +12,7 @@ import '@agoric/wallet/api/src/internal-types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/zoe/src/contractFacet/types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/run-protocol/exported.js';
+import '@agoric/inter-protocol/exported.js';
 
 export {};
 
@@ -20,8 +20,8 @@ export {};
 /** @typedef {ReturnType<typeof import('@agoric/spawner').makeSpawner>} Spawner */
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
-/** @typedef { import('@agoric/run-protocol/src/vaultFactory/vaultFactory').VaultFactoryContract['publicFacet']} VaultFactoryPublicFacet */
-/** @typedef { import('@agoric/run-protocol/src/vaultFactory/vaultManager').CollateralManager} VaultCollateralManager */
+/** @typedef { import('@agoric/inter-protocol/src/vaultFactory/vaultFactory').VaultFactoryContract['publicFacet']} VaultFactoryPublicFacet */
+/** @typedef { import('@agoric/inter-protocol/src/vaultFactory/vaultManager').CollateralManager} VaultCollateralManager */
 /** @typedef { import('@agoric/zoe/tools/priceAuthorityRegistry').PriceAuthorityRegistryAdmin } PriceAuthorityRegistryAdmin */
 
 /**
