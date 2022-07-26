@@ -753,7 +753,11 @@ const main = async (progName, rawArgs, powers) => {
             }
           } else {
             loadgenTaskFailed = new Error(`Loadgen ${task} task ${seq} failed`);
-            stopLoadgenKit.resolve();
+            if (notifier.idleCallback) {
+              notifier.idleCallback();
+            } else {
+              stopLoadgenKit.resolve();
+            }
           }
         },
         /** @type {null | (() => void)} */
