@@ -453,6 +453,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {Object} config
    * @param {boolean} config.chainOnly
    * @param {number} config.durationConfig
+   * @param {number} config.cycleCount
    * @param {unknown} config.loadgenConfig
    * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
@@ -462,6 +463,7 @@ const main = async (progName, rawArgs, powers) => {
     const {
       chainOnly,
       durationConfig,
+      cycleCount,
       loadgenConfig,
       loadgenWindDown,
       withMonitor,
@@ -725,20 +727,32 @@ const main = async (progName, rawArgs, powers) => {
 
       const notifier = {
         currentCount: 0,
-        /** @param {number} count */
-        updateActive(count) {
-          notifier.currentCount = count;
-          if (!count && notifier.idleCallback) {
-            notifier.idleCallback();
+        totalCycles: 0,
+        /**
+         * @param {string} _task
+         * @param {number} _seq
+         */
+        start(_task, _seq) {
+          notifier.currentCount += 1;
+          notifier.totalCycles += 1;
+          if (notifier.totalCycles >= cycleCount) {
+            stopLoadgenKit.resolve();
           }
         },
         /**
          * @param {string} task
          * @param {number} seq
+         * @param {boolean} success
          */
-        taskFailure(task, seq) {
-          loadgenTaskFailed = new Error(`Loadgen ${task} task ${seq} failed`);
-          stopLoadgenKit.resolve();
+        finish(task, seq, success) {
+          const count = notifier.currentCount - 1;
+          notifier.currentCount = count;
+          if (!success) {
+            loadgenTaskFailed = new Error(`Loadgen ${task} task ${seq} failed`);
+            stopLoadgenKit.resolve();
+          } else if (!count && notifier.idleCallback) {
+            notifier.idleCallback();
+          }
         },
         /** @type {null | (() => void)} */
         idleCallback: null,
@@ -779,7 +793,7 @@ const main = async (progName, rawArgs, powers) => {
             });
 
             await runLoadgenResult.updateConfig(null);
-            const maxLoadgenDuration =
+            const maxCycleDuration =
               Object.values(stats.cycles).reduce(
                 (max, cycleStats) =>
                   cycleStats &&
@@ -789,7 +803,10 @@ const main = async (progName, rawArgs, powers) => {
                     : max,
                 0,
               ) || 2 * 60;
-            const sleepTime = (maxLoadgenDuration + 2 * 6) * 1.2;
+            const sleepTime = Math.max(
+              (maxCycleDuration + 2 * 6) * 1.2,
+              durationConfig - stageStart.now(),
+            );
             stageConsole.log(
               `Waiting for loadgen tasks to end (Max ${sleepTime}s)`,
             );
@@ -1062,13 +1079,21 @@ const main = async (progName, rawArgs, powers) => {
             : !defaultChainOnly,
         );
 
+        const { cycles: stageCyclesConfig, ...stageLoadgenConfigRaw } =
+          stageLoadgenConfig || sharedLoadgenConfig;
+
+        const stageCycleCountRaw =
+          stageCyclesConfig != null ? Number(stageCyclesConfig) : undefined;
+
         // By default the first stage only initializes but doesn't actually set any load
         // Unless loadgen requested or duration explicitly set
         const activeLoadgen =
           (stageWithLoadgen || (stageWithLoadgen == null && !chainOnly)) &&
           stageDurationMinutes !== 0 &&
+          stageCycleCountRaw !== 0 &&
           (stageWithLoadgen ||
             stageDurationMinutes != null ||
+            (stageLoadgenConfig && stageLoadgenConfig.cycles) != null ||
             stages === 1 ||
             currentStage > 0);
 
@@ -1080,9 +1105,13 @@ const main = async (progName, rawArgs, powers) => {
             ? stageDurationMinutes
             : defaultDurationMinutes) * 60;
 
-        const loadgenConfig = activeLoadgen
-          ? stageLoadgenConfig || sharedLoadgenConfig
-          : null;
+        const loadgenConfig = activeLoadgen ? stageLoadgenConfigRaw : null;
+
+        const cycleCountIfActive =
+          stageCycleCountRaw && stageCycleCountRaw > 0
+            ? stageCycleCountRaw
+            : Infinity;
+        const cycleCount = activeLoadgen ? cycleCountIfActive : 0;
 
         // eslint-disable-next-line no-await-in-loop
         await aggregateTryFinally(
@@ -1090,6 +1119,7 @@ const main = async (progName, rawArgs, powers) => {
             runStage({
               chainOnly,
               durationConfig: duration,
+              cycleCount,
               loadgenConfig,
               loadgenWindDown,
               withMonitor,
