@@ -496,7 +496,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
         const processInfo = await getProcessInfo(
           /** @type {number} */ (chainCp.pid),
-        );
+        ).catch(() => undefined);
 
         return harden({
           stop,
@@ -607,7 +607,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
         const processInfo = await getProcessInfo(
           /** @type {number} */ (soloCp.pid),
-        );
+        ).catch(() => undefined);
 
         const stop = () => {
           ignoreKill.signal = 'SIGTERM';

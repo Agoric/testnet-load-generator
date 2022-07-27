@@ -49,6 +49,7 @@ export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
 
     return parseInt(res.toString(bufferOptions.encoding), 10);
   })();
+  userHertzP.catch(() => {});
 
   /** @typedef {string[]} ProcStat */
   /**
@@ -106,6 +107,7 @@ export const makeProcfsHelper = ({ fs, spawn, startPid = process.pid }) => {
   const getStartTicks = (stat) => parseInt(stat[21], 10);
 
   const startTicksOriginP = getStat(startPid).then(getStartTicks);
+  startTicksOriginP.catch(() => {});
 
   // TODO: Use a WeakValueMap
   /** @type {Map<string, ProcessInfo>} */
