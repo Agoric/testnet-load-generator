@@ -157,15 +157,17 @@ export const makeTasks = ({
     }
 
     console.log('Fetching network config');
-    // eslint-disable-next-line jsdoc/check-alignment
-    const { chainName, peers, rpcAddrs, seeds } = /**
-     * @type {{
-     *   chainName: string,
-     *   peers: string[],
-     *   rpcAddrs: string[],
-     *   seeds: string[]
-     * } & Record<string, unknown>}
-     */ (await fetchAsJSON(`${testnetOrigin}/network-config`));
+    /**
+     * @typedef {object} NetworkConfigRequired
+     * @property {string} chainName
+     * @property {string[]} peers
+     * @property {string[]} rpcAddrs
+     * @property {string[]} seeds
+     */
+    const { chainName, peers, rpcAddrs, seeds } =
+      /** @type {NetworkConfigRequired & Record<string, unknown>} */ (
+        await fetchAsJSON(`${testnetOrigin}/network-config`)
+      );
 
     if (withMonitor !== false) {
       storageLocations.chainStorageLocation = chainStateDir;
@@ -208,7 +210,9 @@ export const makeTasks = ({
         const config = await TOML.parse.async(
           await fs.readFile(configPath, 'utf-8'),
         );
-        const configP2p = /** @type {TOML.JsonMap} */ (config.p2p);
+        const configP2p = /** @type {import('@iarna/toml').JsonMap} */ (
+          config.p2p
+        );
         configP2p.persistent_peers = peers.join(',');
         configP2p.seeds = seeds.join(',');
         configP2p.addr_book_strict = false;

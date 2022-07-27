@@ -1,12 +1,16 @@
 /** @typedef {import('../stats/types.js').StageStats} StageStats */
 
 /**
+ * @typedef {object} TaskNotifier
+ * @property {(task: string, seq: number) => void} start
+ * @property {(task: string, seq: number, success: boolean) => void} finish
+ */
+
+/**
  * @param {import("../tasks/types.js").RunLoadgenInfo} loadgenInfo
  * @param {object} param1
  * @param {StageStats} param1.stats
- * @param {object} [param1.notifier]
- * @param {(task: string, seq: number) => void} [param1.notifier.start]
- * @param {(task: string, seq: number, success: boolean) => void} [param1.notifier.finish]
+ * @param {TaskNotifier} [param1.notifier]
  * @param {Console} param1.console
  */
 export const monitorLoadgen = async (
