@@ -29,7 +29,7 @@ const statusLineFormat = /^([^:]+):[\s]+(.+)$/;
 
 /**
  *
- * @param {Object} powers
+ * @param {object} powers
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
  * @param {number} [powers.startPid] The PID of the process to use as a start time reference

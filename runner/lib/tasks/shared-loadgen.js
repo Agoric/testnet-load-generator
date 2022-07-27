@@ -25,7 +25,7 @@ const jsonDataRE = /^\{.*\}$/;
 
 /**
  *
- * @param {Object} powers
+ * @param {object} powers
  * @param {import("child_process").spawn} powers.spawn spawn
  * @returns {import("./types.js").OrchestratorTasks['runLoadgen']}
  */

@@ -37,7 +37,7 @@ export {};
 
 /**
  * @template {AssetKind} [K=AssetKind]
- * @typedef {Object} AssetKit
+ * @typedef {object} AssetKit
  * @property {string} symbol
  * @property {Mint<K>} [mint]
  * @property {Issuer<K>} issuer
@@ -49,7 +49,7 @@ export {};
 /** @typedef {AssetKit<'nat'>} NatAssetKit */
 
 /**
- * @typedef {Object} Home
+ * @typedef {object} Home
  * @property {ERef<NameHub>} agoricNames
  * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
@@ -62,6 +62,6 @@ export {};
  */
 
 /**
- * @typedef {Object} DeployPowers
+ * @typedef {object} DeployPowers
  * @property {BundleSource} bundleSource
  */

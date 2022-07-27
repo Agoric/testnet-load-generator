@@ -53,7 +53,7 @@ const getSymbolPetnameMatcher =
       : undefined;
 
 /**
- * @param {Object} param0
+ * @param {object} param0
  * @param {ERef<WalletUser>} param0.wallet
  * @param {ERef<WalletAdminFacet>} param0.walletAdmin
  */
@@ -67,7 +67,7 @@ const makePurseFinder = ({ wallet, walletAdmin }) => {
   return harden({
     /**
      * @template {boolean} [T=false]
-     * @param {Object} param0
+     * @param {object} param0
      * @param {string} [param0.symbolPetname]
      * @param {PurseMatcher} [param0.purseMatcher]
      * @param {T} [param0.existingOnly]

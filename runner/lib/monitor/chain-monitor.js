@@ -8,10 +8,10 @@ import { PromiseAllOrErrors, warnOnRejection } from '../helpers/async.js';
 const vatIdentifierRE = /^(v\d+):(.*)$/;
 
 /**
- * @param {Object} kernelInfo
+ * @param {object} kernelInfo
  * @param {string | void} kernelInfo.storageLocation
  * @param {import("../helpers/procsfs.js").ProcessInfo} kernelInfo.processInfo
- * @param {Object} param1
+ * @param {object} param1
  * @param {Console} param1.console
  * @param {import('../stats/types.js').LogPerfEvent} param1.logPerfEvent
  * @param {import('../helpers/time.js').TimeSource} param1.cpuTimeSource

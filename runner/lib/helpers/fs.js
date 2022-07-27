@@ -14,7 +14,7 @@ import { childProcessDone } from './child-process.js';
 /**
  * @callback DirDiskUsage
  * @param {string} rootDir
- * @param {Object} [options]
+ * @param {object} [options]
  * @param {number} [options.minFileSize]
  * @returns {Promise<Record<string, number>>}
  */
@@ -38,7 +38,7 @@ import { childProcessDone } from './child-process.js';
 
 /**
  *
- * @param {Object} powers
+ * @param {object} powers
  * @param {import("fs/promises")} powers.fs Node.js promisified fs object
  * @param {fsStream} powers.fsStream Node.js fs stream operations
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
@@ -63,7 +63,7 @@ export const makeFsHelper = ({ fs, fsStream, spawn, tmpDir }) => {
   // TODO: figure out why tsc complains when using /** @type {DirDiskUsage} */
   /**
    * @param {string} rootDir
-   * @param {Object} [options]
+   * @param {object} [options]
    * @param {number} [options.minFileSize]
    */
   const dirDiskUsage = async (rootDir, { minFileSize = 5 } = {}) => {

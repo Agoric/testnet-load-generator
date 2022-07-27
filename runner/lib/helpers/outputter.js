@@ -3,7 +3,7 @@ import { Console } from 'console';
 import LineStreamTransform from './line-stream-transform.js';
 
 /**
- * @param {Object} options
+ * @param {object} options
  * @param {import("stream").Writable} options.out
  * @param {import("stream").Writable} [options.err]
  * @param {string} [options.outPrefix]

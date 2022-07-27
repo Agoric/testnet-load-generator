@@ -36,7 +36,7 @@ function inquire(moduleName) {
  *
  * @memberof util.inquire
  * @param {string} moduleName Module name to register
- * @param {Object} mod corresponding module object
+ * @param {object} mod corresponding module object
  */
 function register(moduleName, mod) {
   modules.set(moduleName, mod);

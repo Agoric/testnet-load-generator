@@ -9,7 +9,7 @@ const BestPipelinablePromise = globalThis.HandledPromise || Promise;
 
 /**
  * @template T
- * @typedef {Object} PromiseRecord A reified Promise
+ * @typedef {object} PromiseRecord A reified Promise
  * @property {(value: ERef<T>) => void} resolve
  * @property {(reason: any) => void} reject
  * @property {Promise<T>} promise
