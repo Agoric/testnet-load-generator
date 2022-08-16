@@ -300,7 +300,9 @@ export default async function startAgent({
   // Use `when` as older versions of agoric-sdk cannot accept a promise
   // See https://github.com/Agoric/agoric-sdk/issues/3837
   /** @type {ERef<import('../types.js').AttenuatedAMM>} */
-  const amm = E.when(withFee(ammInstance), E(zoe).getPublicFacet);
+  const amm = E.when(withFee(ammInstance), (instance) =>
+    E(zoe).getPublicFacet(instance),
+  );
 
   /** @type {(() => Promise<Amount<'nat'>>)[]} */
   const recoverFunding = [];
@@ -329,7 +331,7 @@ export default async function startAgent({
     );
     const centralPayment = E(centralPurse).withdraw(centralAmount);
     recoverFunding.push(async () =>
-      E.when(centralPayment, E(centralPurse).deposit),
+      E.when(centralPayment, (payment) => E(centralPurse).deposit(payment)),
     );
 
     // Each amm and vault cycle temporarily uses 1% of holdings
@@ -350,10 +352,12 @@ export default async function startAgent({
 
     const depositInitialSecondaryResult = E.when(
       secondaryPursePayment,
-      E(secondaryPurse).deposit,
+      (payment) => E(secondaryPurse).deposit(payment),
     );
     recoverFunding.push(async () =>
-      E.when(secondaryAMMPayment, E(secondaryPurse).deposit),
+      E.when(secondaryAMMPayment, (payment) =>
+        E(secondaryPurse).deposit(payment),
+      ),
     );
 
     console.error(
@@ -406,7 +410,7 @@ export default async function startAgent({
   /** @type {ERef<import('../types.js').VaultFactoryPublicFacet>} */
   const vaultFactoryPublicFacet = E.when(
     withFee(vaultFactoryInstance),
-    E(zoe).getPublicFacet,
+    (instance) => E(zoe).getPublicFacet(instance),
   );
 
   const vaultManager = E.when(
