@@ -199,9 +199,19 @@ export const makeTasks = ({
         );
 
         await childProcessDone(
-          printerSpawn(sdkBinaries.cosmosChain, ['unsafe-reset-all'], {
-            stdio,
-          }),
+          printerSpawn(
+            sdkBinaries.cosmosChain,
+            ['tendermint', 'unsafe-reset-all'],
+            {
+              stdio,
+            },
+          ),
+        ).catch(() =>
+          childProcessDone(
+            printerSpawn(sdkBinaries.cosmosChain, ['unsafe-reset-all'], {
+              stdio,
+            }),
+          ),
         );
 
         const configPath = joinPath(chainStateDir, 'config', 'config.toml');
