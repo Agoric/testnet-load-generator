@@ -291,6 +291,8 @@ export const monitorSlog = async (
             blockHeight,
             'linesInBlock=',
             block.slogLines,
+            'computrons=',
+            block.computrons,
           );
           block = null;
         }
