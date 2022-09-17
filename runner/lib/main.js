@@ -548,8 +548,12 @@ const main = async (progName, rawArgs, powers) => {
           }
 
           if (resolveFirstEmptyBlock) {
-            if (block.slogLines === 0 || emptyBlockRetries === 0) {
-              if (block.slogLines === 0) {
+            if (
+              block.slogLines === 0 ||
+              block.computrons === 0 ||
+              emptyBlockRetries === 0
+            ) {
+              if (block.slogLines === 0 || block.computrons === 0) {
                 logPerfEvent('stage-first-empty-block', {
                   block: block.blockHeight,
                 });
