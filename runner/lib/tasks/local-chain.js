@@ -102,6 +102,8 @@ export const makeTasks = ({
     }
   };
 
+  let chainId = CHAIN_ID;
+
   /** @type {Record<string, string>} */
   const additionChainEnv = {};
 
@@ -232,6 +234,11 @@ export const makeTasks = ({
 
         await PromiseAllOrErrors([outputParsed, launcherDone]);
       }
+
+      const genesis = JSON.parse(
+        await fs.readFile(genesisPath, { encoding: 'utf-8' }),
+      );
+      chainId = genesis.chain_id;
     }
 
     console.log('Done');
@@ -377,7 +384,7 @@ export const makeTasks = ({
 
     const keysSharedArgs = [
       `--home=${keysDir}`,
-      `--chain-id=${CHAIN_ID}`,
+      `--chain-id=${chainId}`,
       `--node=tcp://${rpcAddr}`,
     ];
 
@@ -489,7 +496,7 @@ export const makeTasks = ({
     await childProcessDone(
       printerSpawn(
         sdkBinaries.agSolo,
-        ['set-gci-ingress', `--chainID=${CHAIN_ID}`, gci, rpcAddr],
+        ['set-gci-ingress', `--chainID=${chainId}`, gci, rpcAddr],
         { stdio, cwd: clientStateDir },
       ),
     );
