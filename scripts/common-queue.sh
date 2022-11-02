@@ -53,5 +53,6 @@ start() {
     [ -d "/var/lib/docker" ] && sudo -n cat /var/lib/docker/containers/${DOCKER_ID}/${DOCKER_ID}-json.log >"${OUTPUT_DIR}/docker.json.log"
     docker rm ${DOCKER_ID}
     DOCKER_ID=
+    [ `cat ${OUTPUT_DIR}/exit_code` -eq 0 ] && [ "x${SUCCESS_CLEAN}" = "x1" ] && rm -f ${OUTPUT_DIR}/*-storage*
   done
 }

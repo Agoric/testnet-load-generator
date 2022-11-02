@@ -7,6 +7,7 @@ set -x
 # Requires a docker image named `loadgen-runner`
 
 SDK_REPO="${SDK_REPO:-https://github.com/Agoric/agoric-sdk.git}"
+SUCCESS_CLEAN=1
 
 next_revision() {
   git ls-remote ${SDK_REPO} HEAD | awk '{ print substr($1,1,12) }'
