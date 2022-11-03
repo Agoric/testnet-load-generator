@@ -59,9 +59,10 @@ import { warnOnRejection } from '../helpers/async.js';
  *   time: TimeValueS,
  *   monotime?: number,
  *   type: 'deliver',
- *   crankNum: number,
+ *   crankNum?: number,
  *   vatID: string,
  *   deliveryNum: number,
+ *   replay: boolean,
  * }} SlogCosmicSwingsetVatDeliveryEvent
  */
 
@@ -70,9 +71,10 @@ import { warnOnRejection } from '../helpers/async.js';
  *   time: TimeValueS,
  *   monotime?: number,
  *   type: 'deliver-result',
- *   crankNum: number,
+ *   crankNum?: number,
  *   vatID: string,
  *   deliveryNum: number,
+ *   replay: boolean,
  *   dr: [
  *    tag: 'ok' | 'error',
  *    message: null | string,
@@ -308,12 +310,15 @@ export const monitorSlog = async (
             crankNum,
             deliveryNum,
             vatID,
+            replay,
             dr: [, , usage],
           } = event;
-          if (usage && typeof usage === 'object' && 'compute' in usage) {
-            computrons = usage.compute;
+          if (!replay && crankNum !== undefined) {
+            if (usage && typeof usage === 'object' && 'compute' in usage) {
+              computrons = usage.compute;
+            }
+            block.recordDelivery({ crankNum, deliveryNum, vatID, computrons });
           }
-          block.recordDelivery({ crankNum, deliveryNum, vatID, computrons });
         }
         break;
       }
