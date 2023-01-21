@@ -22,7 +22,7 @@ import { fallback } from './fallback.js';
  *   vaultFactoryCreatorFacet: ERef<VaultFactory | void>,
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
- *   mintBundle: BundleSource,
+ *   mintBundle: import('../types.js').Bundle,
  *   fallbackCollateralToken?: string | undefined,
  *   fallbackTradeToken?: string | undefined,
  * }} startParam
