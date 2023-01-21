@@ -41,7 +41,7 @@ export async function prepareLoadgen(home, deployPowers) {
   if (!loadgenKit) {
     const { bundleSource, publishBundle } = deployPowers;
     const mintFn = path.join(__dirname, 'contract', 'mintHolder.js');
-    const mintBundle = await E.when(bundleSource(mintFn), publishBundle);
+    const mintBundle = E.when(bundleSource(mintFn), publishBundle);
 
     const agentFn = path.join(
       __dirname,
@@ -51,9 +51,16 @@ export async function prepareLoadgen(home, deployPowers) {
     const agentBundle = await bundleSource(agentFn);
 
     console.log(
-      `prepare-loadgen: prepare: mint bundle ${
-        JSON.stringify(mintBundle).length
-      }, agent bundle ${JSON.stringify(agentBundle).length}`,
+      `prepare-loadgen: prepare: agent bundle ${
+        JSON.stringify(agentBundle).length
+      }`,
+    );
+    E.when(mintBundle, (bundle) =>
+      console.log(
+        `prepare-loadgen: prepare: mint bundle ${
+          JSON.stringify(bundle).length
+        }`,
+      ),
     );
     // create a solo-side agent to setup everything
     const installerP = E(spawner).install(agentBundle);
