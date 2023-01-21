@@ -39,9 +39,9 @@ export async function prepareLoadgen(home, deployPowers) {
   /** @type {import('./contract/agent-prepare-loadgen').LoadgenKit | undefined} */
   let loadgenKit = await E(scratch).get(key);
   if (!loadgenKit) {
-    const { bundleSource } = deployPowers;
+    const { bundleSource, publishBundle } = deployPowers;
     const mintFn = path.join(__dirname, 'contract', 'mintHolder.js');
-    const mintBundle = await bundleSource(mintFn);
+    const mintBundle = await E.when(bundleSource(mintFn), publishBundle);
 
     const agentFn = path.join(
       __dirname,
