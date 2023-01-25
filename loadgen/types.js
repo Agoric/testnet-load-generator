@@ -61,8 +61,6 @@ export {};
  * @property {ERef<MyAddressNameAdmin>} myAddressNameAdmin
  */
 
-/** @typedef {import('agoric/src/publish').Bundle} Bundle */
-
 /**
  * @typedef {object} DeployPowers
  * @property {BundleSource} bundleSource

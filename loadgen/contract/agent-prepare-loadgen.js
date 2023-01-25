@@ -22,7 +22,7 @@ import { fallback } from './fallback.js';
  *   vaultFactoryCreatorFacet: ERef<VaultFactory | void>,
  *   wallet: ERef<import('../types.js').HomeWallet>,
  *   zoe: ERef<ZoeService>,
- *   mintBundle: ERef<import('../types.js').Bundle>,
+ *   mintInstallation: ERef<Installation>,
  *   fallbackCollateralToken?: string | undefined,
  *   fallbackTradeToken?: string | undefined,
  * }} startParam
@@ -160,7 +160,7 @@ export default async function startAgent({
   vaultFactoryCreatorFacet,
   zoe,
   wallet,
-  mintBundle,
+  mintInstallation,
   fallbackTradeToken,
   fallbackCollateralToken,
 }) {
@@ -264,13 +264,9 @@ export default async function startAgent({
       keyword: tokenSymbolPetname,
     };
 
-    const installation = E.when(mintBundle, async (bundle) =>
-      E(zoe).install(bundle),
-    );
-
     /** @type {Promise<ReturnType<typeof import('./mintHolder.js').start>>} */
     const startInstanceResult = E(zoe).startInstance(
-      installation,
+      mintInstallation,
       undefined,
       customTerms,
     );
