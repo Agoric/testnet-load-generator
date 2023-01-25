@@ -1,9 +1,8 @@
 // @ts-check
 
 import { E } from '@agoric/eventual-send';
-import { makeHelpers } from '@agoric/deploy-script-support';
 
-import { pathResolveShim } from './powers-shim.js';
+import { pathResolveShim, makeInstall } from './powers-shim.js';
 import { fallbackCollateralToken, fallbackTradeToken } from './config.js';
 
 const key = 'loadgenKit';
@@ -40,7 +39,7 @@ export async function prepareLoadgen(home, deployPowers) {
   let loadgenKit = await E(scratch).get(key);
   if (!loadgenKit) {
     const { bundleSource, pathResolve = pathResolveShim } = deployPowers;
-    const { install } = await makeHelpers(home, deployPowers);
+    const install = await makeInstall(home, deployPowers);
     const mintFn = pathResolve('contract', 'mintHolder.js');
     const { installation: mintInstallation } = E.get(
       install(mintFn, 'loadgen-mint'),
