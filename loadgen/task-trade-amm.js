@@ -1,9 +1,8 @@
 // @ts-check
 
-/* global __dirname */
-import path from 'path';
 import { E } from '@agoric/eventual-send';
 
+import { pathResolveShim } from './powers-shim.js';
 import { getLoadgenKit } from './prepare-loadgen.js';
 
 /**
@@ -19,9 +18,9 @@ export async function prepareAMMTrade(home, deployPowers) {
   let agent = await E(scratch).get(key);
   if (!agent) {
     const loadgenKit = getLoadgenKit(home);
-    const { bundleSource } = deployPowers;
+    const { bundleSource, pathResolve = pathResolveShim } = deployPowers;
 
-    const agentFn = path.join(__dirname, 'contract', 'agent-trade-amm.js');
+    const agentFn = pathResolve('contract', 'agent-trade-amm.js');
     const agentBundle = await bundleSource(agentFn);
 
     // create the solo-side agent to drive each cycle, let it handle zoe

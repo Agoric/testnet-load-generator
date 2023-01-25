@@ -1,9 +1,8 @@
 // @ts-check
 
-/* global __dirname */
-import path from 'path';
 import { E } from '@agoric/eventual-send';
 
+import { pathResolveShim } from './powers-shim.js';
 import { fallbackCollateralToken, fallbackTradeToken } from './config.js';
 
 const key = 'loadgenKit';
@@ -39,15 +38,15 @@ export async function prepareLoadgen(home, deployPowers) {
   /** @type {import('./contract/agent-prepare-loadgen').LoadgenKit | undefined} */
   let loadgenKit = await E(scratch).get(key);
   if (!loadgenKit) {
-    const { bundleSource, publishBundle } = deployPowers;
-    const mintFn = path.join(__dirname, 'contract', 'mintHolder.js');
+    const {
+      bundleSource,
+      publishBundle,
+      pathResolve = pathResolveShim,
+    } = deployPowers;
+    const mintFn = pathResolve('contract', 'mintHolder.js');
     const mintBundle = E.when(bundleSource(mintFn), publishBundle);
 
-    const agentFn = path.join(
-      __dirname,
-      'contract',
-      'agent-prepare-loadgen.js',
-    );
+    const agentFn = pathResolve('contract', 'agent-prepare-loadgen.js');
     const agentBundle = await bundleSource(agentFn);
 
     console.log(
