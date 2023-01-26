@@ -2,6 +2,7 @@
 
 import { performance } from 'perf_hooks';
 import http from 'http';
+import process from 'process';
 
 import { E } from '@agoric/eventual-send';
 
@@ -270,7 +271,7 @@ export default async function runCycles(homePromise, deployPowers) {
   // console.log(`got chain time:`, time);
   // return;
 
-  await prepareLoadgen(homePromise, deployPowers);
+  await prepareLoadgen(homePromise, deployPowers, process.env);
 
   for (const [name, [prepare]] of Object.entries(tasks)) {
     // eslint-disable-next-line no-await-in-loop
