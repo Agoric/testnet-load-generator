@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global process */
 
-import '../lib/sdk/install-ses.js';
+import '@endo/init';
 
 import { promisify } from 'util';
 import { pipeline as pipelineCallback } from 'stream';

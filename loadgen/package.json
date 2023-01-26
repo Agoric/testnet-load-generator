@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@agoric/deploy-script-support": "*",
-    "@agoric/eventual-send": "*",
-    "@agoric/install-ses": "*",
-    "@agoric/promise-kit": "*",
+    "@endo/init": "^0.5.53",
+    "@endo/promise-kit": "^0.2.53",
+    "@endo/eventual-send": "^0.16.9",
     "esm": "agoric-labs/esm#Agoric-built",
     "firebase": "^9.0.2"
   },

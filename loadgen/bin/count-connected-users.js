@@ -1,6 +1,6 @@
 /* global process */
 
-import '@agoric/install-ses';
+import '@endo/init';
 
 import { fetchAsJSON } from '../../runner/lib/tasks/helpers.js';
 

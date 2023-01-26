@@ -13,11 +13,11 @@
   "devDependencies": {},
   "dependencies": {
     "@agoric/ertp": "*",
-    "@agoric/eventual-send": "*",
-    "@agoric/marshal": "*",
     "@agoric/notifier": "*",
     "@agoric/ui-components": "*",
-    "@agoric/zoe": "*"
+    "@agoric/zoe": "*",
+    "@endo/eventual-send": "^0.16.9",
+    "@endo/far": "^0.2.15"
   },
   "keywords": [],
   "author": "Agoric",

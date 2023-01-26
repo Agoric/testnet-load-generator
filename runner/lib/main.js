@@ -14,7 +14,7 @@ import {
 
 import yargsParser from 'yargs-parser';
 import chalk from 'chalk';
-import { makePromiseKit } from './sdk/promise-kit.js';
+import { makePromiseKit } from '@endo/promise-kit';
 import { resolve as importMetaResolve } from './helpers/module.js';
 
 import {
@@ -530,7 +530,7 @@ const main = async (progName, rawArgs, powers) => {
         slogOutputWriteStream,
       );
 
-      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+      /** @type {import("@endo/promise-kit").PromiseRecord<void>} */
       const firstBlockDoneKit = makePromiseKit();
       /** @type {(() => void) | null} */
       let resolveFirstBlockDone = firstBlockDoneKit.resolve;
@@ -602,7 +602,7 @@ const main = async (progName, rawArgs, powers) => {
           logPerfEvent('chain-ready');
           stageConsole.log('Chain ready');
 
-          /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+          /** @type {import("@endo/promise-kit").PromiseRecord<void>} */
           const firstEmptyBlockKit = makePromiseKit();
           resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
 
@@ -730,7 +730,7 @@ const main = async (progName, rawArgs, powers) => {
 
       /** @type {Error | null} */
       let loadgenTaskFailed = null;
-      /** @type {import('./sdk/promise-kit.js').PromiseRecord<void>} */
+      /** @type {import('@endo/promise-kit').PromiseRecord<void>} */
       const stopLoadgenKit = makePromiseKit();
 
       const notifier = {
@@ -856,7 +856,7 @@ const main = async (progName, rawArgs, powers) => {
     const stageReady = async (nextStep) => {
       /** @type {Promise<void>} */
       let sleeping;
-      /** @type {import("./sdk/promise-kit.js").PromiseRecord<void>} */
+      /** @type {import("@endo/promise-kit").PromiseRecord<void>} */
       const sleepCancel = makePromiseKit();
       if (durationConfig < 0) {
         // sleeping forever

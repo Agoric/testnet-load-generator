@@ -3,7 +3,7 @@
 // Protobufjs patch is mostly necessary for Firestore but keep around as it doesn't hurt
 import './setup-protobufjs-inquire.js';
 
-import { makePromiseKit } from '@agoric/promise-kit';
+import { makePromiseKit } from '@endo/promise-kit';
 
 import {
   getDatabase,

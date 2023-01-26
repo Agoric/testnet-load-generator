@@ -1,6 +1,6 @@
 /* global process */
 
-import '@agoric/install-ses';
+import '@endo/init';
 
 import { makeAuthBroker } from '../firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from '../firebase/client.js';

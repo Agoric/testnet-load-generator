@@ -1,6 +1,6 @@
 /* global setTimeout,clearTimeout */
 
-import { makePromiseKit } from '../sdk/promise-kit.js';
+import { makePromiseKit } from '@endo/promise-kit';
 
 /** @type {import("./async.js").sleep} */
 export const sleep = (ms, cancel) =>
@@ -117,7 +117,7 @@ export const tryTimeout = async (timeoutMs, trier, onError) => {
 /** @typedef {import("./async.js").Task} Task */
 /**
  * @template T
- * @typedef {import('../sdk/promise-kit.js').PromiseRecord<T>} PromiseRecord<T>
+ * @typedef {import('@endo/promise-kit').PromiseRecord<T>} PromiseRecord<T>
  */
 
 /**

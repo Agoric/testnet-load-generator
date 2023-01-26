@@ -1,6 +1,6 @@
 // @ts-check
 
-import { E } from '@agoric/eventual-send';
+import { E } from '@endo/eventual-send';
 import { pathResolveShim } from './powers-shim.js';
 import { getLoadgenKit } from './prepare-loadgen.js';
 

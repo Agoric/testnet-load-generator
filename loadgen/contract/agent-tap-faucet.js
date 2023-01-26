@@ -1,8 +1,8 @@
 // @ts-check
 
 import { AmountMath } from '@agoric/ertp';
-import { E } from '@agoric/eventual-send';
-import { Far } from '@agoric/marshal';
+import { E } from '@endo/eventual-send';
+import { Far } from '@endo/far';
 
 import { disp } from './display.js';
 
