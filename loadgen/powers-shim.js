@@ -12,13 +12,29 @@ export const pathResolveShim = (...paths) => path.resolve(dirname, ...paths);
  *
  * @param { ERef<Pick<import('./types').Home, 'zoe'>> } home
  * @param { import('./types').DeployPowers } powers
+ * @param {object} [options]
+ * @param {boolean} [options.mustPublish]
  */
-export const makeInstall = async (home, powers) => {
+export const makeInstall = async (home, powers, { mustPublish } = {}) => {
+  if (mustPublish && !powers.publishBundle) {
+    throw Error('publishBundle power required for publishing contract bundle');
+  }
   try {
     const { makeHelpers } = await import('@agoric/deploy-script-support');
     const { install } = await makeHelpers(home, powers);
     return install;
   } catch (e) {
+    if (mustPublish) {
+      const error = Error(
+        'deploy-script-support failed, cannot publish bundle',
+      );
+      Object.defineProperty(error, 'cause', {
+        value: e,
+        configurable: true,
+        enumerable: true,
+      });
+      throw error;
+    }
     const { bundleSource, pathResolve = pathResolveShim } = powers;
     const { zoe } = E.get(home);
     /** @param {string} contractPath */

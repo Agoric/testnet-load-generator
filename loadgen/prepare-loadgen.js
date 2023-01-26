@@ -22,8 +22,9 @@ const key = 'loadgenKit';
  *   'wallet' |
  *   'zoe' |
  * never} UsedHomeCaps
+ * @param { Partial<Record<string, string>>} env
  */
-export async function prepareLoadgen(home, deployPowers) {
+export async function prepareLoadgen(home, deployPowers, env) {
   const {
     agoricNames,
     faucet,
@@ -39,7 +40,10 @@ export async function prepareLoadgen(home, deployPowers) {
   let loadgenKit = await E(scratch).get(key);
   if (!loadgenKit) {
     const { bundleSource, pathResolve = pathResolveShim } = deployPowers;
-    const install = await makeInstall(home, deployPowers);
+    const mustPublish =
+      env.MUST_USE_PUBLISH_BUNDLE === '1' ||
+      env.MUST_USE_PUBLISH_BUNDLE === 'true';
+    const install = await makeInstall(home, deployPowers, { mustPublish });
     const mintFn = pathResolve('contract', 'mintHolder.js');
     const { installation: mintInstallation } = E.get(
       install(mintFn, 'loadgen-mint'),
