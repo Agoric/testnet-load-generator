@@ -13,6 +13,7 @@
     "@agoric/bundle-source": "*"
   },
   "dependencies": {
+    "@agoric/deploy-script-support": "*",
     "@agoric/eventual-send": "*",
     "@agoric/install-ses": "*",
     "@agoric/promise-kit": "*",

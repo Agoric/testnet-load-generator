@@ -64,4 +64,6 @@ export {};
 /**
  * @typedef {object} DeployPowers
  * @property {BundleSource} bundleSource
+ * @property {(...paths: string[]) => string} [pathResolve]
+ * @property {import('agoric/src/publish').PublishBundle} [publishBundle]
  */

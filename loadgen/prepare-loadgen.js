@@ -1,9 +1,8 @@
 // @ts-check
 
-/* global __dirname */
-import path from 'path';
 import { E } from '@agoric/eventual-send';
 
+import { pathResolveShim, makeInstall } from './powers-shim.js';
 import { fallbackCollateralToken, fallbackTradeToken } from './config.js';
 
 const key = 'loadgenKit';
@@ -39,21 +38,20 @@ export async function prepareLoadgen(home, deployPowers) {
   /** @type {import('./contract/agent-prepare-loadgen').LoadgenKit | undefined} */
   let loadgenKit = await E(scratch).get(key);
   if (!loadgenKit) {
-    const { bundleSource } = deployPowers;
-    const mintFn = path.join(__dirname, 'contract', 'mintHolder.js');
-    const mintBundle = await bundleSource(mintFn);
-
-    const agentFn = path.join(
-      __dirname,
-      'contract',
-      'agent-prepare-loadgen.js',
+    const { bundleSource, pathResolve = pathResolveShim } = deployPowers;
+    const install = await makeInstall(home, deployPowers);
+    const mintFn = pathResolve('contract', 'mintHolder.js');
+    const { installation: mintInstallation } = E.get(
+      install(mintFn, 'loadgen-mint'),
     );
+
+    const agentFn = pathResolve('contract', 'agent-prepare-loadgen.js');
     const agentBundle = await bundleSource(agentFn);
 
     console.log(
-      `prepare-loadgen: prepare: mint bundle ${
-        JSON.stringify(mintBundle).length
-      }, agent bundle ${JSON.stringify(agentBundle).length}`,
+      `prepare-loadgen: prepare: agent bundle ${
+        JSON.stringify(agentBundle).length
+      }`,
     );
     // create a solo-side agent to setup everything
     const installerP = E(spawner).install(agentBundle);
@@ -65,7 +63,7 @@ export async function prepareLoadgen(home, deployPowers) {
       vaultFactoryCreatorFacet,
       wallet,
       zoe,
-      mintBundle,
+      mintInstallation,
       fallbackCollateralToken,
       fallbackTradeToken,
     });

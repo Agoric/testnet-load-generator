@@ -1,8 +1,7 @@
 // @ts-check
 
-/* global __dirname */
-import path from 'path';
 import { E } from '@agoric/eventual-send';
+import { pathResolveShim } from './powers-shim.js';
 import { getLoadgenKit } from './prepare-loadgen.js';
 
 // Prepare to create and close a vault on each cycle. We measure our
@@ -26,9 +25,9 @@ export async function prepareVaultCycle(home, deployPowers) {
   let agent = await E(scratch).get(key);
   if (!agent) {
     const loadgenKit = getLoadgenKit(home);
-    const { bundleSource } = deployPowers;
+    const { bundleSource, pathResolve = pathResolveShim } = deployPowers;
 
-    const agentFn = path.join(__dirname, 'contract', 'agent-create-vault.js');
+    const agentFn = pathResolve('contract', 'agent-create-vault.js');
     const agentBundle = await bundleSource(agentFn);
 
     // create the solo-side agent to drive each cycle, let it handle zoe
