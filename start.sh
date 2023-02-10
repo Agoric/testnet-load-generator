@@ -14,7 +14,7 @@ fi
 mkdir -p "${SDK_SRC}"
 
 # Clone the repo if needed
-if [ ! -d "${SDK_SRC}/.git" ]
+if [ ! -e "${SDK_SRC}/.git" ]
 then
     git clone "${SDK_REPO}" "${SDK_SRC}"
     if [ ! -z "${SDK_REVISION}" ]
