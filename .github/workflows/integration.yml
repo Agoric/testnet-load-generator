@@ -44,7 +44,7 @@ jobs:
         shell: bash
       - uses: actions/setup-go@v2
         with:
-          go-version: 1.17
+          go-version: 1.19
       - name: cache Go modules
         uses: actions/cache@v2
         id: go-cache
@@ -59,7 +59,7 @@ jobs:
           node-version: 16.x
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
+        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
       - uses: actions/cache@v2
         id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
         with:
