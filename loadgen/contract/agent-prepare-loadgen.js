@@ -1,7 +1,7 @@
 // @ts-check
 
 import { AmountMath, AssetKind } from '@agoric/ertp';
-import { E } from '@agoric/eventual-send';
+import { E } from '@endo/eventual-send';
 import { makeAsyncIterableFromNotifier } from '@agoric/notifier';
 import { makeRatio } from '@agoric/zoe/src/contractSupport';
 

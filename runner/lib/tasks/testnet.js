@@ -7,7 +7,7 @@ import { pipeline as pipelineCallback } from 'stream';
 
 import TOML from '@iarna/toml';
 
-import { makePromiseKit } from '../sdk/promise-kit.js';
+import { makePromiseKit } from '@endo/promise-kit';
 import {
   childProcessDone,
   makeSpawnWithPipedStream,
@@ -446,7 +446,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
       },
     );
 
-    /** @type {import('../sdk/promise-kit.js').PromiseRecord<void>} */
+    /** @type {import('@endo/promise-kit').PromiseRecord<void>} */
     const doneKit = makePromiseKit();
     const done = doneKit.promise;
 

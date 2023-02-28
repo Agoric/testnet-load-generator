@@ -1,7 +1,7 @@
 // @ts-check
 
-import { E } from '@agoric/eventual-send';
-import { Far } from '@agoric/marshal';
+import { E } from '@endo/eventual-send';
+import { Far } from '@endo/far';
 import { AmountMath } from '@agoric/ertp';
 // import { allComparable } from '@agoric/same-structure';
 import * as contractSupport from '@agoric/zoe/src/contractSupport/index.js';

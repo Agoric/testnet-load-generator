@@ -2,7 +2,7 @@
 /* global process console */
 // @ts-nocheck
 
-import './sdk/install-ses.js';
+import '@endo/init';
 
 import path from 'path';
 import { spawn } from 'child_process';

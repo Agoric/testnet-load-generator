@@ -3,7 +3,7 @@
 import { promisify } from 'util';
 import { finished as finishedCallback, PassThrough } from 'stream';
 
-import { makePromiseKit } from '../sdk/promise-kit.js';
+import { makePromiseKit } from '@endo/promise-kit';
 
 import LineStreamTransform from './line-stream-transform.js';
 import ElidedBufferLineTransform from './elided-buffer-line-transform.js';
@@ -41,7 +41,7 @@ export const whenStreamSteps = (
         const match = stepsAndKits[0].step.matcher.exec(line);
         if (match) {
           const stepAndKit =
-            /** @type {{step: StepConfig, kit: import('../sdk/promise-kit.js').PromiseRecord<any>}} */ (
+            /** @type {{step: StepConfig, kit: import('@endo/promise-kit').PromiseRecord<any>}} */ (
               stepsAndKits.shift()
             );
           const {

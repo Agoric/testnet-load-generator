@@ -6,6 +6,7 @@
     "moduleResolution": "node",
     "noEmit": true,
     "checkJs": true,
+    "maxNodeModuleJsDepth": 0,
     /*
     // The following flags are for creating .d.ts files:
     "noEmit": false,
@@ -25,5 +26,5 @@
     "noUnusedLocals": true
     // "noUnusedParameters": true
   },
-  "include": ["lib/**/*.js", "lib/**/*.d.ts"]
+  "include": ["lib/**/*.js", "lib/**/*.d.ts", "../node_modules/ses/index.d.ts"]
 }

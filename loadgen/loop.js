@@ -4,7 +4,7 @@ import { performance } from 'perf_hooks';
 import http from 'http';
 import process from 'process';
 
-import { E } from '@agoric/eventual-send';
+import { E } from '@endo/eventual-send';
 
 import { makeAuthBroker } from './firebase/auth.js';
 import { makeClientConnectionHandlerFactory } from './firebase/client.js';

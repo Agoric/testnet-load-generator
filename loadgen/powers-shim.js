@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { E } from '@agoric/eventual-send';
+import { E } from '@endo/eventual-send';
 
 const filename = new URL(import.meta.url).pathname;
 const dirname = path.dirname(filename);
