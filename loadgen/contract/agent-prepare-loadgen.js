@@ -526,7 +526,7 @@ export default async function startAgent({
       await allValues({
         tokenKit,
         stableKit,
-        amm,
+        amm: Promise.resolve(amm).catch(() => null),
         ammTokenKit,
         vaultManager,
         vaultFactory: vaultFactoryPublicFacet,
