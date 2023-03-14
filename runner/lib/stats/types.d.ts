@@ -161,6 +161,7 @@ export interface StageStats extends StageStatsInitData {
 export interface RunMetadata {
   readonly profile: string;
   readonly testnetOrigin?: string;
+  readonly useStateSync?: boolean | undefined;
   readonly agChainCosmosVersion?: unknown;
   readonly testData?: unknown;
 }
