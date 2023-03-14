@@ -182,20 +182,12 @@ export const makeTasks = ({
       const genesisPath = joinPath(chainStateDir, 'config', 'genesis.json');
 
       if (!(await fsExists(genesisPath))) {
-        console.log('Fetching genesis');
-        const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
-
         await childProcessDone(
           printerSpawn(
             sdkBinaries.cosmosChain,
             ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
             { stdio },
           ),
-        );
-
-        fs.writeFile(
-          joinPath(chainStateDir, 'config', 'genesis.json'),
-          JSON.stringify(genesis),
         );
 
         await childProcessDone(
@@ -228,6 +220,14 @@ export const makeTasks = ({
         configP2p.addr_book_strict = false;
         delete config.log_level;
         await fs.writeFile(configPath, TOML.stringify(config));
+
+        console.log('Fetching genesis');
+        const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
+
+        fs.writeFile(
+          joinPath(chainStateDir, 'config', 'genesis.json'),
+          JSON.stringify(genesis),
+        );
       }
 
       if (loadgenBootstrapConfig) {
