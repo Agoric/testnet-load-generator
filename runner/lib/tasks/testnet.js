@@ -235,6 +235,13 @@ export const makeTasks = ({
           const currentBlockInfo = await fetchAsJSON(
             `http://${rpcAddrs[0]}/block`,
           );
+
+          // `trustHeight` is the block height considered as the "root of trust"
+          // for state-sync. The node will attempt to find a snapshot offered for
+          // a block at or after this height, and will validate that block's hash
+          // using a light client with the configured RPC servers.
+          // We want to use a block height recent enough, but for which a snapshot
+          // exists since then.
           const stateSyncInterval =
             Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
           const trustHeight = Math.max(
