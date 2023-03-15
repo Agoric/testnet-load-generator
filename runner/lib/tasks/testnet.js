@@ -124,7 +124,7 @@ export const makeTasks = ({
   /** @type {Record<string, string>} */
   const additionChainEnv = {};
 
-  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string}}} options */
+  /** @param {import("./types.js").TaskBaseOptions & {config?: {reset?: boolean, chainOnly?: boolean, withMonitor?: boolean, testnetOrigin?: string, useStateSync?: boolean}}} options */
   const setupTasks = async ({
     stdout,
     stderr,
@@ -135,6 +135,7 @@ export const makeTasks = ({
       chainOnly,
       withMonitor = true,
       testnetOrigin: testnetOriginOption,
+      useStateSync,
     } = {},
   }) => {
     const { console, stdio } = getConsoleAndStdio(
@@ -182,20 +183,12 @@ export const makeTasks = ({
       const genesisPath = joinPath(chainStateDir, 'config', 'genesis.json');
 
       if (!(await fsExists(genesisPath))) {
-        console.log('Fetching genesis');
-        const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
-
         await childProcessDone(
           printerSpawn(
             sdkBinaries.cosmosChain,
             ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
             { stdio },
           ),
-        );
-
-        fs.writeFile(
-          joinPath(chainStateDir, 'config', 'genesis.json'),
-          JSON.stringify(genesis),
         );
 
         await childProcessDone(
@@ -227,6 +220,53 @@ export const makeTasks = ({
         configP2p.seeds = seeds.join(',');
         configP2p.addr_book_strict = false;
         delete config.log_level;
+
+        if (!useStateSync) {
+          console.log('Fetching genesis');
+          const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
+
+          fs.writeFile(
+            joinPath(chainStateDir, 'config', 'genesis.json'),
+            JSON.stringify(genesis),
+          );
+        } else {
+          console.log('Fetching state-sync info');
+          /** @type {any} */
+          const currentBlockInfo = await fetchAsJSON(
+            `http://${rpcAddrs[0]}/block`,
+          );
+
+          // `trustHeight` is the block height considered as the "root of trust"
+          // for state-sync. The node will attempt to find a snapshot offered for
+          // a block at or after this height, and will validate that block's hash
+          // using a light client with the configured RPC servers.
+          // We want to use a block height recent enough, but for which a snapshot
+          // exists since then.
+          const stateSyncInterval =
+            Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
+          const trustHeight = Math.max(
+            1,
+            Number(currentBlockInfo.result.block.header.height) -
+              stateSyncInterval,
+          );
+
+          /** @type {any} */
+          const trustedBlockInfo = await fetchAsJSON(
+            `http://${rpcAddrs[0]}/block?height=${trustHeight}`,
+          );
+          const trustHash = trustedBlockInfo.result.block_id.hash;
+
+          const configStatesync = /** @type {import('@iarna/toml').JsonMap} */ (
+            config.statesync
+          );
+          configStatesync.enable = true;
+          configStatesync.rpc_servers = rpcAddrs
+            .map((host) => `http://${host}`)
+            .join(',');
+          configStatesync.trust_height = trustHeight;
+          configStatesync.trust_hash = trustHash;
+        }
+
         await fs.writeFile(configPath, TOML.stringify(config));
       }
 

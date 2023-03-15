@@ -279,6 +279,9 @@ const main = async (progName, rawArgs, powers) => {
   /** @type {string} */
   let testnetOrigin;
 
+  /** @type {boolean | undefined} */
+  let useStateSync;
+
   const profile = argv.profile == null ? 'local' : argv.profile;
 
   switch (profile) {
@@ -291,6 +294,7 @@ const main = async (progName, rawArgs, powers) => {
     case 'stage':
       makeTasks = makeTestnetTasks;
       testnetOrigin = argv.testnetOrigin || `https://${profile}.agoric.net`;
+      useStateSync = argv.useStateSync;
       break;
     default:
       throw new Error(`Unexpected profile option: ${profile}`);
@@ -382,6 +386,7 @@ const main = async (progName, rawArgs, powers) => {
     metadata: {
       profile,
       testnetOrigin,
+      useStateSync,
       ...envInfo,
       testData: argv.testData,
     },
@@ -961,6 +966,7 @@ const main = async (progName, rawArgs, powers) => {
           chainOnly: globalChainOnly,
           withMonitor,
           testnetOrigin,
+          useStateSync,
         };
         logPerfEvent('setup-tasks-start', setupConfig);
         ({ chainStorageLocation, clientStorageLocation } =
