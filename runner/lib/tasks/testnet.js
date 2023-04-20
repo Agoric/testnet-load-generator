@@ -47,6 +47,29 @@ const clientWalletReadyRE =
   /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
 
+const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
+
+/**
+ * @param {string} rpcAddr
+ * @param {object} [options]
+ * @param {string} [options.withScheme]
+ * @param {boolean} [options.forceScheme]
+ */
+const rpcAddrWithScheme = (
+  rpcAddr,
+  { withScheme = 'http', forceScheme = false } = {},
+) => {
+  const parsed = rpcAddr.match(rpcAddrRegex);
+  if (!parsed) {
+    throw new Error(`Couldn't parse rpcAddr ${rpcAddr}`);
+  }
+  const [, scheme, hierarchicalPart] = parsed;
+  if (scheme && (scheme.startsWith(withScheme) || !forceScheme)) {
+    return rpcAddr;
+  }
+  return `${withScheme}://${hierarchicalPart}`;
+};
+
 /**
  *
  * @param {object} powers
@@ -89,7 +112,7 @@ export const makeTasks = ({
     const args = ['status'];
 
     if (rpcAddr) {
-      args.push(`--node=tcp://${rpcAddr}`);
+      args.push(`--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`);
     }
 
     // Don't pipe output to console, it's too noisy
@@ -164,8 +187,9 @@ export const makeTasks = ({
      * @property {string[]} peers
      * @property {string[]} rpcAddrs
      * @property {string[]} seeds
+     * @property {string} gci
      */
-    const { chainName, peers, rpcAddrs, seeds } =
+    const { chainName, peers, rpcAddrs, seeds, gci } =
       /** @type {NetworkConfigRequired & Record<string, unknown>} */ (
         await fetchAsJSON(`${testnetOrigin}/network-config`)
       );
@@ -223,7 +247,8 @@ export const makeTasks = ({
 
         if (!useStateSync) {
           console.log('Fetching genesis');
-          const genesis = await fetchAsJSON(`${testnetOrigin}/genesis.json`);
+          const gciResult = await fetchAsJSON(gci);
+          const { genesis } = /** @type {*} */ (gciResult).result;
 
           fs.writeFile(
             joinPath(chainStateDir, 'config', 'genesis.json'),
@@ -233,7 +258,7 @@ export const makeTasks = ({
           console.log('Fetching state-sync info');
           /** @type {any} */
           const currentBlockInfo = await fetchAsJSON(
-            `http://${rpcAddrs[0]}/block`,
+            `${rpcAddrWithScheme(rpcAddrs[0], { forceScheme: true })}/block`,
           );
 
           // `trustHeight` is the block height considered as the "root of trust"
@@ -252,16 +277,21 @@ export const makeTasks = ({
 
           /** @type {any} */
           const trustedBlockInfo = await fetchAsJSON(
-            `http://${rpcAddrs[0]}/block?height=${trustHeight}`,
+            `${rpcAddrWithScheme(rpcAddrs[0], {
+              forceScheme: true,
+            })}/block?height=${trustHeight}`,
           );
           const trustHash = trustedBlockInfo.result.block_id.hash;
+
+          const stateSyncRpc =
+            rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
 
           const configStatesync = /** @type {import('@iarna/toml').JsonMap} */ (
             config.statesync
           );
           configStatesync.enable = true;
-          configStatesync.rpc_servers = rpcAddrs
-            .map((host) => `http://${host}`)
+          configStatesync.rpc_servers = stateSyncRpc
+            .map((rpcAddr) => rpcAddrWithScheme(rpcAddr))
             .join(',');
           configStatesync.trust_height = trustHeight;
           configStatesync.trust_hash = trustHash;
@@ -348,7 +378,7 @@ export const makeTasks = ({
       const keysSharedArgs = [
         '--log_level=info',
         `--chain-id=${chainName}`,
-        `--node=tcp://${rpcAddr}`,
+        `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
       ];
 
       /**
@@ -404,7 +434,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
   };
 
   /** @param {import("./types.js").TaskSwingSetOptions} options */
-  const runChain = async ({ stdout, stderr, timeout = 180, trace }) => {
+  const runChain = async ({ stdout, stderr, timeout = 300, trace }) => {
     const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
     const printerSpawn = makePrinterSpawn({
       spawn,
