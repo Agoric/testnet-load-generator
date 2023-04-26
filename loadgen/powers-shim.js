@@ -2,6 +2,8 @@ import path from 'path';
 
 import { E } from '@endo/eventual-send';
 
+const { Fail, quote: q } = assert;
+
 const filename = new URL(import.meta.url).pathname;
 const dirname = path.dirname(filename);
 /** @param {string[]} paths */
@@ -25,15 +27,7 @@ export const makeInstall = async (home, powers, { mustPublish } = {}) => {
     return install;
   } catch (e) {
     if (mustPublish) {
-      const error = Error(
-        'deploy-script-support failed, cannot publish bundle',
-      );
-      Object.defineProperty(error, 'cause', {
-        value: e,
-        configurable: true,
-        enumerable: true,
-      });
-      throw error;
+      throw Fail`deploy-script-support failed, cannot publish bundle: ${q(e)}`;
     }
     const { bundleSource, pathResolve = pathResolveShim } = powers;
     const { zoe } = E.get(home);
