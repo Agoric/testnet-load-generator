@@ -573,6 +573,7 @@ const main = async (progName, rawArgs, powers) => {
       };
 
       const chainMonitor =
+        /** @type {undefined | true} */ (undefined) &&
         runChainResult.processInfo &&
         makeChainMonitor(
           {
