@@ -472,7 +472,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     );
 
     let stopped = false;
-    /** @type {{signal: undefined | 'SIGTERM'}} */
+    /** @type {{signal: undefined | 'SIGTERM' | 'SIGINT'}} */
     const ignoreKill = {
       signal: undefined,
     };
@@ -485,7 +485,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const stop = () => {
       if (!stopped) {
         stopped = true;
-        ignoreKill.signal = 'SIGTERM';
+        ignoreKill.signal = 'SIGINT';
         chainCp.kill(ignoreKill.signal);
       }
     };
