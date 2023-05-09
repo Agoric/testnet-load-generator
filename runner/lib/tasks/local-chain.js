@@ -416,7 +416,11 @@ export const makeTasks = ({
         getSoloCoins(denom),
       ];
       const provCmds = [
-        // We need to provision our address.
+        // First send the address some coins. This is roughly equivalent to
+        // including this message in the same transaction as the swingset
+        // account provisioning.
+        STABLE_DENOMS.map(provCoins),
+        // Then provision the swingset account on the address.
         [
           [
             'tx',
@@ -433,8 +437,6 @@ export const makeTasks = ({
             soloAddr,
           ],
         ],
-        // Then send it some coins.
-        STABLE_DENOMS.map(provCoins),
       ];
       for (let i = 0; i < provCmds.length; i += 1) {
         const altCmds = provCmds[i];
