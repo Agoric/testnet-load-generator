@@ -12,9 +12,9 @@
   },
   "devDependencies": {},
   "dependencies": {
+    "@agoric/assert": "*",
     "@agoric/ertp": "*",
     "@agoric/notifier": "*",
-    "@agoric/ui-components": "*",
     "@agoric/zoe": "*",
     "@endo/eventual-send": "^0.16.9",
     "@endo/far": "^0.2.15"
