@@ -22,7 +22,7 @@ jobs:
             let branch = 'master';
             if (context.payload.pull_request) {
               const { body } = context.payload.pull_request;
-              const regex = /^\#loadgen-branch:\s+(\S+)/m;
+              const regex = /^\#agoric-sdk-branch:\s+(\S+)/m;
               const result = regex.exec(body);
               if (result) {
                 branch = result[1];
@@ -42,9 +42,9 @@ jobs:
       - name: set GOPATH
         run: echo GOPATH="$HOME/go" >> $GITHUB_ENV
         shell: bash
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
-          go-version: 1.19
+          go-version: '1.20'
       - name: cache Go modules
         uses: actions/cache@v3
         id: go-cache
