@@ -57,5 +57,8 @@
   "prettier": {
     "trailingComma": "all",
     "singleQuote": true
-  }
+  },
+    "engines": {
+      "node": ">=14.17.0"
+    }   
 }
