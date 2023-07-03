@@ -11,17 +11,23 @@ then
     SDK_REVISION=${SDK_REVISION:-$(git ls-remote ${SDK_REPO} HEAD | awk '{ print substr($1,1,12) }')}
     SDK_SRC=/tmp/agoric-sdk-src-${SDK_REVISION}
 fi
-mkdir -p "${SDK_SRC}"
+
+if [ -d "${SDK_SRC}" ] && [ ! -e "${SDK_SRC}/.git" ]; then
+    # Don't rebuild an existing SDK.
+    SDK_BUILD=${SDK_BUILD-0}
+fi
 
 # Clone the repo if needed
-if [ ! -e "${SDK_SRC}/.git" ]
-then
-    git clone "${SDK_REPO}" "${SDK_SRC}"
+mkdir -p "${SDK_SRC}"
+if [ ! -e "${SDK_SRC}/.git" ]; then
+    git clone --bare "${SDK_REPO}" "${SDK_SRC}/.git"
+    git -C "${SDK_SRC}" config --unset core.bare
     if [ ! -z "${SDK_REVISION}" ]
     then
-        git -C "${SDK_SRC}" reset --hard ${SDK_REVISION}
+        git -C "${SDK_SRC}" checkout ${SDK_REVISION}
+        git submodule update --init --recursive
     fi
-    SDK_BUILD=1
+    SDK_BUILD=${SDK_BUILD-1}
 fi
 
 SDK_FULL_REVISION=$(git -C "${SDK_SRC}" rev-parse HEAD)
