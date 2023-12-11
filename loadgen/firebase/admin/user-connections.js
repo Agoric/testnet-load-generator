@@ -110,7 +110,7 @@ export const computeUserConnectionsSpans = (
     clientId,
     clientLogConnections,
   ] of clientLogConnectionsMap.entries()) {
-    clientLogConnections.forEach((connection, idx) => {
+    for (const [idx, connection] of clientLogConnections.entries()) {
       if (connection.unexpected) {
         console.warn('Found unexpected connect log', {
           clientId,
@@ -118,7 +118,7 @@ export const computeUserConnectionsSpans = (
           connection,
         });
       }
-    });
+    }
 
     const { userId } = clients[clientId];
 
