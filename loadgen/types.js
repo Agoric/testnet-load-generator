@@ -1,7 +1,7 @@
 // @ts-check
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/bundle-source/src/types.js';
+import '@endo/bundle-source/src/types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/vats/exported.js';
 // eslint-disable-next-line import/no-extraneous-dependencies

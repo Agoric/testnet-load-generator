@@ -12,12 +12,12 @@
   },
   "devDependencies": {},
   "dependencies": {
-    "@agoric/assert": "*",
-    "@agoric/ertp": "*",
-    "@agoric/notifier": "*",
-    "@agoric/zoe": "*",
-    "@endo/eventual-send": "^0.16.9",
-    "@endo/far": "^0.2.15"
+    "@agoric/assert": "latest",
+    "@agoric/ertp": "latest",
+    "@agoric/notifier": "latest",
+    "@agoric/zoe": "latest",
+    "@endo/eventual-send": "^0.17.2",
+    "@endo/far": "^0.2.18"
   },
   "keywords": [],
   "author": "Agoric",

@@ -26,5 +26,5 @@
     "noUnusedLocals": true
     // "noUnusedParameters": true
   },
-  "include": ["lib/**/*.js", "lib/**/*.d.ts", "../node_modules/ses/index.d.ts"]
+  "include": ["lib/**/*.js", "lib/**/*.d.ts", "../node_modules/ses/types.d.ts"]
 }
