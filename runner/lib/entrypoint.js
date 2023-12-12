@@ -58,9 +58,9 @@ process.on('uncaughtException', (error) => {
     // console.log(process._getActiveRequests(), process._getActiveHandles());
     console.error(rej);
     if (rej.errors) {
-      flattenAggregateErrors(rej.errors).forEach((error) =>
-        console.error('nested error:', error),
-      );
+      for (const error of flattenAggregateErrors(rej.errors)) {
+        console.error('nested error:', error);
+      }
     }
     process.exit(2);
   },

@@ -10,13 +10,13 @@
     "lint-fix": "eslint --fix ."
   },
   "devDependencies": {
-    "@agoric/bundle-source": "*"
+    "@endo/bundle-source": "2.5.2-upstream-rollup"
   },
   "dependencies": {
-    "@agoric/deploy-script-support": "*",
-    "@endo/init": "^0.5.53",
-    "@endo/promise-kit": "^0.2.53",
-    "@endo/eventual-send": "^0.16.9",
+    "@agoric/deploy-script-support": "latest",
+    "@endo/init": "^0.5.56",
+    "@endo/promise-kit": "^0.2.56",
+    "@endo/eventual-send": "^0.17.2",
     "esm": "agoric-labs/esm#Agoric-built",
     "firebase": "^9.0.2"
   },

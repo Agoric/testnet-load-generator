@@ -140,14 +140,14 @@ export const copyProperties = (target, ...sources) =>
 export const arrayGroupBy = (source, callback) => {
   /** @type {{[key: PropertyKey]: unknown[]}} */
   const target = Object.create(null);
-  source.forEach((value, index) => {
+  for (const [index, value] of source.entries()) {
     const key = Reflect.ownKeys({ [callback(value, index, source)]: null })[0];
     if (key in target) {
       target[key].push(value);
     } else {
       target[key] = [value];
     }
-  });
+  }
 
   return target;
 };

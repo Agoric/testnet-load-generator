@@ -62,7 +62,11 @@ export const whenStreamSteps = (
       const error = new Error(
         `Stream ended before match found: ${stepsAndKits[0].step.matcher}`,
       );
-      stepsAndKits.forEach(({ kit: { reject } }) => reject(error));
+      for (const {
+        kit: { reject },
+      } of stepsAndKits) {
+        reject(error);
+      }
     }
 
     if (waitEnd) {

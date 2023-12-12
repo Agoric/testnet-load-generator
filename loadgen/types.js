@@ -1,7 +1,7 @@
 // @ts-check
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/bundle-source/src/types.js';
+import '@endo/bundle-source/src/types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/vats/exported.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -9,7 +9,7 @@ import '@agoric/wallet/api/exported.js';
 // Unfortunately need to dig in internal types for WalletAdminFacet
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/wallet/api/src/internal-types.js';
-// eslint-disable-next-line import/no-extraneous-dependencies
+// eslint-disable-next-line import/no-extraneous-dependencies, import/no-unresolved
 import '@agoric/zoe/src/contractFacet/types.js';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/inter-protocol/exported.js';
