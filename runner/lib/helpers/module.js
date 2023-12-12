@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
-import { pathToFileURL } from 'url';
+import { pathToFileURL, fileURLToPath } from 'url';
+import { promises as fs } from 'fs';
 
 /**
  *
@@ -12,11 +13,19 @@ export const resolve = async (specified, parent) => {
   }
   try {
     if (import.meta.resolve) {
-      return await import.meta.resolve(specified, parent);
+      const resolved = await import.meta.resolve(specified, parent);
+      await fs.stat(fileURLToPath(resolved));
+      return resolved;
     }
-  } catch (err) {
-    if (/MODULE_NOT_FOUND/.test(/** @type {any} */ (err).code)) {
-      throw err;
+  } catch (e) {
+    const err = /** @type {NodeJS.ErrnoException} */ (e);
+    switch (err.code) {
+      case 'ENOENT':
+        return undefined;
+      case 'MODULE_NOT_FOUND':
+        break;
+      default:
+        throw err;
     }
     // Fall-through
   }
