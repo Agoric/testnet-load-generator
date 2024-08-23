@@ -161,15 +161,18 @@ const makeInterrupterKit = ({ console }) => {
 };
 
 /**
+ * @param {object} param0
+ * @param {Console} param0.console
  * @returns {Promise<import('./tasks/types.js').SDKBinaries>}
  */
-const getSDKBinaries = async () => {
+const getSDKBinaries = async ({ console }) => {
   const srcHelpers = 'agoric/src/helpers.js';
   const libHelpers = 'agoric/lib/helpers.js';
   try {
     const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
     return cliHelpers.getSDKBinaries();
   } catch (err) {
+    console.error('Modern import failed, falling back to older helpers', err);
     // Older SDKs were only at lib
     const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
     // Prefer CJS as some versions have both and must use .cjs for RESM
@@ -344,7 +347,7 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   const [sdkBinaries, loadgenBootstrapConfig] = await Promise.all([
-    getSDKBinaries(),
+    getSDKBinaries({ console: topConsole }),
     !withBootstrap
       ? undefined
       : Promise.all(
