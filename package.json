@@ -3,7 +3,6 @@
   "version": "0.0.1",
   "private": true,
   "useWorkspaces": true,
-  "main": "index.js",
   "workspaces": [
     "_agstate/agoric-servers",
     "loadgen",
@@ -33,7 +32,6 @@
     "esm": "https://github.com/agoric-labs/esm#Agoric-built"
   },
   "scripts": {
-    "preinstall": "node -e \"process.env.AGORIC_INSTALL && process.exit(0); console.warn('please use: agoric install . For details, see https://agoric.com/documentation/'); process.exit(1)\"",
     "lint": "run-s --continue-on-error lint:*",
     "lint:format": "yarn prettier --check .",
     "lint:packages": "yarn workspaces run lint",
@@ -57,5 +55,6 @@
   "prettier": {
     "trailingComma": "all",
     "singleQuote": true
-  }
+  },
+  "packageManager": "yarn@1.22.5"
 }
