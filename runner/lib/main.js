@@ -218,6 +218,7 @@ const main = async (progName, rawArgs, powers) => {
       'duplicate-arguments-array': false,
       'flatten-duplicate-arrays': false,
       'greedy-arrays': true,
+      'strip-dashed': true,
     },
   });
 
@@ -573,7 +574,6 @@ const main = async (progName, rawArgs, powers) => {
       };
 
       const chainMonitor =
-        /** @type {undefined | true} */ (undefined) &&
         runChainResult.processInfo &&
         makeChainMonitor(
           {

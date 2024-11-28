@@ -55,7 +55,6 @@ process.on('uncaughtException', (error) => {
     res === undefined || process.exit(res);
   },
   (rej) => {
-    // console.log(process._getActiveRequests(), process._getActiveHandles());
     console.error(rej);
     if (rej.errors) {
       flattenAggregateErrors(rej.errors).forEach((error) =>
