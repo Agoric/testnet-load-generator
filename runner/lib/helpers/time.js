@@ -37,4 +37,4 @@ export const makeTimeSource = ({
   return { timeOrigin, getTime, now, shift };
 };
 
-/** @typedef {ReturnType<makeTimeSource>} TimeSource */
+/** @typedef {ReturnType<typeof makeTimeSource>} TimeSource */

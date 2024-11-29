@@ -164,9 +164,15 @@ const makeInterrupterKit = ({ console }) => {
 const getSDKBinaries = async () => {
   const srcHelpers = 'agoric/src/helpers.js';
   const libHelpers = 'agoric/lib/helpers.js';
+
+  /**
+   * @type {import('./tasks/types.js').SDKBinaries}
+   */
+  let binaryPaths;
+
   try {
     const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
-    return cliHelpers.getSDKBinaries();
+    binaryPaths = cliHelpers.getSDKBinaries();
   } catch (err) {
     // Older SDKs were only at lib
     const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
@@ -181,12 +187,9 @@ const getSDKBinaries = async () => {
     ) {
       agSolo = agSolo.replace(/\.cjs$/, '.js');
     }
-    return {
+    binaryPaths = {
       agSolo,
-      cosmosChain: new URL(
-        '../../cosmic-swingset/bin/ag-chain-cosmos',
-        cliHelpersUrl,
-      ).pathname,
+      cosmosChain: '',
       cosmosHelper: new URL(
         // The older SDKs without getSDKBinaries hadn't renamed to agd yet
         '../../../golang/cosmos/build/ag-cosmos-helper',
@@ -194,6 +197,10 @@ const getSDKBinaries = async () => {
       ).pathname,
     };
   }
+
+  binaryPaths = {...binaryPaths, cosmosChain: 'ag-chain-cosmos'};
+
+  return binaryPaths;
 };
 
 /**
@@ -984,7 +991,7 @@ const main = async (progName, rawArgs, powers) => {
             // This will throw if there was any interrupt, and prevent further execution
             async () => releaseInterrupt(),
           ));
-        logPerfEvent('setup-tasks-finish');
+        return logPerfEvent('setup-tasks-finish');
       }
 
       const stages =

@@ -11,6 +11,7 @@ import {
   childProcessReady,
 } from '../helpers/child-process.js';
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
+import LineStreamTransform from '../helpers/line-stream-transform.js';
 import { PromiseAllOrErrors, tryTimeout } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
 import {
@@ -42,6 +43,9 @@ const CHAIN_ID = 'agoric';
 const GAS_ADJUSTMENT = '1.2';
 const STABLE_DENOMS = ['uist', 'urun'];
 const STAKING_DENOM = 'ubld';
+const FILE_ENCODING = 'utf-8';
+const KEYRING_BACKEND = 'test';
+const KEY_NAME = 'local-key';
 
 // Need to provision less than 50000 RUN as that's the most we can get from an old sdk genesis
 /** @param {string} stableDenom */
@@ -64,6 +68,135 @@ const chainGoArgvMatcher = getArgvMatcher([/(?:sh|node)$/, /ag-chain-cosmos$/]);
 /** @param {string[]} argv */
 const chainArgvMatcher = (argv) =>
   chainNodeArgvMatcher(argv) || chainGoArgvMatcher(argv);
+
+/**
+ * @param {import("fs/promises")} fs
+ * @param {string} name
+ */
+const fsExists = async (fs, name) => {
+  try {
+    await fs.stat(name);
+    return true;
+  } catch (e) {
+    if (/** @type {NodeJS.ErrnoException} */ (e).code === 'ENOENT') {
+      return false;
+    }
+    throw e;
+  }
+};
+
+/**
+ * @param {object} powers
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+ * @param {import("fs/promises")} powers.fs
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+ * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+ */
+const generateMnemonic = async ({ console, fs, sdkBinaries, spawn, stdio }) => {
+  const mnemonicFile = joinPath(chainStateDir, 'mnemonic');
+  console.log('generating mnemonic in ', mnemonicFile);
+
+  const mnemonicFileHandler = await fs.open(mnemonicFile, 'w');
+  await childProcessDone(
+    spawn(
+      sdkBinaries.cosmosChain,
+      [
+        'keys',
+        'mnemonic',
+        '--home',
+        chainStateDir,
+        '--keyring-backend',
+        KEYRING_BACKEND,
+      ],
+      {
+        stdio: [stdio[0], mnemonicFileHandler.fd, stdio[2]],
+      },
+    ),
+  ).finally(mnemonicFileHandler.close);
+
+  return mnemonicFile;
+};
+
+/**
+ * @param {Awaited<ReturnType<generateMnemonic>>} mnemonicFile
+ * @param {object} powers
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+ * @param {import("fs/promises")} powers.fs
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+ * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+ */
+const generateWalletFromMnemonic = async (
+  mnemonicFile,
+  { console, fs, sdkBinaries, spawn, stdio },
+) => {
+  const addressFile = joinPath(chainStateDir, 'address');
+
+  console.log('Deriving key from ', mnemonicFile);
+  const mnemonicFileHandler = await fs.open(mnemonicFile, 'r');
+
+  const cp = spawn(
+    sdkBinaries.cosmosChain,
+    [
+      'keys',
+      'add',
+      KEY_NAME,
+      '--home',
+      chainStateDir,
+      '--keyring-backend',
+      KEYRING_BACKEND,
+      '--output',
+      'json',
+      '--recover',
+    ],
+    {
+      stdio: [mnemonicFileHandler.fd, 'pipe', 'pipe'],
+    },
+  );
+
+  const lines = new LineStreamTransform();
+
+  // @ts-expect-error
+  combineAndPipe(cp.stdio, stdio).pipe(lines);
+
+  let output = '';
+
+  for await (const line of lines) output += line;
+
+  await childProcessDone(cp).finally(mnemonicFileHandler.close);
+
+  console.log('Writing address to ', addressFile);
+  await fs.writeFile(addressFile, JSON.parse(output).address, {
+    encoding: FILE_ENCODING,
+  });
+
+  return addressFile;
+};
+
+/**
+ * @param {object} powers
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+ * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+ */
+const initializeChain = async ({ console, sdkBinaries, spawn, stdio }) => {
+  console.log(`Initializing chain ${CHAIN_ID} inside ${chainStateDir}`);
+
+  await childProcessDone(
+    spawn(
+      sdkBinaries.cosmosChain,
+      [
+        'init',
+        profileName,
+        `--home=${chainStateDir}`,
+        `--chain-id==${CHAIN_ID}`,
+      ],
+      { stdio },
+    ),
+  );
+};
 
 /**
  *
@@ -89,19 +222,6 @@ export const makeTasks = ({
     end: false,
   });
 
-  /** @param {string} name */
-  const fsExists = async (name) => {
-    try {
-      await fs.stat(name);
-      return true;
-    } catch (e) {
-      if (/** @type {NodeJS.ErrnoException} */ (e).code === 'ENOENT') {
-        return false;
-      }
-      throw e;
-    }
-  };
-
   let chainId = CHAIN_ID;
 
   /** @type {Record<string, string>} */
@@ -124,122 +244,128 @@ export const makeTasks = ({
     });
 
     /** @type {Partial<Record<'chainStorageLocation' | 'clientStorageLocation', string>>} */
-    const storageLocations = {};
+    const storageLocations = {
+      chainStorageLocation: chainStateDir,
+    };
 
     console.log('Starting');
 
-    if (chainOnly !== true) {
-      storageLocations.clientStorageLocation = clientStateDir;
+    let addressFile = '';
 
+    if (chainOnly !== true) {
       if (reset) {
         console.log('Resetting client state');
-        await childProcessDone(
-          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
-        );
-      }
-
-      // Initialize the solo directory and key.
-      if (!(await fsExists(clientStateDir))) {
-        await childProcessDone(
-          printerSpawn(
-            sdkBinaries.agSolo,
-            ['init', clientStateDir, `--webport=${CLIENT_PORT}`],
-            {
-              stdio,
-            },
-          ),
-        );
-      }
-    }
-
-    if (withMonitor !== false) {
-      storageLocations.chainStorageLocation = chainStateDir;
-
-      if (reset) {
-        console.log('Resetting chain node');
         await childProcessDone(
           printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
         );
       }
 
-      const configDir = joinPath(chainStateDir, 'config');
-      const genesisPath = joinPath(configDir, 'genesis.json');
-      const soloAddrPath = joinPath(clientStateDir, 'ag-cosmos-helper-address');
+      // Initialize the directory and key.
+      if (!(await fsExists(fs, chainStateDir))) {
+        await fs.mkdir(chainStateDir, { recursive: true });
 
-      if (!(await fsExists(genesisPath))) {
-        console.log('Provisioning chain');
-
-        if (loadgenBootstrapConfig && (await fsExists(soloAddrPath))) {
-          const soloAddr = (await fs.readFile(soloAddrPath, 'utf-8')).trimEnd();
-          additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
-          additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
-        }
-
-        const chainEnv = Object.assign(Object.create(process.env), {
-          ...additionChainEnv,
-          CHAIN_PORT: `${CHAIN_PORT}`,
-        });
-
-        const launcherCp = printerSpawn(
-          'agoric',
-          ['start', profileName, '--no-restart'],
-          {
-            stdio: ['ignore', 'pipe', 'pipe'],
-            env: chainEnv,
-          },
-        );
-
-        const ignoreKill = {
-          signal: false,
-        };
-
-        const launcherDone = childProcessDone(launcherCp, {
-          ignoreKill,
-          killedExitCode: 98,
-        });
-
-        launcherDone.then(
-          () => console.log('Chain setup exited successfully'),
-          (error) => console.error('Chain setup exited with error', error),
-        );
-
-        const launcherCombinedElidedOutput = combineAndPipe(
-          launcherCp.stdio,
+        const mnemonicFile = await generateMnemonic({
+          console,
+          fs,
+          sdkBinaries,
+          spawn: printerSpawn,
           stdio,
-        );
+        });
+        addressFile = await generateWalletFromMnemonic(mnemonicFile, {
+          console,
+          fs,
+          sdkBinaries,
+          spawn: printerSpawn,
+          stdio,
+        });
 
-        const [chainStarted, outputParsed] = whenStreamSteps(
-          launcherCombinedElidedOutput,
-          [{ matcher: chainStartRE }],
-        );
-
-        await chainStarted.then(
-          async () => {
-            // agoric-cli does not support `--no-restart`, kill the chain
-            console.log('Stopping chain setup');
-            const launcherInfo = await getProcessInfo(
-              /** @type {number} */ (launcherCp.pid),
-            );
-            const processInfo = await getChildMatchingArgv(
-              launcherInfo,
-              chainArgvMatcher,
-            );
-            ignoreKill.signal = true;
-            process.kill(processInfo.pid);
-          },
-          () => {
-            // agoric-cli supports `--no-restart`, so output is parsed without outputting step
-          },
-        );
-
-        await PromiseAllOrErrors([outputParsed, launcherDone]);
+        await initializeChain({
+          console,
+          sdkBinaries,
+          spawn: printerSpawn,
+          stdio,
+        });
       }
-
-      const genesis = JSON.parse(
-        await fs.readFile(genesisPath, { encoding: 'utf-8' }),
-      );
-      chainId = genesis.chain_id;
     }
+
+    // if (withMonitor !== false) {
+    //   const configDir = joinPath(chainStateDir, 'config');
+    //   const genesisPath = joinPath(configDir, 'genesis.json');
+
+    //   if (!(await fsExists(fs, genesisPath))) {
+    //     console.log('Provisioning chain');
+
+    //     if (loadgenBootstrapConfig && (await fsExists(fs, addressFile))) {
+    //       const soloAddr = (await fs.readFile(addressFile, FILE_ENCODING)).trimEnd();
+    //       additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
+    //       additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
+    //     }
+
+    //     const chainEnv = Object.assign(Object.create(process.env), {
+    //       ...additionChainEnv,
+    //       CHAIN_PORT: `${CHAIN_PORT}`,
+    //     });
+
+    //     const launcherCp = printerSpawn(
+    //       'agoric',
+    //       ['start', profileName, '--no-restart'],
+    //       {
+    //         stdio: ['ignore', 'pipe', 'pipe'],
+    //         env: chainEnv,
+    //       },
+    //     );
+
+    //     const ignoreKill = {
+    //       signal: false,
+    //     };
+
+    //     const launcherDone = childProcessDone(launcherCp, {
+    //       ignoreKill,
+    //       killedExitCode: 98,
+    //     });
+
+    //     launcherDone.then(
+    //       () => console.log('Chain setup exited successfully'),
+    //       (error) => console.error('Chain setup exited with error', error),
+    //     );
+
+    //     const launcherCombinedElidedOutput = combineAndPipe(
+    //       launcherCp.stdio,
+    //       stdio,
+    //     );
+
+    //     const [chainStarted, outputParsed] = whenStreamSteps(
+    //       launcherCombinedElidedOutput,
+    //       [{ matcher: chainStartRE }],
+    //     );
+
+    //     await chainStarted.then(
+    //       async () => {
+    //         // agoric-cli does not support `--no-restart`, kill the chain
+    //         console.log('Stopping chain setup');
+    //         const launcherInfo = await getProcessInfo(
+    //           /** @type {number} */ (launcherCp.pid),
+    //         );
+    //         const processInfo = await getChildMatchingArgv(
+    //           launcherInfo,
+    //           chainArgvMatcher,
+    //         );
+    //         ignoreKill.signal = true;
+    //         process.kill(processInfo.pid);
+    //       },
+    //       () => {
+    //         // agoric-cli supports `--no-restart`, so output is parsed without outputting step
+    //       },
+    //     );
+
+    //     await PromiseAllOrErrors([outputParsed, launcherDone]);
+    //   }
+
+    //   const genesis = JSON.parse(
+    //     await fs.readFile(genesisPath, { encoding: 'utf-8' }),
+    //   );
+    //   chainId = genesis.chain_id;
+    // }
 
     console.log('Done');
 
@@ -372,7 +498,7 @@ export const makeTasks = ({
 
     const gciFile = `${chainStateDir}/config/genesis.json.sha256`;
 
-    if (!(await fsExists(gciFile))) {
+    if (!(await fsExists(fs, gciFile))) {
       throw new Error('Chain not running');
     }
 
