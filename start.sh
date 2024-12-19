@@ -1,82 +1,158 @@
-#!/bin/sh
-set -e -x
+#!/bin/bash
 
-LOADGEN_DIR="$(dirname "$(readlink -f -- "$0")")"
+set -o errexit
 
-SDK_REPO="${SDK_REPO:-https://github.com/Agoric/agoric-sdk.git}"
+DEFAULT_NODE_VERSION="v18.20.4"
+DIRECTORY_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+GITHUB_REST_API_HOST="https://api.github.com"
+ORG_NAME=""
+OUTPUT_DIR="$OUTPUT_DIR"
+REPO_LINK_REGEX="https://github.com/([^/]+)/([^/]+)\.git"
+REPO_NAME=""
+SDK_BUILD=""
+SDK_COMMIT_TIME=""
+SDK_FULL_REVISION=""
+SDK_REPO="${SDK_REPO:-"https://github.com/Agoric/agoric-sdk.git"}"
+SDK_REVISION="$SDK_REVISION"
+SDK_SRC="$SDK_SRC"
 
-# Create temporary directory for SDK source if none provided
-if [ -z "${SDK_SRC}" ]
-then
-    SDK_REVISION=${SDK_REVISION:-$(git ls-remote ${SDK_REPO} HEAD | awk '{ print substr($1,1,12) }')}
-    SDK_SRC=/tmp/agoric-sdk-src-${SDK_REVISION}
-fi
-mkdir -p "${SDK_SRC}"
+add_binary_to_path() {
+    AGORIC_BIN_DIR="/tmp/agoric-sdk-bin-$SDK_REVISION"
+    mkdir --parents "$AGORIC_BIN_DIR"
+    export PATH="$AGORIC_BIN_DIR:$PATH"
+    ln --force --symbolic \
+     "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "$AGORIC_BIN_DIR/ag-chain-cosmos"
+}
 
-# Clone the repo if needed
-if [ ! -e "${SDK_SRC}/.git" ]
-then
-    git clone "${SDK_REPO}" "${SDK_SRC}"
-    if [ ! -z "${SDK_REVISION}" ]
+ensure_correct_revision_checkout_out() {
+    SDK_FULL_REVISION=$(git -C "$SDK_SRC" rev-parse HEAD)
+
+    # Check if SDK_FULL_REVISION doesn't start with SDK_REVISION
+    if [ ! -z "$SDK_REVISION" ] && [ "$SDK_FULL_REVISION#$SDK_REVISION" = "$SDK_FULL_REVISION" ]
     then
-        git -C "${SDK_SRC}" reset --hard ${SDK_REVISION}
+        echo "Error: SDK is currently checked out at revision $SDK_FULL_REVISION but revision $SDK_REVISION was specified"
+        exit 2
     fi
-    SDK_BUILD=1
-fi
 
-SDK_FULL_REVISION=$(git -C "${SDK_SRC}" rev-parse HEAD)
+    # Ensure we have the short sha
+    SDK_REVISION=$(git -C "$SDK_SRC" rev-parse --short HEAD)
+    SDK_COMMIT_TIME=$(git -C "$SDK_SRC" show --format="%ct" --no-patch "$SDK_REVISION")
+}
 
-if [ ! -z "${SDK_REVISION}" -a "${SDK_FULL_REVISION#${SDK_REVISION}}" = "${SDK_FULL_REVISION}" ]
-then
-    echo "Error: SDK is currently checked out at revision ${SDK_FULL_REVISION} but revision ${SDK_REVISION} was specified"
-    exit 2
-fi
+ensure_correct_node_version() {
+    OUTPUT_DIR="${OUTPUT_DIR:-"/tmp/agoric-sdk-out-$SDK_REVISION"}"
 
-SDK_REVISION=$(git -C "${SDK_SRC}" rev-parse --short HEAD)
-SDK_COMMIT_TIME=$(git -C "${SDK_SRC}" show -s --format=%ct ${SDK_REVISION})
-
-AGORIC_BIN_DIR=/tmp/agoric-sdk-bin-${SDK_REVISION}
-mkdir -p ${AGORIC_BIN_DIR}
-
-OUTPUT_DIR="${OUTPUT_DIR:-/tmp/agoric-sdk-out-${SDK_REVISION}}"
-mkdir -p "${OUTPUT_DIR}"
-
-export PATH="$AGORIC_BIN_DIR:$PATH"
-
-if [ ! -f "${OUTPUT_DIR}/.nvmrc" ] ; then
-    SDK_NODE16_REVISION=475d7ff1eb2371aa9e0c0dc7a50644089db351f6
-    if git -C "${SDK_SRC}" cat-file -e $SDK_NODE16_REVISION^{commit} && \
-      ! git -C "${SDK_SRC}" merge-base --is-ancestor $SDK_NODE16_REVISION $SDK_FULL_REVISION
+    if ! node --version > /dev/null 2>&1
     then
-        echo "lts/fermium" > "${OUTPUT_DIR}/.nvmrc"
+        echo "$DEFAULT_NODE_VERSION" > "$OUTPUT_DIR/.nvmrc"
     fi
-    if [ -n "$NVM_RC_VERSION" ]; then 
-        echo "$NVM_RC_VERSION" > "${OUTPUT_DIR}/.nvmrc"
+
+    if [ -f "$OUTPUT_DIR/.nvmrc" ]
+    then
+        ensure_nvm_installed
+
+        export NVM_SYMLINK_CURRENT=false
+        local required_node_version="$(cat "$OUTPUT_DIR/.nvmrc")"
+
+        if [ "$(nvm version "$required_node_version")" = "N/A" ]
+        then
+            nvm install "$required_node_version"
+        fi
+
+        nvm use "$required_node_version"
     fi
-fi
+}
 
-if [ -f "${OUTPUT_DIR}/.nvmrc" ] ; then
-    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-    export NVM_SYMLINK_CURRENT=false
-    cd "${OUTPUT_DIR}"
-    if [ "$(nvm version "$(cat ".nvmrc")")" = "N/A" ]; then
-        nvm install
+ensure_nvm_installed() {
+    if ! nvm --help > /dev/null 2>&1
+    then
+        echo "nvm not found, installing"
+        curl --output "-" --silent \
+         https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | \
+        bash > /dev/null 2>&1
+
+        if [ ! -f "$HOME/.nvm/nvm.sh" ]
+        then
+            echo "Couldn't install nvm"
+            exit 1
+        fi
+
+        source "$HOME/.nvm/nvm.sh"
     fi
-    nvm use
-    cd -
-fi
+}
 
-cd "$SDK_SRC"
-if [ "x$SDK_BUILD" != "x0" ]; then
-    yarn install --frozen-lockfile
-    yarn build
-    make -C packages/cosmic-swingset
-fi
+ensure_repo_folder_exists() {
+    SDK_REVISION="${SDK_REVISION:-"$(get_head_commit_sha)"}"
+    SDK_SRC="${SDK_SRC:-"/tmp/agoric-sdk-src-${SDK_REVISION}"}"
 
-rm -f "${AGORIC_BIN_DIR}/agoric"
-yarn link-cli "${AGORIC_BIN_DIR}/agoric"
-ln -sf "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR}/ag-chain-cosmos"
+    mkdir --parents "$SDK_SRC"
 
-cd "$LOADGEN_DIR"
-agoric install
-exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" --test-data.sdk-revision=${SDK_REVISION} --test-data.sdk-commit-time=${SDK_COMMIT_TIME} "$@" 2>&1 
+    if [ ! -e "$SDK_SRC/.git" ]
+    then
+        git clone "$SDK_REPO" "$SDK_SRC"
+        if [ ! -z "$SDK_REVISION" ]
+        then
+            git -C "$SDK_SRC" reset --hard "$SDK_REVISION"
+        fi
+        SDK_BUILD=1
+    fi
+}
+
+extract_repo_and_org_name() {
+    if [[ "$SDK_REPO" =~ $REPO_LINK_REGEX ]]
+    then
+        ORG_NAME="${BASH_REMATCH[1]}"
+        REPO_NAME="${BASH_REMATCH[2]}"
+    else
+        echo "$SDK_REPO is not a valid repository"
+        exit 1
+    fi
+}
+
+generate_build() {
+    if [ "x$SDK_BUILD" != "x0" ]
+    then
+        yarn --cwd "$SDK_SRC" install --frozen-lockfile
+        yarn --cwd "$SDK_SRC" build
+        make --directory "$SDK_SRC/packages/cosmic-swingset"
+    fi
+}
+
+get_head_commit_sha() {
+    curl "$GITHUB_REST_API_HOST/repos/$ORG_NAME/$REPO_NAME/git/refs/heads/master" \
+     --location --silent |
+    jq --raw-output '.object.sha'
+}
+
+install_dependencies() {
+    if ! which curl > /dev/null || ! which git > /dev/null || ! which jq > /dev/null
+    then
+        local install_packages="apt-get install curl git jq > /dev/null"
+        local update_packages_info="apt-get update > /dev/null"
+
+        if [ -z "$(which sudo)" ]
+        then
+            eval "$update_packages_info"
+            eval "$install_packages"
+        else
+            eval "sudo $update_packages_info"
+            eval "sudo $install_packages"
+        fi
+    fi
+}
+
+start_runner() {
+    yarn --cwd "$DIRECTORY_PATH" install
+    exec "$DIRECTORY_PATH/runner/bin/loadgen-runner" \
+     --output-dir "$OUTPUT_DIR" --test-data.sdk-commit-time "$SDK_COMMIT_TIME" \
+     --test-data.sdk-revision "$SDK_REVISION" "$@" 2>&1 
+}
+
+install_dependencies
+extract_repo_and_org_name
+ensure_repo_folder_exists
+ensure_correct_revision_checkout_out
+ensure_correct_node_version
+generate_build
+add_binary_to_path
+start_runner
