@@ -73,18 +73,30 @@ export const httpRequest = (urlOrString, options = {}) => {
 
 /**
  * @param {string} url
- * @param {HTTPRequestOptions} [options]
+ * @param {HTTPRequestOptions & {retries?: number;}} options
  * @returns {Promise<unknown>}
  */
-export const fetchAsJSON = async (url, options) => {
-  const res = await httpRequest(url, options);
+export const fetchAsJSON = async (url, options = {}) => {
+  const {retries, ...rest} = options;
 
-  if (!res.statusCode || res.statusCode >= 400) {
-    throw new Error(`HTTP request error: ${res.statusCode}`);
+  let remainingRetries = retries || 1;
+  /**
+   * @type {Error | null}
+   */
+  let err = null;
+
+  while (remainingRetries) {
+    const res = await httpRequest(url, rest);
+  
+    if (!res.statusCode || res.statusCode >= 400) {
+      err = Error(`HTTP request error: ${res.statusCode}`);
+      remainingRetries -= 1;
+      await sleep(1000);
+    }
+    else return asJSON(res);
   }
 
-  // TODO: Check `res.headers['content-type']` for type and charset
-  return asJSON(res);
+  throw err;
 };
 
 /** @typedef {(argv: string[]) => boolean} ArgvMatcher */

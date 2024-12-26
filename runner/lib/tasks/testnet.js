@@ -6,30 +6,31 @@ import { promisify } from 'util';
 import { pipeline as pipelineCallback } from 'stream';
 
 import TOML from '@iarna/toml';
-
 import { makePromiseKit } from '@endo/promise-kit';
-import {
-  childProcessDone,
-  makeSpawnWithPipedStream,
-  makePrinterSpawn,
-  childProcessReady,
-} from '../helpers/child-process.js';
-import BufferLineTransform from '../helpers/buffer-line-transform.js';
-import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
-import { fsStreamReady } from '../helpers/fs.js';
-import {
-  asBuffer,
-  combineAndPipe,
-  whenStreamSteps,
-} from '../helpers/stream.js';
+
 import {
   getConsoleAndStdio,
   fetchAsJSON,
   cleanAsyncIterable,
   getExtraEnvArgs,
 } from './helpers.js';
+import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
+import BufferLineTransform from '../helpers/buffer-line-transform.js';
+import {
+  childProcessDone,
+  makeSpawnWithPipedStream,
+  makePrinterSpawn,
+  // childProcessReady,
+} from '../helpers/child-process.js';
+import { fsStreamReady } from '../helpers/fs.js';
+import LineStreamTransform from '../helpers/line-stream-transform.js';
+import {
+  asBuffer,
+  combineAndPipe,
+  whenStreamSteps,
+} from '../helpers/stream.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
-import { makeLoadgenTask } from './shared-loadgen.js';
+// import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
 
@@ -42,11 +43,13 @@ const VerboseDebugEnv = 'agoric,SwingSet:vat,SwingSet:ls';
 
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
-const clientSwingSetReadyRE = /start: swingset running$/;
-const clientWalletReadyRE =
-  /(?:Deployed Wallet!|Don't need our provides: wallet)/;
+// const clientSwingSetReadyRE = /start: swingset running$/;
+// const clientWalletReadyRE =
+/(?:Deployed Wallet!|Don't need our provides: wallet)/;
 const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
-
+const FILE_ENCODING = 'utf-8';
+const KEY_NAME = 'provisioned-wallet';
+const KEYRING_BACKEND = 'test';
 const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
 
 /**
@@ -68,6 +71,138 @@ const rpcAddrWithScheme = (
     return rpcAddr;
   }
   return `${withScheme}://${hierarchicalPart}`;
+};
+
+/**
+ * @param {string} chainStateDir
+ * @param {object} powers
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+ * @param {import("fs/promises")} powers.fs
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+ * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+ */
+const generateMnemonic = async (
+  chainStateDir,
+  { console, fs, sdkBinaries, spawn, stdio },
+) => {
+  const mnemonicFile = joinPath(chainStateDir, 'mnemonic');
+  console.log('generating mnemonic in ', mnemonicFile);
+
+  const mnemonicFileHandler = await fs.open(mnemonicFile, 'w');
+  await childProcessDone(
+    spawn(
+      sdkBinaries.cosmosChain,
+      [
+        'keys',
+        'mnemonic',
+        '--home',
+        chainStateDir,
+        '--keyring-backend',
+        KEYRING_BACKEND,
+      ],
+      {
+        stdio: [stdio[0], mnemonicFileHandler.fd, stdio[2]],
+      },
+    ),
+  ).finally(mnemonicFileHandler.close);
+
+  return mnemonicFile;
+};
+
+/**
+ * @param {string} chainStateDir
+ * @param {Awaited<ReturnType<generateMnemonic>>} mnemonicFile
+ * @param {object} powers
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+ * @param {import("fs/promises")} powers.fs
+ * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+ * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+ * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+ */
+const generateWalletFromMnemonic = async (
+  chainStateDir,
+  mnemonicFile,
+  { console, fs, sdkBinaries, spawn, stdio },
+) => {
+  const addressFile = joinPath(chainStateDir, 'address');
+
+  console.log('Deriving key from ', mnemonicFile);
+  const mnemonicFileHandler = await fs.open(mnemonicFile, 'r');
+
+  const cp = spawn(
+    sdkBinaries.cosmosChain,
+    [
+      'keys',
+      'add',
+      KEY_NAME,
+      '--home',
+      chainStateDir,
+      '--keyring-backend',
+      KEYRING_BACKEND,
+      '--output',
+      'json',
+      '--recover',
+    ],
+    {
+      stdio: [mnemonicFileHandler.fd, 'pipe', 'pipe'],
+    },
+  );
+
+  const lines = new LineStreamTransform();
+
+  // @ts-expect-error
+  combineAndPipe(cp.stdio, stdio).pipe(lines);
+
+  let output = '';
+
+  for await (const line of lines) output += line;
+
+  await childProcessDone(cp).finally(mnemonicFileHandler.close);
+
+  console.log('Writing address to ', addressFile);
+  await fs.writeFile(addressFile, JSON.parse(output).address, {
+    encoding: FILE_ENCODING,
+  });
+
+  return addressFile;
+};
+
+/**
+ * @param {string} rpcAddress
+ */
+const getTrustedBlockData = async (rpcAddress) => {
+  let { TRUSTED_BLOCK_HASH, TRUSTED_BLOCK_HEIGHT } = process.env;
+
+  if (!TRUSTED_BLOCK_HASH) {
+    if (!TRUSTED_BLOCK_HEIGHT) {
+      /** @type {any} */
+      const currentBlockInfo = await fetchAsJSON(
+        `${rpcAddrWithScheme(rpcAddress, { forceScheme: true })}/block`,
+        { retries: 10 },
+      );
+      const stateSyncInterval =
+        Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
+      TRUSTED_BLOCK_HEIGHT = String(
+        Math.max(
+          1,
+          Number(currentBlockInfo.result.block.header.height) -
+            stateSyncInterval,
+        ),
+      );
+    }
+
+    /** @type {any} */
+    const trustedBlockInfo = await fetchAsJSON(
+      `${rpcAddrWithScheme(rpcAddress, {
+        forceScheme: true,
+      })}/block?height=${TRUSTED_BLOCK_HEIGHT}`,
+      { retries: 10 },
+    );
+    TRUSTED_BLOCK_HASH = String(trustedBlockInfo.result.block_id.hash);
+  }
+
+  return [TRUSTED_BLOCK_HASH, String(TRUSTED_BLOCK_HEIGHT)];
 };
 
 /**
@@ -111,12 +246,13 @@ export const makeTasks = ({
   const queryNodeStatus = async (rpcAddr) => {
     const args = ['status'];
 
-    if (rpcAddr) {
-      args.push(`--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`);
-    }
+    if (rpcAddr)
+      args.push(
+        `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
+      );
 
     // Don't pipe output to console, it's too noisy
-    const statusCp = spawn(sdkBinaries.cosmosHelper, args, {
+    const statusCp = spawn(sdkBinaries.cosmosChain, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -155,8 +291,8 @@ export const makeTasks = ({
     orInterrupt = async (job) => job,
     config: {
       reset = true,
-      chainOnly,
-      withMonitor = true,
+      // chainOnly,
+      // withMonitor = true,
       testnetOrigin: testnetOriginOption,
       useStateSync,
     } = {},
@@ -166,6 +302,9 @@ export const makeTasks = ({
       stdout,
       stderr,
     );
+
+    console.log('Starting');
+
     const printerSpawn = makePrinterSpawn({
       spawn,
       print: (cmd) => console.log(cmd),
@@ -174,11 +313,7 @@ export const makeTasks = ({
     /** @type {Partial<Record<'chainStorageLocation' | 'clientStorageLocation', string>>} */
     const storageLocations = {};
 
-    console.log('Starting');
-
-    if (testnetOriginOption) {
-      testnetOrigin = testnetOriginOption;
-    }
+    testnetOrigin = testnetOriginOption || testnetOrigin;
 
     console.log('Fetching network config');
     /**
@@ -194,239 +329,220 @@ export const makeTasks = ({
         await fetchAsJSON(`${testnetOrigin}/network-config`)
       );
 
-    if (withMonitor !== false) {
-      storageLocations.chainStorageLocation = chainStateDir;
+    // if (withMonitor !== false) {
+    storageLocations.chainStorageLocation = chainStateDir;
 
-      if (reset) {
-        console.log('Resetting chain node');
-        await childProcessDone(
-          printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
-        );
-      }
-
-      const genesisPath = joinPath(chainStateDir, 'config', 'genesis.json');
-
-      if (!(await fsExists(genesisPath))) {
-        await childProcessDone(
-          printerSpawn(
-            sdkBinaries.cosmosChain,
-            ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
-            { stdio },
-          ),
-        );
-
-        await childProcessDone(
-          printerSpawn(
-            sdkBinaries.cosmosChain,
-            ['tendermint', 'unsafe-reset-all'],
-            {
-              stdio,
-            },
-          ),
-        ).catch(() =>
-          childProcessDone(
-            printerSpawn(sdkBinaries.cosmosChain, ['unsafe-reset-all'], {
-              stdio,
-            }),
-          ),
-        );
-
-        const configPath = joinPath(chainStateDir, 'config', 'config.toml');
-
-        console.log('Patching config');
-        const config = await TOML.parse.async(
-          await fs.readFile(configPath, 'utf-8'),
-        );
-        const configP2p = /** @type {import('@iarna/toml').JsonMap} */ (
-          config.p2p
-        );
-        configP2p.persistent_peers = peers.join(',');
-        configP2p.seeds = seeds.join(',');
-        configP2p.addr_book_strict = false;
-        delete config.log_level;
-
-        if (!useStateSync) {
-          console.log('Fetching genesis');
-          const gciResult = await fetchAsJSON(gci);
-          const { genesis } = /** @type {*} */ (gciResult).result;
-
-          fs.writeFile(
-            joinPath(chainStateDir, 'config', 'genesis.json'),
-            JSON.stringify(genesis),
-          );
-        } else {
-          console.log('Fetching state-sync info');
-          /** @type {any} */
-          const currentBlockInfo = await fetchAsJSON(
-            `${rpcAddrWithScheme(rpcAddrs[0], { forceScheme: true })}/block`,
-          );
-
-          // `trustHeight` is the block height considered as the "root of trust"
-          // for state-sync. The node will attempt to find a snapshot offered for
-          // a block at or after this height, and will validate that block's hash
-          // using a light client with the configured RPC servers.
-          // We want to use a block height recent enough, but for which a snapshot
-          // exists since then.
-          const stateSyncInterval =
-            Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
-          const trustHeight = Math.max(
-            1,
-            Number(currentBlockInfo.result.block.header.height) -
-              stateSyncInterval,
-          );
-
-          /** @type {any} */
-          const trustedBlockInfo = await fetchAsJSON(
-            `${rpcAddrWithScheme(rpcAddrs[0], {
-              forceScheme: true,
-            })}/block?height=${trustHeight}`,
-          );
-          const trustHash = trustedBlockInfo.result.block_id.hash;
-
-          const stateSyncRpc =
-            rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
-
-          const configStatesync = /** @type {import('@iarna/toml').JsonMap} */ (
-            config.statesync
-          );
-          configStatesync.enable = true;
-          configStatesync.rpc_servers = stateSyncRpc
-            .map((rpcAddr) => rpcAddrWithScheme(rpcAddr))
-            .join(',');
-          configStatesync.trust_height = trustHeight;
-          configStatesync.trust_hash = trustHash;
-        }
-
-        await fs.writeFile(configPath, TOML.stringify(config));
-      }
-
-      if (loadgenBootstrapConfig) {
-        additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
-      }
+    if (reset) {
+      console.log('Resetting chain node');
+      await childProcessDone(
+        printerSpawn('rm', ['-rf', chainStateDir], { stdio }),
+      );
     }
 
-    // Make sure client is provisioned
-    if (chainOnly !== true) {
-      storageLocations.clientStorageLocation = clientStateDir;
+    const genesisPath = joinPath(chainStateDir, 'config', 'genesis.json');
 
-      if (reset) {
-        console.log('Resetting client');
-        await childProcessDone(
-          printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
-        );
-      }
-
-      console.log('Provisioning client');
-
-      const netConfig = `${testnetOrigin}/network-config`;
-
-      // Initialize the solo directory and key.
-      if (!(await fsExists(clientStateDir))) {
-        await childProcessDone(
-          printerSpawn(
-            sdkBinaries.agSolo,
-            [
-              'init',
-              clientStateDir,
-              `--webport=${CLIENT_PORT}`,
-              `--netconfig=${netConfig}`,
-            ],
-            {
-              stdio,
-            },
-          ),
-        );
-      }
-
+    if (!(await fsExists(genesisPath))) {
       await childProcessDone(
-        printerSpawn(sdkBinaries.agSolo, ['add-chain', netConfig], {
-          stdio,
-          cwd: clientStateDir,
-        }),
+        printerSpawn(
+          sdkBinaries.cosmosChain,
+          ['init', '--chain-id', chainName, `loadgen-monitor-${Date.now()}`],
+          { stdio },
+        ),
       );
 
-      const soloAddr = (
-        await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
-      ).trimEnd();
+      await childProcessDone(
+        printerSpawn(
+          sdkBinaries.cosmosChain,
+          ['tendermint', 'unsafe-reset-all'],
+          {
+            stdio,
+          },
+        ),
+      ).catch(() =>
+        childProcessDone(
+          printerSpawn(sdkBinaries.cosmosChain, ['unsafe-reset-all'], {
+            stdio,
+          }),
+        ),
+      );
 
-      const rpcAddrCandidates = [...rpcAddrs];
-      let rpcAddr;
+      const configPath = joinPath(chainStateDir, 'config', 'config.toml');
 
-      while (!rpcAddr && rpcAddrCandidates.length) {
-        const pseudoRandom =
-          rpcAddrCandidates
-            .join('')
-            .split('')
-            .reduce((acc, val) => acc + val.charCodeAt(0), 0) %
-          rpcAddrCandidates.length;
-        const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
+      console.log('Patching config');
+      const config = await TOML.parse.async(
+        await fs.readFile(configPath, 'utf-8'),
+      );
+      const configP2p = /** @type {import('@iarna/toml').JsonMap} */ (
+        config.p2p
+      );
+      configP2p.persistent_peers = peers.join(',');
+      configP2p.seeds = seeds.join(',');
+      configP2p.addr_book_strict = false;
+      delete config.log_level;
 
-        const result = await queryNodeStatus(rpcAddrCandidate);
+      if (!useStateSync) {
+        console.log('Fetching genesis');
+        const gciResult = await fetchAsJSON(gci);
+        const { genesis } = /** @type {*} */ (gciResult).result;
 
-        if (
-          result.type === 'success' &&
-          result.status.SyncInfo.catching_up === false
-        ) {
-          rpcAddr = rpcAddrCandidate;
-        }
-      }
-
-      if (!rpcAddr) {
-        throw new Error('Found no suitable RPC node');
-      }
-
-      const keysSharedArgs = [
-        '--log_level=info',
-        `--chain-id=${chainName}`,
-        `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
-      ];
-
-      /**
-       * @param {number} [checks]
-       * @returns {Promise<void>}
-       */
-      const untilProvisioned = async (checks = 0) => {
-        const checkAddrStatus = await childProcessDone(
-          spawn(
-            sdkBinaries.cosmosHelper,
-            [
-              `--home=${joinPath(clientStateDir, 'ag-cosmos-helper-statedir')}`,
-              ...keysSharedArgs,
-              'query',
-              'swingset',
-              'egress',
-              '--',
-              soloAddr,
-            ],
-            { stdio: 'ignore' },
-          ),
-          { ignoreExitCode: true },
+        fs.writeFile(
+          joinPath(chainStateDir, 'config', 'genesis.json'),
+          JSON.stringify(genesis),
         );
+      } else {
+        console.log('Fetching state-sync info');
+        const [trustHeight, trustHash] = await getTrustedBlockData(rpcAddrs[0]);
 
-        if (checkAddrStatus === 0) {
-          return undefined;
-        }
+        const stateSyncRpc =
+          rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
 
-        if (!checks) {
-          console.error(`
-=============
-${chainName} chain does not yet know of address ${soloAddr}
-=============
-          `);
-        }
-
-        await orInterrupt(sleep(6 * 1000));
-
-        return untilProvisioned(checks + 1);
-      };
-
-      await tryTimeout(timeout * 1000, untilProvisioned);
-
-      // TODO: Figure out how to plumb address of other loadgen client
-      if (soloAddr) {
-        additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = soloAddr;
+        const configStatesync = /** @type {import('@iarna/toml').JsonMap} */ (
+          config.statesync
+        );
+        configStatesync.enable = true;
+        configStatesync.rpc_servers = stateSyncRpc
+          .map((rpcAddr) => rpcAddrWithScheme(rpcAddr))
+          .join(',');
+        configStatesync.trust_height = trustHeight;
+        configStatesync.trust_hash = trustHash;
       }
+
+      await fs.writeFile(configPath, TOML.stringify(config));
     }
+
+    if (loadgenBootstrapConfig)
+      additionChainEnv.CHAIN_BOOTSTRAP_VAT_CONFIG = loadgenBootstrapConfig;
+    // }
+
+    // if (chainOnly !== true) {
+    storageLocations.clientStorageLocation = clientStateDir;
+
+    // if (reset) {
+    //   console.log('Resetting client');
+    //   await childProcessDone(
+    //     printerSpawn('rm', ['-rf', clientStateDir], { stdio }),
+    //   );
+    // }
+
+    console.log('Provisioning client');
+
+    // const netConfig = `${testnetOrigin}/network-config`;
+
+    //   // Initialize the solo directory and key.
+    //   if (!(await fsExists(clientStateDir))) {
+    //     await childProcessDone(
+    //       printerSpawn(
+    //         sdkBinaries.agSolo,
+    //         [
+    //           'init',
+    //           clientStateDir,
+    //           `--webport=${CLIENT_PORT}`,
+    //           `--netconfig=${netConfig}`,
+    //         ],
+    //         {
+    //           stdio,
+    //         },
+    //       ),
+    //     );
+    //   }
+    // await childProcessDone(
+    //   printerSpawn(sdkBinaries.agSolo, ['add-chain', netConfig], {
+    //     stdio,
+    //     cwd: clientStateDir,
+    //   }),
+    // );
+
+    // const soloAddr = (
+    //   await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
+    // ).trimEnd();
+
+    const provisionedAddress = (
+      await fs.readFile(
+        await generateWalletFromMnemonic(
+          chainStateDir,
+          await generateMnemonic(chainStateDir, {
+            console,
+            fs,
+            sdkBinaries,
+            spawn,
+            stdio,
+          }),
+          {
+            console,
+            fs,
+            sdkBinaries,
+            spawn,
+            stdio,
+          },
+        ),
+        FILE_ENCODING,
+      )
+    ).trimEnd();
+
+    const rpcAddrCandidates = [...rpcAddrs];
+    let rpcAddr;
+
+    while (!rpcAddr && rpcAddrCandidates.length) {
+      const pseudoRandom =
+        rpcAddrCandidates
+          .join('')
+          .split('')
+          .reduce((acc, val) => acc + val.charCodeAt(0), 0) %
+        rpcAddrCandidates.length;
+      const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
+
+      const result = await queryNodeStatus(rpcAddrCandidate);
+
+      if (
+        result.type === 'success' &&
+        result.status.SyncInfo.catching_up === false
+      )
+        rpcAddr = rpcAddrCandidate;
+    }
+
+    if (!rpcAddr) throw new Error('Found no suitable RPC node');
+
+    /**
+     * @param {number} [checks]
+     * @returns {Promise<void>}
+     */
+    const untilProvisioned = async (checks = 0) => {
+      const checkAddrStatus = await childProcessDone(
+        spawn(
+          sdkBinaries.cosmosChain,
+          [
+            'query',
+            'swingset',
+            'egress',
+            provisionedAddress,
+            `--chain-id "${chainName}"`,
+            `--home "${chainStateDir}"`,
+            `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
+          ],
+          { stdio: 'ignore' },
+        ),
+        { ignoreExitCode: true },
+      );
+
+      if (checkAddrStatus === 0) return undefined;
+
+      if (!checks)
+        console.error(`
+=============
+${chainName} chain does not yet know of address ${provisionedAddress}
+=============
+              `);
+
+      await orInterrupt(sleep(6 * 1000));
+
+      return untilProvisioned(checks + 1);
+    };
+
+    await tryTimeout(timeout * 1000, untilProvisioned);
+
+    // TODO: Figure out how to plumb address of other loadgen client
+    if (provisionedAddress)
+      additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = provisionedAddress;
 
     console.log('Done');
 
@@ -599,127 +715,127 @@ ${chainName} chain does not yet know of address ${soloAddr}
     );
   };
 
-  /** @param {import("./types.js").TaskSwingSetOptions} options */
-  const runClient = async ({ stdout, stderr, timeout = 180, trace }) => {
-    const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
-    const printerSpawn = makePrinterSpawn({
-      spawn,
-      print: (cmd) => console.log(cmd),
-    });
+  // /** @param {import("./types.js").TaskSwingSetOptions} options */
+  // const runClient = async ({ stdout, stderr, timeout = 180, trace }) => {
+  //   const { console, stdio } = getConsoleAndStdio('client', stdout, stderr);
+  //   const printerSpawn = makePrinterSpawn({
+  //     spawn,
+  //     print: (cmd) => console.log(cmd),
+  //   });
 
-    console.log('Starting client');
+  //   console.log('Starting client');
 
-    const slogFifo = await makeFIFO('client.slog');
-    const slogReady = fsStreamReady(slogFifo);
-    const slogLines = new BufferLineTransform();
-    const slogPipeResult = slogReady.then(() =>
-      slogLines.writableEnded ? undefined : pipeline(slogFifo, slogLines),
-    );
+  //   const slogFifo = await makeFIFO('client.slog');
+  //   const slogReady = fsStreamReady(slogFifo);
+  //   const slogLines = new BufferLineTransform();
+  //   const slogPipeResult = slogReady.then(() =>
+  //     slogLines.writableEnded ? undefined : pipeline(slogFifo, slogLines),
+  //   );
 
-    const { env: traceEnv } = getExtraEnvArgs({ trace }, 'SOLO_');
+  //   const { env: traceEnv } = getExtraEnvArgs({ trace }, 'SOLO_');
 
-    const clientEnv = Object.assign(Object.create(process.env), {
-      ...traceEnv,
-      SOLO_SLOGFILE: slogFifo.path,
-      DEBUG: VerboseDebugEnv,
-    });
+  //   const clientEnv = Object.assign(Object.create(process.env), {
+  //     ...traceEnv,
+  //     SOLO_SLOGFILE: slogFifo.path,
+  //     DEBUG: VerboseDebugEnv,
+  //   });
 
-    const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: clientStateDir,
-      env: clientEnv,
-      detached: true,
-    });
+  //   const soloCp = printerSpawn(sdkBinaries.agSolo, ['start'], {
+  //     stdio: ['ignore', 'pipe', 'pipe'],
+  //     cwd: clientStateDir,
+  //     env: clientEnv,
+  //     detached: true,
+  //   });
 
-    /** @type {{signal: undefined | 'SIGTERM'}} */
-    const ignoreKill = {
-      signal: undefined,
-    };
+  //   /** @type {{signal: undefined | 'SIGTERM'}} */
+  //   const ignoreKill = {
+  //     signal: undefined,
+  //   };
 
-    const soloCpReady = childProcessReady(soloCp);
-    const clientDone = childProcessDone(soloCp, {
-      ignoreKill,
-      killedExitCode: 98,
-    });
+  //   const soloCpReady = childProcessReady(soloCp);
+  //   const clientDone = childProcessDone(soloCp, {
+  //     ignoreKill,
+  //     killedExitCode: 98,
+  //   });
 
-    clientDone
-      .then(
-        () => console.log('Client exited successfully'),
-        (error) => console.error('Client exited with error', error),
-      )
-      .finally(() => {
-        if (slogFifo.pending) {
-          slogLines.end();
-          slogFifo.close();
-        }
-      });
+  //   clientDone
+  //     .then(
+  //       () => console.log('Client exited successfully'),
+  //       (error) => console.error('Client exited with error', error),
+  //     )
+  //     .finally(() => {
+  //       if (slogFifo.pending) {
+  //         slogLines.end();
+  //         slogFifo.close();
+  //       }
+  //     });
 
-    const soloCombinedElidedOutput = combineAndPipe(soloCp.stdio, stdio);
-    const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
-      soloCombinedElidedOutput,
-      [
-        { matcher: clientSwingSetReadyRE, resultIndex: -1 },
-        { matcher: clientWalletReadyRE, resultIndex: -1 },
-      ],
-      {
-        waitEnd: false,
-      },
-    );
+  //   const soloCombinedElidedOutput = combineAndPipe(soloCp.stdio, stdio);
+  //   const [clientStarted, walletReady, outputParsed] = whenStreamSteps(
+  //     soloCombinedElidedOutput,
+  //     [
+  //       { matcher: clientSwingSetReadyRE, resultIndex: -1 },
+  //       { matcher: clientWalletReadyRE, resultIndex: -1 },
+  //     ],
+  //     {
+  //       waitEnd: false,
+  //     },
+  //   );
 
-    const done = PromiseAllOrErrors([
-      slogPipeResult,
-      outputParsed,
-      clientDone,
-    ]).then(() => {});
+  //   const done = PromiseAllOrErrors([
+  //     slogPipeResult,
+  //     outputParsed,
+  //     clientDone,
+  //   ]).then(() => {});
 
-    walletReady
-      .then(() =>
-        Promise.race([
-          slogReady,
-          Promise.reject(new Error('Slog not supported')),
-        ]),
-      )
-      .catch((err) => console.warn(err.message || err));
+  //   walletReady
+  //     .then(() =>
+  //       Promise.race([
+  //         slogReady,
+  //         Promise.reject(new Error('Slog not supported')),
+  //       ]),
+  //     )
+  //     .catch((err) => console.warn(err.message || err));
 
-    return tryTimeout(
-      timeout * 1000,
-      async () => {
-        await soloCpReady;
-        await clientStarted;
+  //   return tryTimeout(
+  //     timeout * 1000,
+  //     async () => {
+  //       await soloCpReady;
+  //       await clientStarted;
 
-        console.log('Client running');
+  //       console.log('Client running');
 
-        const processInfo = await getProcessInfo(
-          /** @type {number} */ (soloCp.pid),
-        ).catch(() => undefined);
+  //       const processInfo = await getProcessInfo(
+  //         /** @type {number} */ (soloCp.pid),
+  //       ).catch(() => undefined);
 
-        const stop = () => {
-          ignoreKill.signal = 'SIGTERM';
-          soloCp.kill(ignoreKill.signal);
-        };
+  //       const stop = () => {
+  //         ignoreKill.signal = 'SIGTERM';
+  //         soloCp.kill(ignoreKill.signal);
+  //       };
 
-        return harden({
-          stop,
-          done,
-          ready: walletReady,
-          slogLines: cleanAsyncIterable(slogLines),
-          storageLocation: clientStateDir,
-          processInfo,
-        });
-      },
-      async () => {
-        soloCp.kill();
-        slogFifo.close();
-        await Promise.allSettled([done, clientStarted, walletReady]);
-      },
-    );
-  };
+  //       return harden({
+  //         stop,
+  //         done,
+  //         ready: walletReady,
+  //         slogLines: cleanAsyncIterable(slogLines),
+  //         storageLocation: clientStateDir,
+  //         processInfo,
+  //       });
+  //     },
+  //     async () => {
+  //       soloCp.kill();
+  //       slogFifo.close();
+  //       await Promise.allSettled([done, clientStarted, walletReady]);
+  //     },
+  //   );
+  // };
 
   return harden({
     getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }),
     setupTasks,
     runChain,
-    runClient,
-    runLoadgen: makeLoadgenTask({ spawn }),
+    // runClient,
+    // runLoadgen: makeLoadgenTask({ spawn }),
   });
 };

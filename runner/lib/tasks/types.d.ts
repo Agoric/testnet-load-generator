@@ -80,6 +80,6 @@ export interface OrchestratorTasks {
   getEnvInfo(options: TaskBaseOptions): Promise<EnvInfo>;
   setupTasks(options: TaskBaseOptions): Promise<SetupTasksResult>;
   runChain(options: TaskSwingSetOptions): Promise<RunChainResult>;
-  runClient(options: TaskSwingSetOptions): Promise<RunClientResult>;
-  runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
+  // runClient(options: TaskSwingSetOptions): Promise<RunClientResult>;
+  // runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
 }
