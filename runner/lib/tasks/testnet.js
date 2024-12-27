@@ -529,6 +529,7 @@ export const makeTasks = ({
       const result = await queryNodeStatus(
         { spawn: printerSpawn },
         rpcAddrCandidate,
+        10,
       );
 
       if (
