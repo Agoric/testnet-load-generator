@@ -136,17 +136,17 @@ install_dependencies() {
 }
 
 start_runner() {
-    yarn --cwd "$DIRECTORY_PATH" install
+    # yarn --cwd "$DIRECTORY_PATH" install
     exec "$DIRECTORY_PATH/runner/bin/loadgen-runner" \
         --output-dir "$OUTPUT_DIR" --test-data.sdk-commit-time "$SDK_COMMIT_TIME" \
         --test-data.sdk-revision "$SDK_REVISION" "$@" 2>&1
 }
 
-install_dependencies
-extract_repo_and_org_name
-ensure_repo_folder_exists
-ensure_correct_revision_checkout_out
-ensure_correct_node_version
-generate_build
-add_binary_to_path
+# install_dependencies
+# extract_repo_and_org_name
+# ensure_repo_folder_exists
+# ensure_correct_revision_checkout_out
+# ensure_correct_node_version
+# generate_build
+# add_binary_to_path
 start_runner "$@"
