@@ -136,7 +136,7 @@ install_dependencies() {
 }
 
 start_runner() {
-    # yarn --cwd "$DIRECTORY_PATH" install
+    yarn --cwd "$DIRECTORY_PATH" install
     exec "$DIRECTORY_PATH/runner/bin/loadgen-runner" \
         --output-dir "$OUTPUT_DIR" --test-data.sdk-commit-time "$SDK_COMMIT_TIME" \
         --test-data.sdk-revision "$SDK_REVISION" "$@" 2>&1
