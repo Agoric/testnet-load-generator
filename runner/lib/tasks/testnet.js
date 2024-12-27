@@ -244,11 +244,12 @@ export const makeTasks = ({
 
   /**
    * @param {object} powers
+   * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
    * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
    * @param {string} [rpcAddr]
    * @param {number} [retries]
    */
-  const queryNodeStatus = async ({ spawn }, rpcAddr, retries = 1) => {
+  const queryNodeStatus = async ({ console, spawn }, rpcAddr, retries = 1) => {
     const args = ['status'];
 
     if (rpcAddr)
@@ -268,6 +269,8 @@ export const makeTasks = ({
       });
 
       const output = (await pres).toString('utf-8');
+      console.log(`retCode: ${retCode}`);
+      console.log(`output: ${output}`);
 
       return retCode === 0
         ? { type: 'success', status: JSON.parse(output) }
@@ -527,7 +530,7 @@ export const makeTasks = ({
       const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
 
       const result = await queryNodeStatus(
-        { spawn: printerSpawn },
+        { console, spawn: printerSpawn },
         rpcAddrCandidate,
         10,
       );
@@ -695,7 +698,7 @@ ${chainName} chain does not yet know of address ${provisionedAddress}
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        const result = await queryNodeStatus({ spawn: printerSpawn });
+        const result = await queryNodeStatus({ console, spawn: printerSpawn });
 
         if (result.type === 'error') {
           if (retries >= 10) {
