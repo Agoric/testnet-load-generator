@@ -30,6 +30,7 @@ import {
   whenStreamSteps,
 } from '../helpers/stream.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
+import { spawn as rootSpawn } from 'child_process';
 // import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
@@ -259,7 +260,7 @@ export const makeTasks = ({
 
     const runQuery = async () => {
       // Don't pipe output to console, it's too noisy
-      const statusCp = spawn(sdkBinaries.cosmosChain, args, {
+      const statusCp = rootSpawn(sdkBinaries.cosmosChain, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -269,8 +270,8 @@ export const makeTasks = ({
       });
 
       const output = (await pres).toString('utf-8');
-      console.log(`retCode: ${retCode}`);
-      console.log(`output: ${output}`);
+      console.log(`retCode: "${retCode}"`);
+      console.log(`output: "${output}"`);
 
       return retCode === 0
         ? { type: 'success', status: JSON.parse(output) }
@@ -288,7 +289,7 @@ export const makeTasks = ({
       response = await runQuery();
       if (response.type === 'success') return response;
       else {
-        console.log(`error: ${response.error}`);
+        console.log(`error: "${response.error}"`);
         retries -= 1;
         await sleep(2000);
       }
