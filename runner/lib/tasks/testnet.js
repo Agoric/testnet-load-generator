@@ -288,6 +288,7 @@ export const makeTasks = ({
       response = await runQuery();
       if (response.type === 'success') return response;
       else {
+        console.log(`error: ${response.error}`);
         retries -= 1;
         await sleep(2000);
       }
