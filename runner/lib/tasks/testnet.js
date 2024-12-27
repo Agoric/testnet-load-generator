@@ -404,7 +404,7 @@ export const makeTasks = ({
         );
       } else {
         console.log('Fetching state-sync info');
-        const [trustHeight, trustHash] = await getTrustedBlockData(rpcAddrs[0]);
+        const [trustHash, trustHeight] = await getTrustedBlockData(rpcAddrs[0]);
 
         const stateSyncRpc =
           rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
