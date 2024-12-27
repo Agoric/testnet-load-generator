@@ -316,7 +316,6 @@ export const makeTasks = ({
 
     testnetOrigin = testnetOriginOption || testnetOrigin;
 
-    console.log(`Fetching network config from ${testnetOrigin}`);
     /**
      * @typedef {object} NetworkConfigRequired
      * @property {string} chainName
@@ -325,10 +324,23 @@ export const makeTasks = ({
      * @property {string[]} seeds
      * @property {string} gci
      */
-    const { chainName, peers, rpcAddrs, seeds, gci } =
-      /** @type {NetworkConfigRequired & Record<string, unknown>} */ (
+
+    /**
+     * @type {NetworkConfigRequired}
+     */
+    let networkConfig = process.env.NETWORK_CONFIG
+      ? JSON.parse(process.env.NETWORK_CONFIG)
+      : {};
+    if (!networkConfig) {
+      console.log('Fetching network config');
+
+      networkConfig = /** @type {NetworkConfigRequired} */ (
         await fetchAsJSON(`${testnetOrigin}/network-config`)
       );
+    }
+    console.log('Using network config: ', networkConfig);
+
+    const { chainName, peers, rpcAddrs, seeds, gci } = networkConfig;
 
     // if (withMonitor !== false) {
     storageLocations.chainStorageLocation = chainStateDir;
