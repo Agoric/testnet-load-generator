@@ -282,7 +282,7 @@ export const makeTasks = ({
     let response = null;
 
     while (retries) {
-      const response = await runQuery();
+      response = await runQuery();
       if (response.type === 'success') return response;
       else {
         retries -= 1;
