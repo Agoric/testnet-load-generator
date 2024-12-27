@@ -296,6 +296,7 @@ export const makeTasks = ({
       testnetOrigin: testnetOriginOption,
       useStateSync,
     } = {},
+    config,
   }) => {
     const { console, stdio } = getConsoleAndStdio(
       'setup-tasks',
@@ -303,7 +304,7 @@ export const makeTasks = ({
       stderr,
     );
 
-    console.log('Starting');
+    console.log('Starting using config: ', JSON.stringify(config || {}));
 
     const printerSpawn = makePrinterSpawn({
       spawn,
@@ -315,7 +316,7 @@ export const makeTasks = ({
 
     testnetOrigin = testnetOriginOption || testnetOrigin;
 
-    console.log('Fetching network config');
+    console.log(`Fetching network config from ${testnetOrigin}`);
     /**
      * @typedef {object} NetworkConfigRequired
      * @property {string} chainName
