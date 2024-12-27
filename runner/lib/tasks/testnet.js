@@ -242,8 +242,13 @@ export const makeTasks = ({
     }
   };
 
-  /** @param {string} [rpcAddr] */
-  const queryNodeStatus = async (rpcAddr) => {
+  /**
+   * @param {object} powers
+   * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+   * @param {string} [rpcAddr]
+   * @param {number} [retries]
+   */
+  const queryNodeStatus = async ({ spawn }, rpcAddr, retries = 1) => {
     const args = ['status'];
 
     if (rpcAddr)
@@ -251,26 +256,43 @@ export const makeTasks = ({
         `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
       );
 
-    // Don't pipe output to console, it's too noisy
-    const statusCp = spawn(sdkBinaries.cosmosChain, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const runQuery = async () => {
+      // Don't pipe output to console, it's too noisy
+      const statusCp = spawn(sdkBinaries.cosmosChain, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
 
-    const pres = asBuffer(statusCp.stdout);
-    const retCode = await childProcessDone(statusCp, {
-      ignoreExitCode: true,
-    });
+      const pres = asBuffer(statusCp.stdout);
+      const retCode = await childProcessDone(statusCp, {
+        ignoreExitCode: true,
+      });
 
-    const output = (await pres).toString('utf-8');
+      const output = (await pres).toString('utf-8');
 
-    return retCode === 0
-      ? { type: 'success', status: JSON.parse(output) }
-      : {
-          type: 'error',
-          code: retCode,
-          output,
-          error: (await asBuffer(statusCp.stderr)).toString('utf-8'),
-        };
+      return retCode === 0
+        ? { type: 'success', status: JSON.parse(output) }
+        : {
+            type: 'error',
+            code: retCode,
+            output,
+            error: (await asBuffer(statusCp.stderr)).toString('utf-8'),
+          };
+    };
+
+    let response = null;
+
+    while (retries) {
+      const response = await runQuery();
+      if (response.type === 'success') return response;
+      else {
+        retries -= 1;
+        await sleep(2000);
+      }
+    }
+
+    return /** @type {ReturnType<typeof runQuery>} */ (
+      /** @type {unknown} */ (response)
+    );
   };
 
   const chainStateDir = String(
@@ -477,14 +499,14 @@ export const makeTasks = ({
             console,
             fs,
             sdkBinaries,
-            spawn,
+            spawn: printerSpawn,
             stdio,
           }),
           {
             console,
             fs,
             sdkBinaries,
-            spawn,
+            spawn: printerSpawn,
             stdio,
           },
         ),
@@ -504,7 +526,10 @@ export const makeTasks = ({
         rpcAddrCandidates.length;
       const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
 
-      const result = await queryNodeStatus(rpcAddrCandidate);
+      const result = await queryNodeStatus(
+        { spawn: printerSpawn },
+        rpcAddrCandidate,
+      );
 
       if (
         result.type === 'success' &&
@@ -669,7 +694,7 @@ ${chainName} chain does not yet know of address ${provisionedAddress}
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        const result = await queryNodeStatus();
+        const result = await queryNodeStatus({ spawn: printerSpawn });
 
         if (result.type === 'error') {
           if (retries >= 10) {
