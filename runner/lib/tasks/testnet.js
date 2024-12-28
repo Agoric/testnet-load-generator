@@ -23,7 +23,7 @@ import {
   // childProcessReady,
 } from '../helpers/child-process.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import LineStreamTransform from '../helpers/line-stream-transform.js';
+// import LineStreamTransform from '../helpers/line-stream-transform.js';
 import {
   asBuffer,
   combineAndPipe,
@@ -47,9 +47,9 @@ const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 // const clientWalletReadyRE =
 /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
-const FILE_ENCODING = 'utf-8';
-const KEY_NAME = 'provisioned-wallet';
-const KEYRING_BACKEND = 'test';
+// const FILE_ENCODING = 'utf-8';
+// const KEY_NAME = 'provisioned-wallet';
+// const KEYRING_BACKEND = 'test';
 const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
 
 /**
@@ -73,99 +73,99 @@ const rpcAddrWithScheme = (
   return `${withScheme}://${hierarchicalPart}`;
 };
 
-/**
- * @param {string} chainStateDir
- * @param {object} powers
- * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
- * @param {import("fs/promises")} powers.fs
- * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
- * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
- * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
- */
-const generateMnemonic = async (
-  chainStateDir,
-  { console, fs, sdkBinaries, spawn, stdio },
-) => {
-  const mnemonicFile = joinPath(chainStateDir, 'mnemonic');
-  console.log('generating mnemonic in ', mnemonicFile);
+// /**
+//  * @param {string} chainStateDir
+//  * @param {object} powers
+//  * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+//  * @param {import("fs/promises")} powers.fs
+//  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+//  * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+//  * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+//  */
+// const generateMnemonic = async (
+//   chainStateDir,
+//   { console, fs, sdkBinaries, spawn, stdio },
+// ) => {
+//   const mnemonicFile = joinPath(chainStateDir, 'mnemonic');
+//   console.log('generating mnemonic in ', mnemonicFile);
 
-  const mnemonicFileHandler = await fs.open(mnemonicFile, 'w');
-  await childProcessDone(
-    spawn(
-      sdkBinaries.cosmosChain,
-      [
-        'keys',
-        'mnemonic',
-        '--home',
-        chainStateDir,
-        '--keyring-backend',
-        KEYRING_BACKEND,
-      ],
-      {
-        stdio: [stdio[0], mnemonicFileHandler.fd, stdio[2]],
-      },
-    ),
-  ).finally(mnemonicFileHandler.close);
+//   const mnemonicFileHandler = await fs.open(mnemonicFile, 'w');
+//   await childProcessDone(
+//     spawn(
+//       sdkBinaries.cosmosChain,
+//       [
+//         'keys',
+//         'mnemonic',
+//         '--home',
+//         chainStateDir,
+//         '--keyring-backend',
+//         KEYRING_BACKEND,
+//       ],
+//       {
+//         stdio: [stdio[0], mnemonicFileHandler.fd, stdio[2]],
+//       },
+//     ),
+//   ).finally(mnemonicFileHandler.close);
 
-  return mnemonicFile;
-};
+//   return mnemonicFile;
+// };
 
-/**
- * @param {string} chainStateDir
- * @param {Awaited<ReturnType<generateMnemonic>>} mnemonicFile
- * @param {object} powers
- * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
- * @param {import("fs/promises")} powers.fs
- * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
- * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
- * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
- */
-const generateWalletFromMnemonic = async (
-  chainStateDir,
-  mnemonicFile,
-  { console, fs, sdkBinaries, spawn, stdio },
-) => {
-  const addressFile = joinPath(chainStateDir, 'address');
+// /**
+//  * @param {string} chainStateDir
+//  * @param {Awaited<ReturnType<generateMnemonic>>} mnemonicFile
+//  * @param {object} powers
+//  * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
+//  * @param {import("fs/promises")} powers.fs
+//  * @param {import("./types.js").SDKBinaries} powers.sdkBinaries
+//  * @param {(ReturnType<typeof getConsoleAndStdio>)['stdio']} powers.stdio
+//  * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
+//  */
+// const generateWalletFromMnemonic = async (
+//   chainStateDir,
+//   mnemonicFile,
+//   { console, fs, sdkBinaries, spawn, stdio },
+// ) => {
+//   const addressFile = joinPath(chainStateDir, 'address');
 
-  const mnemonicFileHandler = await fs.open(mnemonicFile, 'r');
+//   const mnemonicFileHandler = await fs.open(mnemonicFile, 'r');
 
-  const cp = spawn(
-    sdkBinaries.cosmosChain,
-    [
-      'keys',
-      'add',
-      KEY_NAME,
-      '--home',
-      chainStateDir,
-      '--keyring-backend',
-      KEYRING_BACKEND,
-      '--output',
-      'json',
-      '--recover',
-    ],
-    {
-      stdio: [mnemonicFileHandler.fd, 'pipe', 'pipe'],
-    },
-  );
+//   const cp = spawn(
+//     sdkBinaries.cosmosChain,
+//     [
+//       'keys',
+//       'add',
+//       KEY_NAME,
+//       '--home',
+//       chainStateDir,
+//       '--keyring-backend',
+//       KEYRING_BACKEND,
+//       '--output',
+//       'json',
+//       '--recover',
+//     ],
+//     {
+//       stdio: [mnemonicFileHandler.fd, 'pipe', 'pipe'],
+//     },
+//   );
 
-  const lines = new LineStreamTransform();
+//   const lines = new LineStreamTransform();
 
-  // @ts-expect-error
-  combineAndPipe(cp.stdio, stdio).pipe(lines);
+//   // @ts-expect-error
+//   combineAndPipe(cp.stdio, stdio).pipe(lines);
 
-  let output = '';
+//   let output = '';
 
-  for await (const line of lines) output += line;
+//   for await (const line of lines) output += line;
 
-  await childProcessDone(cp).finally(mnemonicFileHandler.close);
+//   await childProcessDone(cp).finally(mnemonicFileHandler.close);
 
-  console.log('Writing address to ', addressFile);
-  await fs.writeFile(addressFile, JSON.parse(output).address, {
-    encoding: FILE_ENCODING,
-  });
+//   console.log('Writing address to ', addressFile);
+//   await fs.writeFile(addressFile, JSON.parse(output).address, {
+//     encoding: FILE_ENCODING,
+//   });
 
-  return addressFile;
-};
+//   return addressFile;
+// };
 
 /**
  * @param {string} rpcAddress
@@ -306,8 +306,8 @@ export const makeTasks = ({
   const setupTasks = async ({
     stdout,
     stderr,
-    timeout = 10 * 60,
-    orInterrupt = async (job) => job,
+    // timeout = 10 * 60,
+    // orInterrupt = async (job) => job,
     config: {
       reset = true,
       // chainOnly,
@@ -456,7 +456,7 @@ export const makeTasks = ({
     //   );
     // }
 
-    console.log('Provisioning client');
+    // console.log('Provisioning client');
 
     // const netConfig = `${testnetOrigin}/network-config`;
 
@@ -488,28 +488,28 @@ export const makeTasks = ({
     //   await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
     // ).trimEnd();
 
-    const provisionedAddress = (
-      await fs.readFile(
-        await generateWalletFromMnemonic(
-          chainStateDir,
-          await generateMnemonic(chainStateDir, {
-            console,
-            fs,
-            sdkBinaries,
-            spawn: printerSpawn,
-            stdio,
-          }),
-          {
-            console,
-            fs,
-            sdkBinaries,
-            spawn: printerSpawn,
-            stdio,
-          },
-        ),
-        FILE_ENCODING,
-      )
-    ).trimEnd();
+    // const provisionedAddress = (
+    //   await fs.readFile(
+    //     await generateWalletFromMnemonic(
+    //       chainStateDir,
+    //       await generateMnemonic(chainStateDir, {
+    //         console,
+    //         fs,
+    //         sdkBinaries,
+    //         spawn: printerSpawn,
+    //         stdio,
+    //       }),
+    //       {
+    //         console,
+    //         fs,
+    //         sdkBinaries,
+    //         spawn: printerSpawn,
+    //         stdio,
+    //       },
+    //     ),
+    //     FILE_ENCODING,
+    //   )
+    // ).trimEnd();
 
     const rpcAddrCandidates = [...rpcAddrs];
     let rpcAddr;
@@ -538,10 +538,10 @@ export const makeTasks = ({
 
     if (!rpcAddr) throw new Error('Found no suitable RPC node');
 
-    /**
-     * @param {number} [checks]
-     * @returns {Promise<void>}
-     */
+    // /**
+    //  * @param {number} [checks]
+    //  * @returns {Promise<void>}
+    //  */
     //     const untilProvisioned = async (checks = 0) => {
     //       const checkAddrStatus = await childProcessDone(
     //         printerSpawn(
@@ -577,8 +577,8 @@ export const makeTasks = ({
     // await tryTimeout(timeout * 1000, untilProvisioned);
 
     // TODO: Figure out how to plumb address of other loadgen client
-    if (provisionedAddress)
-      additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = provisionedAddress;
+    // if (provisionedAddress)
+    //   additionChainEnv.VAULT_FACTORY_CONTROLLER_ADDR = provisionedAddress;
 
     console.log('Done');
 
