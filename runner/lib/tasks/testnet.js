@@ -127,7 +127,6 @@ const generateWalletFromMnemonic = async (
 ) => {
   const addressFile = joinPath(chainStateDir, 'address');
 
-  console.log('Deriving key from ', mnemonicFile);
   const mnemonicFileHandler = await fs.open(mnemonicFile, 'r');
 
   const cp = spawn(
@@ -244,18 +243,15 @@ export const makeTasks = ({
 
   /**
    * @param {object} powers
-   * @param {(ReturnType<typeof getConsoleAndStdio>)['console']} powers.console
    * @param {ReturnType<typeof makePrinterSpawn>} powers.spawn
    * @param {string} [rpcAddr]
    * @param {number} [retries]
    */
-  const queryNodeStatus = async ({ console, spawn }, rpcAddr, retries = 1) => {
+  const queryNodeStatus = async ({ spawn }, rpcAddr, retries = 1) => {
     const args = ['status'];
 
     if (rpcAddr)
-      args.push(
-        `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
-      );
+      args.push(`--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`);
 
     const runQuery = async () => {
       // Don't pipe output to console, it's too noisy
@@ -269,8 +265,6 @@ export const makeTasks = ({
       });
 
       const output = (await pres).toString('utf-8');
-      console.log(`retCode: "${retCode}"`);
-      console.log(`output: "${output}"`);
 
       return retCode === 0
         ? { type: 'success', status: JSON.parse(output) }
@@ -288,7 +282,6 @@ export const makeTasks = ({
       response = await runQuery();
       if (response.type === 'success') return response;
       else {
-        console.log(`error: "${response.error}"`);
         retries -= 1;
         await sleep(2000);
       }
@@ -531,7 +524,7 @@ export const makeTasks = ({
       const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
 
       const result = await queryNodeStatus(
-        { console, spawn: printerSpawn },
+        { spawn: printerSpawn },
         rpcAddrCandidate,
         10,
       );
@@ -549,39 +542,39 @@ export const makeTasks = ({
      * @param {number} [checks]
      * @returns {Promise<void>}
      */
-    const untilProvisioned = async (checks = 0) => {
-      const checkAddrStatus = await childProcessDone(
-        spawn(
-          sdkBinaries.cosmosChain,
-          [
-            'query',
-            'swingset',
-            'egress',
-            provisionedAddress,
-            `--chain-id "${chainName}"`,
-            `--home "${chainStateDir}"`,
-            `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
-          ],
-          { stdio: 'ignore' },
-        ),
-        { ignoreExitCode: true },
-      );
+    //     const untilProvisioned = async (checks = 0) => {
+    //       const checkAddrStatus = await childProcessDone(
+    //         printerSpawn(
+    //           sdkBinaries.cosmosChain,
+    //           [
+    //             'query',
+    //             'swingset',
+    //             'egress',
+    //             provisionedAddress,
+    //             `--chain-id "${chainName}"`,
+    //             `--home "${chainStateDir}"`,
+    //             `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
+    //           ],
+    //           { stdio: 'ignore' },
+    //         ),
+    //         { ignoreExitCode: true },
+    //       );
 
-      if (checkAddrStatus === 0) return undefined;
+    //       if (checkAddrStatus === 0) return undefined;
 
-      if (!checks)
-        console.error(`
-=============
-${chainName} chain does not yet know of address ${provisionedAddress}
-=============
-              `);
+    //       if (!checks)
+    //         console.error(`
+    // =============
+    // ${chainName} chain does not yet know of address ${provisionedAddress}
+    // =============
+    //               `);
 
-      await orInterrupt(sleep(6 * 1000));
+    //       await orInterrupt(sleep(6 * 1000));
 
-      return untilProvisioned(checks + 1);
-    };
+    //       return untilProvisioned(checks + 1);
+    //     };
 
-    await tryTimeout(timeout * 1000, untilProvisioned);
+    // await tryTimeout(timeout * 1000, untilProvisioned);
 
     // TODO: Figure out how to plumb address of other loadgen client
     if (provisionedAddress)
@@ -699,7 +692,7 @@ ${chainName} chain does not yet know of address ${provisionedAddress}
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        const result = await queryNodeStatus({ console, spawn: printerSpawn });
+        const result = await queryNodeStatus({ spawn: printerSpawn });
 
         if (result.type === 'error') {
           if (retries >= 10) {
