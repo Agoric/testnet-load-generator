@@ -255,7 +255,7 @@ export const makeTasks = ({
 
     if (rpcAddr)
       args.push(
-        `--node "${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}"`,
+        `--node ${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
       );
 
     const runQuery = async () => {
