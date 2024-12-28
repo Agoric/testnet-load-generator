@@ -30,7 +30,6 @@ import {
   whenStreamSteps,
 } from '../helpers/stream.js';
 import { makeGetEnvInfo } from './shared-env-info.js';
-import { spawn as rootSpawn } from 'child_process';
 // import { makeLoadgenTask } from './shared-loadgen.js';
 
 const pipeline = promisify(pipelineCallback);
@@ -255,12 +254,12 @@ export const makeTasks = ({
 
     if (rpcAddr)
       args.push(
-        `--node ${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
+        `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
       );
 
     const runQuery = async () => {
       // Don't pipe output to console, it's too noisy
-      const statusCp = rootSpawn(sdkBinaries.cosmosChain, args, {
+      const statusCp = spawn(sdkBinaries.cosmosChain, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
