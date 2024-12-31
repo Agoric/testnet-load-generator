@@ -77,7 +77,7 @@ export const httpRequest = (urlOrString, options = {}) => {
  * @returns {Promise<unknown>}
  */
 export const fetchAsJSON = async (url, options = {}) => {
-  const {retries, ...rest} = options;
+  const { retries, ...rest } = options;
 
   let remainingRetries = retries || 1;
   /**
@@ -87,13 +87,12 @@ export const fetchAsJSON = async (url, options = {}) => {
 
   while (remainingRetries) {
     const res = await httpRequest(url, rest);
-  
+
     if (!res.statusCode || res.statusCode >= 400) {
       err = Error(`HTTP request error: ${res.statusCode}`);
       remainingRetries -= 1;
       await sleep(1000);
-    }
-    else return asJSON(res);
+    } else return asJSON(res);
   }
 
   throw err;
