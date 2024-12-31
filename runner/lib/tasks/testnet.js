@@ -804,15 +804,18 @@ export const makeTasks = ({
     };
 
     const watchSharedFile = async () => {
-      if (chainEnv.SHARED_FILE_PATH) {
-        for await (const { eventType } of fs.watch(chainEnv.SHARED_FILE_PATH)) {
+      if (chainEnv.MESSAGE_FILE_PATH) {
+        for await (const { eventType } of fs.watch(
+          chainEnv.MESSAGE_FILE_PATH,
+        )) {
           if (eventType === 'change') {
             const fileContent = (
-              await fs.readFile(chainEnv.SHARED_FILE_PATH, FILE_ENCODING)
+              await fs.readFile(chainEnv.MESSAGE_FILE_PATH, FILE_ENCODING)
             ).trim();
-            if (!/^[0-9]+$/.test(fileContent))
+            const parsed = /^stop at ([0-9]+)$/.exec(fileContent);
+            if (!parsed)
               console.warn('Ignoring unsupported file content: ', fileContent);
-            else return stopAtHeight(Number(fileContent));
+            else return stopAtHeight(Number(parsed[1]));
           }
         }
       }
