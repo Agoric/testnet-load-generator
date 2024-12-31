@@ -723,6 +723,22 @@ export const makeTasks = ({
       await chainDone;
     });
 
+    const watchSharedFile = async () => {
+      if (chainEnv.SHARED_FILE_PATH) {
+        for await (const { eventType } of fs.watch(chainEnv.SHARED_FILE_PATH)) {
+          console.log('eventType: ', eventType);
+          if (eventType === 'change')
+            console.log(
+              'File contents: ',
+              await fs.readFile(chainEnv.SHARED_FILE_PATH),
+            );
+        }
+      }
+    };
+
+    console.log('chainEnv.SHARED_FILE_PATH: ', chainEnv.SHARED_FILE_PATH);
+    watchSharedFile();
+
     return tryTimeout(
       timeout * 1000,
       async () => {

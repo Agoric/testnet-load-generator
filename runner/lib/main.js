@@ -31,7 +31,7 @@ import { makeOutputter } from './helpers/outputter.js';
 import { makeTasks as makeLocalChainTasks } from './tasks/local-chain.js';
 import { makeTasks as makeTestnetTasks } from './tasks/testnet.js';
 
-import { makeChainMonitor } from './monitor/chain-monitor.js';
+// import { makeChainMonitor } from './monitor/chain-monitor.js';
 import { monitorSlog } from './monitor/slog-monitor.js';
 // import { monitorLoadgen } from './monitor/loadgen-monitor.js';
 import { makeRunStats } from './stats/run.js';
@@ -46,7 +46,7 @@ const defaultLoadgenConfig = {
   vault: { interval: 12, limit: 10 },
   amm: { wait: 6, interval: 12, limit: 10 },
 };
-const defaultMonitorIntervalMinutes = 5;
+// const defaultMonitorIntervalMinutes = 5;
 const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
 
@@ -266,7 +266,10 @@ const main = async (_, rawArgs, powers) => {
   });
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
-  const { dirDiskUsage, makeFIFO } = makeFsHelper({
+  const {
+    // dirDiskUsage,
+    makeFIFO,
+  } = makeFsHelper({
     fs,
     fsStream,
     spawn,
@@ -318,8 +321,8 @@ const main = async (_, rawArgs, powers) => {
       throw new Error(`Unexpected profile option: ${profile}`);
   }
 
-  const monitorInterval =
-    Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
+  // const monitorInterval =
+  //   Number(argv.monitorInterval || defaultMonitorIntervalMinutes) * 60 * 1000;
 
   let currentStage = -1;
   /** @type {Promise<void>[]} */
@@ -467,7 +470,7 @@ const main = async (_, rawArgs, powers) => {
       // loadgenConfig,
       // loadgenWindDown,
       // withMonitor,
-      chainStorageLocation,
+      // chainStorageLocation,
     } = config;
     currentStageTimeSource = timeSource.shift();
 
@@ -567,22 +570,22 @@ const main = async (_, rawArgs, powers) => {
         },
       };
 
-      const chainMonitor = //@ts-expect-error
-        /** @type {undefined | true} */ (undefined) &&
-        runChainResult.processInfo &&
-        makeChainMonitor(
-          {
-            processInfo: runChainResult.processInfo,
-            storageLocation: chainStorageLocation,
-          },
-          {
-            ...makeConsole('monitor-chain', out, err),
-            logPerfEvent,
-            cpuTimeSource,
-            dirDiskUsage,
-          },
-        );
-      chainMonitor?.start(monitorInterval);
+      // const chainMonitor = //@ts-expect-error
+      //   /** @type {undefined | true} */ (undefined) &&
+      //   runChainResult.processInfo &&
+      //   makeChainMonitor(
+      //     {
+      //       processInfo: runChainResult.processInfo,
+      //       storageLocation: chainStorageLocation,
+      //     },
+      //     {
+      //       ...makeConsole('monitor-chain', out, err),
+      //       logPerfEvent,
+      //       cpuTimeSource,
+      //       dirDiskUsage,
+      //     },
+      //   );
+      // chainMonitor?.start(monitorInterval);
 
       const slogMonitorDone = monitorSlog(
         { slogLines },
@@ -590,7 +593,7 @@ const main = async (_, rawArgs, powers) => {
           ...makeConsole('monitor-slog', out, err),
           stats,
           notifier,
-          chainMonitor,
+          // chainMonitor,
           localTimeSource: timeSource,
           logPerfEvent,
         },
@@ -625,7 +628,7 @@ const main = async (_, rawArgs, powers) => {
         async () =>
           aggregateTryFinally(
             async () => {
-              chainMonitor?.stop();
+              // chainMonitor?.stop();
 
               if (!chainExited) {
                 stageConsole.log('Stopping chain');
