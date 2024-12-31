@@ -47,7 +47,7 @@ const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 // const clientWalletReadyRE =
 /(?:Deployed Wallet!|Don't need our provides: wallet)/;
 const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
-// const FILE_ENCODING = 'utf-8';
+const FILE_ENCODING = 'utf-8';
 // const KEY_NAME = 'provisioned-wallet';
 // const KEYRING_BACKEND = 'test';
 const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
@@ -730,7 +730,10 @@ export const makeTasks = ({
           if (eventType === 'change')
             console.log(
               'File contents: ',
-              await fs.readFile(chainEnv.SHARED_FILE_PATH),
+              await fs.readFile(
+                chainEnv.SHARED_FILE_PATH,
+                FILE_ENCODING
+              ),
             );
         }
       }
