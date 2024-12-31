@@ -205,6 +205,43 @@ const getTrustedBlockData = async (rpcAddress) => {
 };
 
 /**
+ * @typedef {{
+ *  NodeInfo: {
+ *    channels: string;
+ *    id: string;
+ *    listen_addr: string;
+ *    moniker: string;
+ *    network: string;
+ *    other: {
+ *      rpc_address: string;
+ *      tx_index: string;
+ *    }
+ *    protocol_version: { app: string; block: string; p2p: string; };
+ *    version: string;
+ *  };
+ *  SyncInfo: {
+ *    catching_up: boolean;
+ *    earliest_app_hash: string;
+ *    earliest_block_hash: string;
+ *    earliest_block_height: string;
+ *    earliest_block_time: string;
+ *    latest_app_hash: string;
+ *    latest_block_hash: string;
+ *    latest_block_height: string;
+ *    latest_block_time: string;
+ *  };
+ *  ValidatorInfo: {
+ *    Address: string;
+ *    PubKey: {
+ *      value: string;
+ *      type: string;
+ *    };
+ *    VotingPower: string;
+ *  }
+ * }} Status
+ */
+
+/**
  *
  * @param {object} powers
  * @param {import("child_process").spawn} powers.spawn Node.js spawn
@@ -267,7 +304,7 @@ export const makeTasks = ({
       const output = (await pres).toString('utf-8');
 
       return retCode === 0
-        ? { type: 'success', status: JSON.parse(output) }
+        ? { type: 'success', status: /** @type {Status}*/ (JSON.parse(output)) }
         : {
             type: 'error',
             code: retCode,
@@ -531,7 +568,7 @@ export const makeTasks = ({
 
       if (
         result.type === 'success' &&
-        result.status.SyncInfo.catching_up === false
+        result.status?.SyncInfo.catching_up === false
       )
         rpcAddr = rpcAddrCandidate;
     }
@@ -711,7 +748,7 @@ export const makeTasks = ({
         } else {
           retries = 0;
 
-          if (result.status.SyncInfo.catching_up === false) {
+          if (result.status?.SyncInfo.catching_up === false) {
             return;
           }
 
@@ -723,23 +760,39 @@ export const makeTasks = ({
       await chainDone;
     });
 
+    /**
+     *
+     * @param {number} height
+     */
+    const stopAtHeight = async (height) => {
+      console.log(`Scheduling follower to stop at height ${height}`);
+      /**
+       * @type {Status | undefined}
+       */
+      let status = undefined;
+      do {
+        const response = await queryNodeStatus({ spawn });
+        if (!response.code) status = response.status;
+      } while (!status || Number(status.SyncInfo.latest_block_height) < height);
+      console.log(`Chain reached height ${height}, stopping follower`);
+      stop();
+    };
+
     const watchSharedFile = async () => {
       if (chainEnv.SHARED_FILE_PATH) {
         for await (const { eventType } of fs.watch(chainEnv.SHARED_FILE_PATH)) {
-          console.log('eventType: ', eventType);
-          if (eventType === 'change')
-            console.log(
-              'File contents: ',
-              await fs.readFile(
-                chainEnv.SHARED_FILE_PATH,
-                FILE_ENCODING
-              ),
-            );
+          if (eventType === 'change') {
+            const fileContent = (
+              await fs.readFile(chainEnv.SHARED_FILE_PATH, FILE_ENCODING)
+            ).trim();
+            if (!/^[0-9]+$/.test(fileContent))
+              console.warn('Ignoring unsupported file content: ', fileContent);
+            else return stopAtHeight(Number(fileContent));
+          }
         }
       }
     };
 
-    console.log('chainEnv.SHARED_FILE_PATH: ', chainEnv.SHARED_FILE_PATH);
     watchSharedFile();
 
     return tryTimeout(
