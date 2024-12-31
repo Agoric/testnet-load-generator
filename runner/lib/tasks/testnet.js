@@ -435,6 +435,7 @@ export const makeTasks = ({
         ),
       );
 
+      const appConfigPath = joinPath(chainStateDir, 'config', 'app.toml');
       const configPath = joinPath(chainStateDir, 'config', 'config.toml');
 
       console.log('Patching config');
@@ -454,6 +455,18 @@ export const makeTasks = ({
         'tcp://0.0.0.0:36657';
       /** @type {import('@iarna/toml').JsonMap} */ (config.rpc).pprof_laddr =
         'localhost:7060';
+
+      console.log('Patching app config');
+      const appConfig = await TOML.parse.async(
+        await fs.readFile(appConfigPath, 'utf-8'),
+      );
+
+      /** @type {import('@iarna/toml').JsonMap} */ (appConfig.api).address =
+        'tcp://0.0.0.0:2317';
+      /** @type {import('@iarna/toml').JsonMap} */ (appConfig.grpc).address =
+        '0.0.0.0:10090';
+
+      await fs.writeFile(appConfigPath, TOML.stringify(appConfig));
 
       if (!useStateSync) {
         console.log('Fetching genesis');
