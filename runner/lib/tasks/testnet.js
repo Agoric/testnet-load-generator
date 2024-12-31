@@ -447,7 +447,13 @@ export const makeTasks = ({
       configP2p.persistent_peers = peers.join(',');
       configP2p.seeds = seeds.join(',');
       configP2p.addr_book_strict = false;
+      configP2p.laddr = 'tcp://0.0.0.0:36656';
       delete config.log_level;
+
+      /** @type {import('@iarna/toml').JsonMap} */ (config.rpc).laddr =
+        'tcp://0.0.0.0:36657';
+      /** @type {import('@iarna/toml').JsonMap} */ (config.rpc).pprof_laddr =
+        'localhost:7060';
 
       if (!useStateSync) {
         console.log('Fetching genesis');
@@ -770,10 +776,16 @@ export const makeTasks = ({
        * @type {Status | undefined}
        */
       let status = undefined;
-      do {
+
+      while (true) {
         const response = await queryNodeStatus({ spawn });
         if (!response.code) status = response.status;
-      } while (!status || Number(status.SyncInfo.latest_block_height) < height);
+
+        if (status && Number(status.SyncInfo.latest_block_height) >= height)
+          break;
+        else sleep(2000);
+      }
+
       console.log(`Chain reached height ${height}, stopping follower`);
       stop();
     };
