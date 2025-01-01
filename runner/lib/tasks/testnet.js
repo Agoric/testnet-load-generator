@@ -41,6 +41,7 @@ const clientStateDir = `${stateDir}/${profileName}-${CLIENT_PORT}`;
 
 const VerboseDebugEnv = 'agoric,SwingSet:vat,SwingSet:ls';
 
+const ADDRESS_REGEX = /^(([a-z]+:\/\/)?[^:]+)(:[0-9]+)?$/;
 const chainSwingSetLaunchRE = /launch-chain: Launching SwingSet kernel$/;
 const chainBlockBeginRE = /block-manager: block (\d+) begin$/;
 // const clientSwingSetReadyRE = /start: swingset running$/;
@@ -381,19 +382,9 @@ export const makeTasks = ({
      * @property {string} gci
      */
 
-    /**
-     * @type {NetworkConfigRequired}
-     */
-    let networkConfig = process.env.NETWORK_CONFIG
-      ? JSON.parse(process.env.NETWORK_CONFIG)
-      : {};
-    if (!networkConfig) {
-      console.log('Fetching network config');
-
-      networkConfig = /** @type {NetworkConfigRequired} */ (
-        await fetchAsJSON(`${testnetOrigin}/network-config`)
-      );
-    }
+    const networkConfig = /** @type {NetworkConfigRequired} */ (
+      await fetchAsJSON(`${testnetOrigin}/network-config`)
+    );
     console.log('Using network config: ', networkConfig);
 
     const { chainName, peers, rpcAddrs, seeds, gci } = networkConfig;
@@ -442,31 +433,73 @@ export const makeTasks = ({
       const config = await TOML.parse.async(
         await fs.readFile(configPath, 'utf-8'),
       );
+
       const configP2p = /** @type {import('@iarna/toml').JsonMap} */ (
         config.p2p
       );
+      const configRpc = /** @type {import('@iarna/toml').JsonMap} */ (
+        config.rpc
+      );
+
       configP2p.persistent_peers = peers.join(',');
       configP2p.seeds = seeds.join(',');
       configP2p.addr_book_strict = false;
-      configP2p.laddr = 'tcp://0.0.0.0:36656';
+
       delete config.log_level;
 
-      /** @type {import('@iarna/toml').JsonMap} */ (config.rpc).laddr =
-        'tcp://0.0.0.0:36657';
-      /** @type {import('@iarna/toml').JsonMap} */ (config.rpc).pprof_laddr =
-        'localhost:7060';
+      if (process.env.P2P_PORT) {
+        const matches = ADDRESS_REGEX.exec(String(configP2p.laddr));
+        if (matches)
+          configP2p.laddr = [matches[1], ':', process.env.P2P_PORT].join('');
+      }
 
-      console.log('Patching app config');
-      const appConfig = await TOML.parse.async(
-        await fs.readFile(appConfigPath, 'utf-8'),
-      );
+      if (process.env.RPC_PORT) {
+        const matches = ADDRESS_REGEX.exec(String(configRpc.laddr));
+        if (matches)
+          configRpc.laddr = [matches[1], ':', process.env.RPC_PORT].join('');
+      }
 
-      /** @type {import('@iarna/toml').JsonMap} */ (appConfig.api).address =
-        'tcp://0.0.0.0:2317';
-      /** @type {import('@iarna/toml').JsonMap} */ (appConfig.grpc).address =
-        '0.0.0.0:10090';
+      if (process.env.PPROF_PORT) {
+        const matches = ADDRESS_REGEX.exec(String(configRpc.pprof_laddr));
+        if (matches)
+          configRpc.pprof_laddr = [
+            matches[1],
+            ':',
+            process.env.PPROF_PORT,
+          ].join('');
+      }
 
-      await fs.writeFile(appConfigPath, TOML.stringify(appConfig));
+      if (process.env.API_PORT || process.env.GRPC_PORT) {
+        console.log('Patching app config');
+        const appConfig = await TOML.parse.async(
+          await fs.readFile(appConfigPath, 'utf-8'),
+        );
+
+        const configApi = /** @type {import('@iarna/toml').JsonMap} */ (
+          appConfig.api
+        );
+        const configGrpc = /** @type {import('@iarna/toml').JsonMap} */ (
+          appConfig.grpc
+        );
+
+        if (process.env.API_PORT) {
+          const matches = ADDRESS_REGEX.exec(String(configApi.address));
+          if (matches)
+            configApi.address = [matches[1], ':', process.env.API_PORT].join(
+              '',
+            );
+        }
+
+        if (process.env.GRPC_PORT) {
+          const matches = ADDRESS_REGEX.exec(String(configGrpc.address));
+          if (matches)
+            configGrpc.address = [matches[1], ':', process.env.GRPC_PORT].join(
+              '',
+            );
+        }
+
+        await fs.writeFile(appConfigPath, TOML.stringify(appConfig));
+      }
 
       if (!useStateSync) {
         console.log('Fetching genesis');
