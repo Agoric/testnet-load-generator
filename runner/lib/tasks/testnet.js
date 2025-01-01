@@ -834,10 +834,15 @@ export const makeTasks = ({
 
       console.log(`Chain reached height ${height}, stopping follower`);
       stop();
+
+      await fs.writeFile(
+        chainEnv.MESSAGE_FILE_PATH,
+        `stopped at ${Number(status.SyncInfo.latest_block_height)}`,
+      );
     };
 
     const watchSharedFile = async () => {
-      if (chainEnv.MESSAGE_FILE_PATH) {
+      if (chainEnv.MESSAGE_FILE_PATH)
         for await (const { eventType } of fs.watch(
           chainEnv.MESSAGE_FILE_PATH,
         )) {
@@ -851,7 +856,6 @@ export const makeTasks = ({
             else return stopAtHeight(Number(parsed[1]));
           }
         }
-      }
     };
 
     watchSharedFile();
