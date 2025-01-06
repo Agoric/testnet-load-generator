@@ -13,7 +13,6 @@ import { makeOutputter } from '../../runner/lib/helpers/outputter.js';
 import { makeProcfsHelper } from '../../runner/lib/helpers/procsfs.js';
 import { makeTimeSource } from '../../runner/lib/helpers/time.js';
 import { makeRunStats } from '../../runner/lib/stats/run.js';
-import { makeGetEnvInfo } from '../../runner/lib/tasks/shared-env-info.js';
 
 const allowedTracingOptions = ['xsnap', 'kvstore', 'swingstore'];
 const defaultBootstrapConfigs = {
@@ -286,7 +285,7 @@ const main = async (
     fsStreamReady(outputStream),
   ]);
 
-  const { getEnvInfo, setupChain } = makeSetup({
+  const { getEnvInfo, runChain, setupChain } = makeSetup({
     spawn,
     fs,
     makeFIFO,
@@ -350,6 +349,18 @@ const main = async (
       );
       initConsole.log('chainStorageLocation: ', chainStorageLocation);
       logPerfEvent('setup-chain-finish');
+
+      logPerfEvent('run-chain-start');
+      const runChainResult = await runChain(
+        {
+          trace: makeTraceOption('chain'),
+        },
+        {
+          stdout: out,
+          stderr: err,
+        },
+      );
+      logPerfEvent('run-chain-finish');
     },
     async () => {},
   );

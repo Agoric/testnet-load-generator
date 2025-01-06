@@ -1,17 +1,32 @@
 import { join as joinPath } from 'path';
+import { promisify } from 'util';
+import { pipeline as pipelineCallback } from 'stream';
 
+import { makePromiseKit } from '@endo/promise-kit';
 import TOML from '@iarna/toml';
 
-import { sleep } from '../../runner/lib/helpers/async.js';
+import {
+  PromiseAllOrErrors,
+  sleep,
+  tryTimeout,
+} from '../../runner/lib/helpers/async.js';
+import BufferLineTransform from '../../runner/lib/helpers/buffer-line-transform.js';
 import {
   childProcessDone,
   makePrinterSpawn,
   makeSpawnWithPipedStream,
 } from '../../runner/lib/helpers/child-process.js';
-import { asBuffer } from '../../runner/lib/helpers/stream.js';
+import { fsStreamReady } from '../../runner/lib/helpers/fs.js';
 import {
+  asBuffer,
+  combineAndPipe,
+  whenStreamSteps,
+} from '../../runner/lib/helpers/stream.js';
+import {
+  cleanAsyncIterable,
   fetchAsJSON,
   getConsoleAndStdio,
+  getExtraEnvArgs,
 } from '../../runner/lib/tasks/helpers.js';
 import { makeGetEnvInfo } from '../../runner/lib/tasks/shared-env-info.js';
 
@@ -61,6 +76,9 @@ import { makeGetEnvInfo } from '../../runner/lib/tasks/shared-env-info.js';
 
 const APP_TOML_FILE_NAME = 'app.toml';
 const ADDRESS_REGEX = /^(([a-z]+:\/\/)?[^:]+)(:[0-9]+)?$/;
+const CHAIN_BLOCK_BEGIN_REGEX = /block-manager: block (\d+) begin$/;
+const CHAIN_CONSENSUS_FAILURE_BUFFER = Buffer.from('CONSENSUS FAILURE');
+const CHAIN_SWINGSET_LAUNCH_REGEX = /launch-chain: Launching SwingSet kernel$/;
 const CONFIG_FOLDER_NAME = 'config';
 const CONFIG_TOML_FILE_NAME = 'config.toml';
 const GENESIS_FILE_NAME = 'genesis.json';
@@ -97,7 +115,9 @@ const rpcAddrWithScheme = (
  */
 const makeSetup = ({
   fs,
+  getProcessInfo,
   loadgenBootstrapConfig,
+  makeFIFO,
   sdkBinaries,
   spawn: _spawn,
 }) => {
@@ -207,6 +227,176 @@ const makeSetup = ({
 
     return /** @type {ReturnType<typeof runQuery>} */ (
       /** @type {unknown} */ (response)
+    );
+  };
+
+  /**
+   * @param {object} options
+   * @param {Partial<Record<import('../../runner/lib/tasks/types.js').CosmicSwingSetTracingKeys, string>>} [options.trace]
+   * @param {number} [options.timeout]
+   * @param {object} powers
+   * @param {import("stream").Writable} powers.stderr
+   * @param {import("stream").Writable} powers.stdout
+   */
+  const runChain = async ({ timeout = 300, trace }, { stderr, stdout }) => {
+    const { console, stdio } = getConsoleAndStdio('chain', stdout, stderr);
+    const printerSpawn = makePrinterSpawn({
+      spawn,
+      print: (cmd) => console.log(cmd),
+    });
+    const pipeline = promisify(pipelineCallback);
+
+    console.log('Starting monitoring follower');
+
+    const slogFifo = await makeFIFO('chain.slog');
+    const slogReady = fsStreamReady(slogFifo);
+    const slogLines = new BufferLineTransform();
+    const slogPipeResult = pipeline(slogFifo, slogLines);
+
+    const { env: traceEnv, args: traceArgs } = getExtraEnvArgs({ trace });
+
+    const chainEnv = Object.assign(Object.create(process.env), {
+      ...additionChainEnv,
+      ...traceEnv,
+      DEBUG: 'agoric,SwingSet:vat,SwingSet:ls',
+      SLOGFILE: slogFifo.path,
+    });
+
+    const chainCp = printerSpawn(
+      sdkBinaries.cosmosChain,
+      ['start', ...traceArgs],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: chainEnv,
+        detached: true,
+      },
+    );
+
+    let stopped = false;
+    /** @type {{signal: undefined | 'SIGTERM' | 'SIGINT'}} */
+    const ignoreKill = {
+      signal: undefined,
+    };
+
+    const chainDone = childProcessDone(chainCp, {
+      ignoreKill,
+      killedExitCode: 98,
+    });
+
+    const stop = () => {
+      if (!stopped) {
+        stopped = true;
+        ignoreKill.signal = 'SIGINT';
+        chainCp.kill(ignoreKill.signal);
+      }
+    };
+
+    chainDone
+      .then(
+        () => console.log('Chain exited successfully'),
+        (error) => console.error('Chain exited with error', error),
+      )
+      .finally(() => {
+        stopped = true;
+        if (slogFifo.pending) {
+          slogLines.end();
+          slogFifo.close();
+        }
+      });
+
+    const chainCombinedElidedOutput = combineAndPipe(chainCp.stdio, stdio);
+    const [swingSetLaunched, firstBlock, outputParsed] = whenStreamSteps(
+      chainCombinedElidedOutput,
+      [
+        { matcher: CHAIN_SWINGSET_LAUNCH_REGEX },
+        { matcher: CHAIN_BLOCK_BEGIN_REGEX, resultIndex: -1 },
+      ],
+      {
+        waitEnd: false,
+        close: false,
+      },
+    );
+
+    /** @type {import('@endo/promise-kit').PromiseRecord<void>} */
+    const doneKit = makePromiseKit();
+    const done = doneKit.promise;
+
+    PromiseAllOrErrors([slogPipeResult, outputParsed, chainDone]).then(() =>
+      doneKit.resolve(),
+    );
+
+    outputParsed.then(async () => {
+      for await (const line of /** @type {AsyncIterable<Buffer>} */ (
+        chainCombinedElidedOutput
+      )) {
+        if (line.subarray(0, 100).includes(CHAIN_CONSENSUS_FAILURE_BUFFER)) {
+          doneKit.reject(new Error('Consensus Failure'));
+          chainCombinedElidedOutput.destroy();
+          stop();
+          return;
+        }
+      }
+    });
+
+    const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
+      let retries = 0;
+      while (!stopped) {
+        const result = await queryNodeStatus({ spawn: printerSpawn });
+
+        if (result.type === 'error') {
+          if (retries >= 10) {
+            console.error(
+              'Failed to query chain status.\n',
+              result.output,
+              result.error,
+            );
+            throw new Error(
+              `Process exited with non-zero code: ${result.code}`,
+            );
+          }
+
+          retries += 1;
+          await sleep(retries * 1000);
+        } else {
+          retries = 0;
+
+          if (result.status?.SyncInfo.catching_up === false) {
+            return;
+          }
+
+          await sleep(5 * 1000);
+        }
+      }
+
+      // Rethrow any error if stopped before ready
+      await chainDone;
+    });
+
+    return tryTimeout(
+      timeout * 1000,
+      async () => {
+        await swingSetLaunched;
+
+        console.log('Chain running');
+
+        const processInfo = await getProcessInfo(
+          /** @type {number} */ (chainCp.pid),
+        ).catch(() => undefined);
+
+        return {
+          stop,
+          done,
+          ready,
+          slogLines: cleanAsyncIterable(slogLines),
+          storageLocation: chainStateDir,
+          processInfo,
+        };
+      },
+      async () => {
+        chainCp.kill();
+        slogFifo.close();
+        await Promise.allSettled([done, ready]);
+      },
     );
   };
 
@@ -434,7 +624,11 @@ const makeSetup = ({
     return chainStateDir;
   };
 
-  return { getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }), setupChain };
+  return {
+    getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }),
+    runChain,
+    setupChain,
+  };
 };
 
 export default makeSetup;
