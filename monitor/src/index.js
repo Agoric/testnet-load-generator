@@ -14,7 +14,7 @@ import main from './main.js';
 import {
   flattenAggregateErrors,
   aggregateTryFinally,
-} from '../../runner/lib/helpers/async.js';
+} from './helpers/async.js';
 
 const start = async () => {
   const progname = basename(process.argv[1]);
