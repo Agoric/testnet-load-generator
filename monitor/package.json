@@ -5,6 +5,7 @@
     "@endo/promise-kit": "1.1.7",
     "@iarna/toml": "2.2.5",
     "chalk": "5.4.1",
+    "readline-transform": "1.0.0",
     "yargs-parser": "21.1.1"
   },
   "description": "Monitoring follower for the load generator",

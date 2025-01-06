@@ -1957,6 +1957,7 @@ __metadata:
     eslint-plugin-jsdoc: "npm:50.6.1"
     eslint-plugin-prettier: "npm:5.2.1"
     prettier: "npm:3.4.2"
+    readline-transform: "npm:1.0.0"
     typescript: "npm:5.7.2"
     yargs-parser: "npm:21.1.1"
   languageName: unknown
@@ -2190,6 +2191,13 @@ __metadata:
   version: 1.2.3
   resolution: "queue-microtask@npm:1.2.3"
   checksum: 10c0/900a93d3cdae3acd7d16f642c29a642aea32c2026446151f0778c62ac089d4b8e6c986811076e1ae180a694cedf077d453a11b58ff0a865629a4f82ab558e102
+  languageName: node
+  linkType: hard
+
+"readline-transform@npm:1.0.0":
+  version: 1.0.0
+  resolution: "readline-transform@npm:1.0.0"
+  checksum: 10c0/504f8918453cac366c375aef1181f312bd05df5f8049686d0b4ad5d4214ecbf844c7470af2027f19051141e6a90dac4dfb9f3e2689ba652a3cf059d730517ec5
   languageName: node
   linkType: hard
 
