@@ -222,7 +222,6 @@ const main = async (
     spawn,
     tmpDir,
   });
-  const getEnvInfo = makeGetEnvInfo({ spawn, sdkBinaries: getSDKBinaries() });
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const timeSource = makeTimeSource({ performance });
 
@@ -276,9 +275,8 @@ const main = async (
       tracing.map((val) => [val, `${outputDir}/${role}-${val}-trace`]),
     );
 
-  const [cpuTimeOffset, envInfo, loadgenBootstrapConfig] = await Promise.all([
+  const [cpuTimeOffset, loadgenBootstrapConfig] = await Promise.all([
     getCPUTimeOffset().catch(() => 0),
-    getEnvInfo({ stdout, stderr }),
     !withBootstrap
       ? undefined
       : getBootstrapConfig(bootstrapConfigs, hasCustomBootstrapConfig, {
@@ -287,6 +285,17 @@ const main = async (
     fs.mkdir(outputDir, { recursive: true }),
     fsStreamReady(outputStream),
   ]);
+
+  const { getEnvInfo, setupChain } = makeSetup({
+    spawn,
+    fs,
+    makeFIFO,
+    getProcessInfo,
+    sdkBinaries: getSDKBinaries(),
+    loadgenBootstrapConfig,
+  });
+
+  const envInfo = getEnvInfo({ stdout, stderr });
 
   rootConsole.log(`Outputting to ${outputDir}`);
   rootConsole.log(envInfo);
@@ -299,14 +308,6 @@ const main = async (
       useStateSync,
       ...envInfo,
     },
-  });
-  const { setupChain } = makeSetup({
-    spawn,
-    fs,
-    makeFIFO,
-    getProcessInfo,
-    sdkBinaries: getSDKBinaries(),
-    loadgenBootstrapConfig,
   });
 
   const cpuTimeSource = timeSource.shift(0 - cpuTimeOffset);
@@ -347,6 +348,7 @@ const main = async (
 
         () => releaseInterrupt(),
       );
+      initConsole.log('chainStorageLocation: ', chainStorageLocation);
       logPerfEvent('setup-chain-finish');
     },
     async () => {},

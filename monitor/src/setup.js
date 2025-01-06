@@ -6,12 +6,14 @@ import { sleep } from '../../runner/lib/helpers/async.js';
 import {
   childProcessDone,
   makePrinterSpawn,
+  makeSpawnWithPipedStream,
 } from '../../runner/lib/helpers/child-process.js';
 import { asBuffer } from '../../runner/lib/helpers/stream.js';
 import {
   fetchAsJSON,
   getConsoleAndStdio,
 } from '../../runner/lib/tasks/helpers.js';
+import { makeGetEnvInfo } from '../../runner/lib/tasks/shared-env-info.js';
 
 /**
  * @typedef {object} NetworkConfigRequired
@@ -93,13 +95,23 @@ const rpcAddrWithScheme = (
  * @param {import("../../runner/lib/tasks/types.js").SDKBinaries} powers.sdkBinaries
  * @param {string | void} powers.loadgenBootstrapConfig
  */
-const makeSetup = ({ fs, loadgenBootstrapConfig, sdkBinaries, spawn }) => {
+const makeSetup = ({
+  fs,
+  loadgenBootstrapConfig,
+  sdkBinaries,
+  spawn: _spawn,
+}) => {
   /** @type {Record<string, string>} */
   const additionChainEnv = {};
   const chainStateDir = String(
     process.env.AG_CHAIN_COSMOS_HOME ||
       joinPath(process.env.HOME || '~', '.ag-chain-cosmos'),
   );
+
+  const spawn = makeSpawnWithPipedStream({
+    spawn: _spawn,
+    end: false,
+  });
 
   /** @param {string} name */
   const fsExists = async (name) => {
@@ -422,7 +434,7 @@ const makeSetup = ({ fs, loadgenBootstrapConfig, sdkBinaries, spawn }) => {
     return chainStateDir;
   };
 
-  return { setupChain };
+  return { getEnvInfo: makeGetEnvInfo({ spawn, sdkBinaries }), setupChain };
 };
 
 export default makeSetup;
