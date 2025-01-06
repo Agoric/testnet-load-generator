@@ -9,20 +9,38 @@
   },
   "description": "Monitoring follower for the load generator",
   "devDependencies": {
+    "@endo/eslint-config": "0.5.3",
     "@types/node": "18.19.69",
-    "@types/readline-transform": "^1.0.0",
+    "@types/readline-transform": "1.0.5",
     "@types/yargs-parser": "21.0.3",
-    "ava": "^3.13.0"
+    "@typescript-eslint/parser": "8.19.0",
+    "eslint": "9.17.0",
+    "eslint-config-airbnb-base": "15.0.0",
+    "eslint-config-jessie": "0.0.6",
+    "eslint-config-prettier": "9.1.0",
+    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-jsdoc": "50.6.1",
+    "eslint-plugin-prettier": "5.2.1",
+    "prettier": "3.4.2",
+    "typescript": "5.7.2"
   },
   "eslintConfig": {
-    "globals": {
-      "console": "off"
+    "root": true,
+    "extends": [
+      "@endo"
+    ],
+    "rules": {
+      "prettier/prettier": "off"
     }
   },
   "license": "Apache-2.0",
   "main": "src",
   "name": "monitoring-follower",
   "packageManager": "yarn@4.5.3",
+  "prettier": {
+    "trailingComma": "all",
+    "singleQuote": true
+  },
   "private": true,
   "type": "module",
   "version": "0.1.0"

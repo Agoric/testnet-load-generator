@@ -17,5 +17,5 @@
     "strictNullChecks": true,
     "target": "esnext"
   },
-  "include": ["**/*.js"]
+  "include": ["**/*.js", "node_modules/ses/types.d.ts"]
 }
