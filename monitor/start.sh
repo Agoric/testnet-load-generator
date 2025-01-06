@@ -120,7 +120,7 @@ install_dependencies() {
 }
 
 start_runner() {
-    yarn --cwd "$DIRECTORY_PATH" install
+    yarn --cwd "$DIRECTORY_PATH" install > /dev/null
     node "$DIRECTORY_PATH/src" \
         --output-dir "$OUTPUT_DIR" --test-data.sdk-commit-time "$SDK_COMMIT_TIME" \
         --test-data.sdk-revision "$SDK_REVISION" "$@" 2>&1
