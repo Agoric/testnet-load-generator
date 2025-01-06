@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowUnreachableCode": false,
+    "baseUrl": "src",
+    "checkJs": true,
+    "exactOptionalPropertyTypes": true,
+    "isolatedModules": true,
+    "maxNodeModuleJsDepth": 0,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "noEmit": true,
+    "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "target": "esnext"
+  },
+  "include": ["**/*.js"]
+}

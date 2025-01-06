@@ -1,0 +1,29 @@
+{
+  "author": "Agoric",
+  "dependencies": {
+    "@endo/init": "1.1.7",
+    "@endo/promise-kit": "1.1.7",
+    "@iarna/toml": "2.2.5",
+    "chalk": "5.4.1",
+    "yargs-parser": "21.1.1"
+  },
+  "description": "Monitoring follower for the load generator",
+  "devDependencies": {
+    "@types/node": "18.19.69",
+    "@types/readline-transform": "^1.0.0",
+    "@types/yargs-parser": "21.0.3",
+    "ava": "^3.13.0"
+  },
+  "eslintConfig": {
+    "globals": {
+      "console": "off"
+    }
+  },
+  "license": "Apache-2.0",
+  "main": "src",
+  "name": "monitoring-follower",
+  "packageManager": "yarn@4.5.3",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0"
+}
