@@ -5,8 +5,8 @@ _agstate/yarn-links/
 .idea/
 ui/.cache/
 ui/dist/
-/results/*
-!/results/.keep
+**/results/*
+!**/results/.keep
 
 # Logs
 logs
