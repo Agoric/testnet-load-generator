@@ -16,8 +16,8 @@
     "@agoric/ertp": "*",
     "@agoric/notifier": "*",
     "@agoric/zoe": "*",
-    "@endo/eventual-send": "^0.16.9",
-    "@endo/far": "^0.2.15"
+    "@endo/eventual-send": "^1.2.7",
+    "@endo/far": "^1.1.7"
   },
   "keywords": [],
   "author": "Agoric",
