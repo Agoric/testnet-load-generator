@@ -51,9 +51,9 @@ const defaultStageDurationMinutes = 30;
 const defaultNumberStages = 4 + 2;
 
 const defaultBootstrapConfigs = {
-  loadgen: '@agoric/vats/decentral-loadgen-config.json',
-  demo: '@agoric/vats/decentral-demo-config.json',
-  base: '@agoric/vats/decentral-config.json',
+  loadgen: 'decentral-loadgen-config.json',
+  demo: 'decentral-demo-config.json',
+  base: 'decentral-config.json',
   custom: undefined,
 };
 
@@ -334,9 +334,18 @@ const main = async (progName, rawArgs, powers) => {
           Object.entries(bootstrapConfigs).map(async ([name, identifier]) => [
             name,
             identifier &&
-              (await importMetaResolve(identifier, import.meta.url).catch(
-                () => {},
-              )),
+              (await importMetaResolve(
+                `@agoric/vm-config/${identifier}`,
+                import.meta.url,
+              )
+                .catch(() =>
+                  importMetaResolve(
+                    `@agoric/vats/${identifier}`,
+                    import.meta.url,
+                  ),
+                )
+                .catch(() => importMetaResolve(identifier, import.meta.url))
+                .catch(() => {})),
           ]),
         ).then((entries) => {
           /** @type {Record<keyof typeof defaultBootstrapConfigs, string | undefined>} */
@@ -612,7 +621,7 @@ const main = async (progName, rawArgs, powers) => {
           const firstEmptyBlockKit = makePromiseKit();
           resolveFirstEmptyBlock = firstEmptyBlockKit.resolve;
 
-          await tryTimeout(2 * 60 * 1000, async () => {
+          await tryTimeout(5 * 60 * 1000, async () => {
             await Promise.race([
               done,
               slogMonitorDone,
