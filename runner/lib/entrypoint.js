@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* global process console */
-// @ts-nocheck
+
+/// <reference types="ses" />
 
 import '@endo/init';
 
@@ -43,8 +44,6 @@ process.on('uncaughtException', (error) => {
         stderr,
         fs,
         fsStream,
-        os,
-        process,
         spawn,
         tmpDir,
       }),
