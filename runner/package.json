@@ -18,10 +18,21 @@
     "lint-fix:js": "eslint --fix ."
   },
   "devDependencies": {
+    "@endo/eslint-config": "^0.5.1",
     "@types/node": "^16.9.1",
     "@types/readline-transform": "^1.0.0",
     "@types/yargs-parser": "^20.2.1",
-    "ava": "^3.13.0"
+    "@typescript-eslint/parser": "^5.30.7",
+    "ava": "^3.13.0",
+    "eslint": "^7.32.0",
+    "eslint-config-airbnb-base": "^14.0.0",
+    "eslint-config-jessie": "^0.0.6",
+    "eslint-config-prettier": "^6.15.0",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-jsdoc": "^39.3.3",
+    "eslint-plugin-prettier": "^3.4.1",
+    "prettier": "^2.5.1",
+    "typescript": "~4.7.4"
   },
   "dependencies": {
     "@endo/init": "^0.5.53",
@@ -38,7 +49,18 @@
   "keywords": [],
   "author": "Agoric",
   "license": "Apache-2.0",
+  "prettier": {
+    "trailingComma": "all",
+    "singleQuote": true
+  },
   "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@endo"
+    ],
+    "rules": {
+      "prettier/prettier": "off"
+    },
     "globals": {
       "console": "off"
     }
