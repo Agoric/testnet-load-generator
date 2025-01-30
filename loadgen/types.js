@@ -2,27 +2,24 @@
 
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/bundle-source/src/types.js';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/vats/exported.js';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/wallet/api/exported.js';
 // Unfortunately need to dig in internal types for WalletAdminFacet
 // eslint-disable-next-line import/no-extraneous-dependencies
 import '@agoric/wallet/api/src/internal-types.js';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/zoe/src/contractFacet/types.js';
-// eslint-disable-next-line import/no-extraneous-dependencies
-import '@agoric/inter-protocol/exported.js';
+
+/// <reference types="@agoric/vats/src/core/types-ambient"/>
+/// <reference types="@agoric/wallet/api/src/types-ambient"/>
+/// <reference types="@agoric/zoe/src/contractFacet/types-ambient"/>
+/// <reference types="@agoric/inter-protocol/src/vaultFactory/types-ambient"/>
 
 export {};
 
-/** @typedef {ReturnType<typeof import('@agoric/solo/src/scratch.js').default>} Scratch */
+/** @typedef {ReturnType<typeof import('@agoric/internal/src/scratch.js').default>} Scratch */
 /** @typedef {ReturnType<typeof import('@agoric/spawner').makeSpawner>} Spawner */
 /** @typedef {WalletUser & { getAdminFacet: () => WalletAdminFacet }} HomeWallet */
 
 /** @typedef { import('@agoric/inter-protocol/src/vaultFactory/vaultFactory').VaultFactoryContract['publicFacet']} VaultFactoryPublicFacet */
 /** @typedef { import('@agoric/inter-protocol/src/vaultFactory/vaultManager').CollateralManager} VaultCollateralManager */
-/** @typedef { import('@agoric/zoe/tools/priceAuthorityRegistry').PriceAuthorityRegistryAdmin } PriceAuthorityRegistryAdmin */
+/** @typedef { import('@agoric/vats/src/priceAuthorityRegistry').PriceAuthorityRegistryAdmin } PriceAuthorityRegistryAdmin */
 
 /**
  * @typedef { Pick<
@@ -50,15 +47,15 @@ export {};
 
 /**
  * @typedef {object} Home
- * @property {ERef<NameHub>} agoricNames
+ * @property {ERef<import('@agoric/vats').NameHub>} agoricNames
  * @property {ERef<unknown>} faucet
  * @property {ERef<Scratch>} scratch
  * @property {ERef<Spawner>} spawner
- * @property {ERef<VaultFactory>} [vaultFactoryCreatorFacet]
+ * @property {ERef<VaultFactoryCreatorFacet>} [vaultFactoryCreatorFacet]
  * @property {ERef<PriceAuthorityRegistryAdmin>} [priceAuthorityAdminFacet]
  * @property {ERef<HomeWallet>} wallet
  * @property {ERef<ZoeService>} zoe
- * @property {ERef<MyAddressNameAdmin>} myAddressNameAdmin
+ * @property {ERef<import('@agoric/vats').MyAddressNameAdmin>} myAddressNameAdmin
  */
 
 /**
