@@ -37,10 +37,15 @@
   dependencies:
     arrify "^1.0.1"
 
-"@endo/base64@^0.2.29":
-  version "0.2.29"
-  resolved "https://registry.yarnpkg.com/@endo/base64/-/base64-0.2.29.tgz#2877d4840a9b5f97b77b4b589c17ac7184288176"
-  integrity sha512-C0u7dP86hXM9mVvRXfUg0a9C/blmkGUOnFwYJVK0wASSQ6k9BTkq9wk91dl+fyg03aG/bAhbs/8C+J/J+qaIrw==
+"@endo/base64@^1.0.9":
+  version "1.0.9"
+  resolved "https://registry.yarnpkg.com/@endo/base64/-/base64-1.0.9.tgz#53a05e8d461a63443097165397a7aef33a11b251"
+  integrity sha512-iUZJSE3EeFxHgk5pRaj83Tv6B0BJHJOpV6UqGv0K3UBn4azQysWRR5IzlXzxcVIpPiSVlOhG/6uCqTxP5cE1ug==
+
+"@endo/env-options@^1.1.8":
+  version "1.1.8"
+  resolved "https://registry.yarnpkg.com/@endo/env-options/-/env-options-1.1.8.tgz#dbfcfbf7574f2a793155281d035c8d6f809f5828"
+  integrity sha512-Xtxw9n33I4guo8q0sDyZiRuxlfaopM454AKiELgU7l3tqsylCut6IBZ0fPy4ltSHsBib7M3yF7OEMoIuLwzWVg==
 
 "@endo/eslint-config@^0.5.1":
   version "0.5.1"
@@ -57,34 +62,36 @@
   dependencies:
     requireindex "~1.1.0"
 
-"@endo/eventual-send@^0.16.9":
-  version "0.16.9"
-  resolved "https://registry.yarnpkg.com/@endo/eventual-send/-/eventual-send-0.16.9.tgz#d0f81510a6cc3b7e160e27335f03de89a367b8d8"
-  integrity sha512-2ahhtCKpT1f/KDcD7aOhSQfBzzO8cL8m5I8baeXln20QM8mEtBIavlj8d36Pop2VSCoK2uoqAKUNAzgF/hTaIg==
-
-"@endo/init@^0.5.53":
-  version "0.5.53"
-  resolved "https://registry.yarnpkg.com/@endo/init/-/init-0.5.53.tgz#9723794e934309c156121ff19c32215157a2cfa7"
-  integrity sha512-pLN/+k9MgA2/Ot1/c0xbQNuiYFqzoNEhxWPjv9RzMD6N/PB8mvqZxvNUzNn6ViXmvGb6WVpb6JcvvLQmU6NOxw==
+"@endo/eventual-send@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@endo/eventual-send/-/eventual-send-1.3.0.tgz#752cdc3b12b09b53c3a65deb691b805502f4ac72"
+  integrity sha512-i7QsvHwwzfemeCwZZ5zySKysIr1eTSzmDup4yyxf3JXo9a5tngCtBpC/s5UJxcrvUvpZDr4ePZs9yw3eMMnCiQ==
   dependencies:
-    "@endo/base64" "^0.2.29"
-    "@endo/eventual-send" "^0.16.9"
-    "@endo/lockdown" "^0.1.25"
-    "@endo/promise-kit" "^0.2.53"
+    "@endo/env-options" "^1.1.8"
 
-"@endo/lockdown@^0.1.25":
-  version "0.1.25"
-  resolved "https://registry.yarnpkg.com/@endo/lockdown/-/lockdown-0.1.25.tgz#43361ce134dc4be9c0166caa555582a6407c7e8e"
-  integrity sha512-Jd5A3JvuRJCL8XfaMgn/BMYwLdMgnp+z5mHfpqjSL23pUZbrakcjTcwaANO7OTWsPAA9NrRErEdw6OvPkVasJQ==
+"@endo/init@^1.1.7":
+  version "1.1.8"
+  resolved "https://registry.yarnpkg.com/@endo/init/-/init-1.1.8.tgz#a6c1e8d10b1098de3d566ddd55c7b33797519ed9"
+  integrity sha512-YSbLRjjT0qv/oemzuEJTCjZKj7zFnWgBrA2Kt33RwQuJq2p24oxcUTzEzyui4Xs9yBWaG+hnWV79r1qs3cpR5w==
   dependencies:
-    ses "^0.18.1"
+    "@endo/base64" "^1.0.9"
+    "@endo/eventual-send" "^1.3.0"
+    "@endo/lockdown" "^1.0.14"
+    "@endo/promise-kit" "^1.1.9"
 
-"@endo/promise-kit@^0.2.53":
-  version "0.2.53"
-  resolved "https://registry.yarnpkg.com/@endo/promise-kit/-/promise-kit-0.2.53.tgz#96ac017474881eb0363e984ff0794c62f151e99e"
-  integrity sha512-nM3NNKWlksxDXT8o9wZ+KPvA03eToVfXaGBD9+7cqR/PXCjfeaofKquzkKJRXKYbGA3KegmmP6FCqizQjkU6MA==
+"@endo/lockdown@^1.0.14":
+  version "1.0.14"
+  resolved "https://registry.yarnpkg.com/@endo/lockdown/-/lockdown-1.0.14.tgz#8562b97e4e7da542949b711717aa5f2bbf2c930e"
+  integrity sha512-V4buKRPDY6IpeaE9jc0Gmj1bZwOLCEJdzvFoqwZA23vdX9YXhACBPc8C5/lK00HrsfOxPOCo4YmsBY8LN9RfBQ==
   dependencies:
-    ses "^0.18.1"
+    ses "^1.11.0"
+
+"@endo/promise-kit@^1.1.8", "@endo/promise-kit@^1.1.9":
+  version "1.1.9"
+  resolved "https://registry.yarnpkg.com/@endo/promise-kit/-/promise-kit-1.1.9.tgz#3f9753b28aa8a9a4fc489b33f792420e4929c77f"
+  integrity sha512-aYRw7PkFeNPqnId61/rfb97K/D8/6ttwUkfcaoft45QK69KTDeXdZ/R7ld9Oqjh3c4NkNqjDHPpB6DVHbv4WCg==
+  dependencies:
+    ses "^1.11.0"
 
 "@es-joy/jsdoccomment@~0.31.0":
   version "0.31.0"
@@ -2757,15 +2764,12 @@ serialize-error@^7.0.1:
   dependencies:
     type-fest "^0.13.1"
 
-ses@^0.15.1:
-  version "0.15.2"
-  resolved "https://registry.yarnpkg.com/ses/-/ses-0.15.2.tgz#d0739438cf0fe07f50f58d32e61036470095d6c2"
-  integrity sha512-g+eZO1YrFSAo8lDqoS3ibiF8zLRBjfTG6d4o0gq6HIWdcA6ejlbCM1K+6R8VZ/Krfr31xs+Gb8v7BqiuxRK4gA==
-
-ses@^0.18.1:
-  version "0.18.1"
-  resolved "https://registry.yarnpkg.com/ses/-/ses-0.18.1.tgz#cd0e6460672f12fd639e9c15d681d45d16901c05"
-  integrity sha512-TySWbVcVDL7V/5lSoPz2EgTirn9APy6ib7lYMsiQ8OkEMA4dVwc1a3REHEzOqjQ8g7f0bLWErOt5IbIMsxf5aQ==
+ses@^1.10.0, ses@^1.11.0:
+  version "1.11.0"
+  resolved "https://registry.yarnpkg.com/ses/-/ses-1.11.0.tgz#9ae54b18b48de3b962281970bfa01a91af108bd2"
+  integrity sha512-FydfDDnciRdVdFHM5u2jU1Qp+ZZyGGXYdEOy83d4CSPSxxEk5bzBd3s2yEsA1Q5TdaDxDN/SaOihx5E1gktIKQ==
+  dependencies:
+    "@endo/env-options" "^1.1.8"
 
 shebang-command@^2.0.0:
   version "2.0.0"
