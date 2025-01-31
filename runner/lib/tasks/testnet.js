@@ -295,6 +295,7 @@ export const makeTasks = ({
             .join(',');
           configStatesync.trust_height = trustHeight;
           configStatesync.trust_hash = trustHash;
+          configStatesync.trust_period = '17520h0m0s';
         }
 
         await fs.writeFile(configPath, TOML.stringify(config));
