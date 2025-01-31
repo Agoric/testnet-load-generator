@@ -165,7 +165,17 @@ const getSDKBinaries = async () => {
   const srcHelpers = 'agoric/src/helpers.js';
   const libHelpers = 'agoric/lib/helpers.js';
   try {
-    const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
+    const cliHelpers = await import(srcHelpers)
+      .catch(() => import(libHelpers))
+      .catch((e) => {
+        if (process.env.SDK_SRC) {
+          return import(
+            `${process.env.SDK_SRC}/packages/agoric-cli/src/helpers.js`
+          );
+        } else {
+          throw e;
+        }
+      });
     return cliHelpers.getSDKBinaries();
   } catch (err) {
     // Older SDKs were only at lib
@@ -343,6 +353,14 @@ const main = async (progName, rawArgs, powers) => {
                     `@agoric/vats/${identifier}`,
                     import.meta.url,
                   ),
+                )
+                .catch((e) =>
+                  process.env.SDK_SRC
+                    ? importMetaResolve(
+                        `${process.env.SDK_SRC}/packages/vm-config/${identifier}`,
+                        import.meta.url,
+                      )
+                    : Promise.reject(e),
                 )
                 .catch(() => importMetaResolve(identifier, import.meta.url))
                 .catch(() => {})),
