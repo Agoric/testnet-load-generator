@@ -35,13 +35,8 @@ fi
 SDK_REVISION=$(git -C "${SDK_SRC}" rev-parse --short HEAD)
 SDK_COMMIT_TIME=$(git -C "${SDK_SRC}" show -s --format=%ct ${SDK_REVISION})
 
-AGORIC_BIN_DIR=/tmp/agoric-sdk-bin-${SDK_REVISION}
-mkdir -p ${AGORIC_BIN_DIR}
-
 OUTPUT_DIR="${OUTPUT_DIR:-/tmp/agoric-sdk-out-${SDK_REVISION}}"
 mkdir -p "${OUTPUT_DIR}"
-
-export PATH="$AGORIC_BIN_DIR:$PATH"
 
 if [ ! -f "${OUTPUT_DIR}/.nvmrc" ] ; then
     SDK_NODE16_REVISION=475d7ff1eb2371aa9e0c0dc7a50644089db351f6
@@ -73,11 +68,6 @@ if [ "x$SDK_BUILD" != "x0" ]; then
     make -C packages/cosmic-swingset
 fi
 
-rm -f "${AGORIC_BIN_DIR}/agoric"
-yarn link-cli "${AGORIC_BIN_DIR}/agoric"
-ln -sf "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR}/ag-chain-cosmos"
-
 cd "$LOADGEN_DIR"
-agoric install
 (cd runner && yarn install)
 exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" --test-data.sdk-revision=${SDK_REVISION} --test-data.sdk-commit-time=${SDK_COMMIT_TIME} "$@" 2>&1 
