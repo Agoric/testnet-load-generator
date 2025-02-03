@@ -9,11 +9,11 @@ on:
   pull_request:
 
 jobs:
-  build:
+  dapp:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [16.x]
+        node-version: [18.18]
     steps:
       - name: Checkout dapp
         uses: actions/checkout@v2
