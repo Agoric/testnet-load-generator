@@ -39,6 +39,8 @@ import { makeTimeSource } from './helpers/time.js';
 
 /** @typedef {import('./helpers/async.js').Task} Task */
 
+const FILE_ENCODING = 'utf-8';
+
 const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
 
@@ -218,8 +220,10 @@ const main = async (progName, rawArgs, powers) => {
       'duplicate-arguments-array': false,
       'flatten-duplicate-arrays': false,
       'greedy-arrays': true,
+      'strip-dashed': true,
     },
   });
+  const messageFilePath = process.env.MESSAGE_FILE_PATH;
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
@@ -266,6 +270,17 @@ const main = async (progName, rawArgs, powers) => {
         await childProcessDone(spawn('tar', ['-cSJf', destination, tmp]));
       }, cleanup),
     };
+  };
+
+  /**
+   * @param {string} message
+   */
+  const writeMessageToMessageFile = (message) => {
+    if (!messageFilePath) throw Error('MESSAGE_FILE_PATH not present in env');
+
+    return fs.writeFile(messageFilePath, message, {
+      encoding: FILE_ENCODING,
+    });
   };
 
   const { console: topConsole } = makeConsole();
@@ -472,6 +487,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
    * @param {string | void} config.chainStorageLocation
+   * @param {boolean} config.integrateAcceptance
    */
   const runStage = async (config) => {
     const {
@@ -482,6 +498,7 @@ const main = async (progName, rawArgs, powers) => {
       loadgenWindDown,
       withMonitor,
       chainStorageLocation,
+      integrateAcceptance,
     } = config;
     currentStageTimeSource = timeSource.shift();
 
@@ -500,6 +517,49 @@ const main = async (progName, rawArgs, powers) => {
       stageIndex: currentStage,
       stageConfig: config,
     });
+
+    /**
+     * @type {Task}
+     *
+     * This task will always run in two stages
+     *
+     * The first stage will signal to the tests runner that the
+     * follower has caught up to the chain (this catching up will
+     * be covered by the `spawnChain` task) and exit
+     *
+     * The second stage will keep running the follower and wait
+     * for a stop signal from the test runner at which point it
+     * will stop the chain process and exit
+     */
+    const spwanAcceptance = async (nextStep) => {
+      /**
+       * @param {RegExp} [regex]
+       */
+      const waitForMessageFromMessageFile = async (regex) => {
+        if (!messageFilePath)
+          throw Error('MESSAGE_FILE_PATH not present in env');
+
+        for await (const { eventType } of fs.watch(messageFilePath))
+          if (eventType === 'change') {
+            const fileContent = (
+              await fs.readFile(messageFilePath, FILE_ENCODING)
+            ).trim();
+            if (regex && !regex.test(fileContent))
+              stageConsole.warn(
+                'Ignoring unsupported file content: ',
+                fileContent,
+              );
+            else return fileContent;
+          }
+
+        return undefined;
+      };
+
+      if (currentStage === 1) writeMessageToMessageFile('ready');
+      else waitForMessageFromMessageFile(/stop/);
+
+      await nextStep(Promise.resolve());
+    };
 
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
@@ -914,9 +974,8 @@ const main = async (progName, rawArgs, powers) => {
           tasks.push(spawnChain);
         }
 
-        if (!chainOnly) {
-          tasks.push(spawnClient, spawnLoadgen);
-        }
+        if (!chainOnly) tasks.push(spawnClient, spawnLoadgen);
+        else if (integrateAcceptance) tasks.push(spwanAcceptance);
 
         if (tasks.length === 1) {
           throw new Error('Nothing to do');
@@ -960,6 +1019,11 @@ const main = async (progName, rawArgs, powers) => {
       });
 
       const withMonitor = coerceBooleanOption(argv.monitor, true);
+      const integrateAcceptance = coerceBooleanOption(
+        argv.integrateAcceptance,
+        false,
+        true,
+      );
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       /** @type {string | void} */
       let chainStorageLocation;
@@ -1162,6 +1226,7 @@ const main = async (progName, rawArgs, powers) => {
               loadgenWindDown,
               withMonitor,
               chainStorageLocation,
+              integrateAcceptance,
             }),
           async (...stageError) => {
             const suffix = `-stage-${currentStage}`;
@@ -1169,6 +1234,9 @@ const main = async (progName, rawArgs, powers) => {
               stageError.length > 0 &&
               /** @type {NodeJS.ErrnoException} */ (stageError[0]).code !==
                 'ERR_SCRIPT_EXECUTION_INTERRUPTED';
+
+            if (integrateAcceptance)
+              writeMessageToMessageFile(`exit code ${Number(hasError)}`);
 
             if (!saveStorage && !hasError) {
               return;
