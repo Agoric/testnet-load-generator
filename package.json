@@ -8,8 +8,7 @@
     "_agstate/agoric-servers",
     "loadgen",
     "loadgen/contract",
-    "loadgen/firebase/admin",
-    "runner"
+    "loadgen/firebase/admin"
   ],
   "dependencies": {
     "agoric": "*"
