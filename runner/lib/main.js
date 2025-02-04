@@ -273,11 +273,13 @@ const main = async (progName, rawArgs, powers) => {
   };
 
   /**
+   * @param {ReturnType<typeof makeConsole>['console']} console
    * @param {string} message
    */
-  const writeMessageToMessageFile = (message) => {
+  const writeMessageToMessageFile = (console, message) => {
     if (!messageFilePath) throw Error('MESSAGE_FILE_PATH not present in env');
 
+    console.log(`Writing message "${message}" to file "${messageFilePath}"`)
     return fs.writeFile(messageFilePath, message, {
       encoding: FILE_ENCODING,
     });
@@ -555,8 +557,8 @@ const main = async (progName, rawArgs, powers) => {
         return undefined;
       };
 
-      if (!currentStage) writeMessageToMessageFile('ready');
-      else waitForMessageFromMessageFile(/stop/);
+      if (!currentStage) await writeMessageToMessageFile(stageConsole, 'ready');
+      else await waitForMessageFromMessageFile(/stop/);
 
       await nextStep(Promise.resolve());
     };
@@ -1276,7 +1278,7 @@ const main = async (progName, rawArgs, powers) => {
     async (error) => {
       logPerfEvent('finish', { stats: runStats });
       if (integrateAcceptance)
-        writeMessageToMessageFile(`exit code ${Number(!!error)}`);
+        writeMessageToMessageFile(topConsole, `exit code ${Number(!!error)}`);
 
       outputStream.end();
 
