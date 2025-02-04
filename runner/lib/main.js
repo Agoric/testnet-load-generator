@@ -279,7 +279,7 @@ const main = async (progName, rawArgs, powers) => {
   const writeMessageToMessageFile = (console, message) => {
     if (!messageFilePath) throw Error('MESSAGE_FILE_PATH not present in env');
 
-    console.log(`Writing message "${message}" to file "${messageFilePath}"`)
+    console.log(`Writing message "${message}" to file "${messageFilePath}"`);
     return fs.writeFile(messageFilePath, message, {
       encoding: FILE_ENCODING,
     });
@@ -523,7 +523,7 @@ const main = async (progName, rawArgs, powers) => {
     /**
      * @type {Task}
      *
-     * This task will always run in two stages
+     * This task will always run in three stages
      *
      * The first stage will signal to the tests runner that the
      * follower has caught up to the chain (this catching up will
@@ -541,6 +541,10 @@ const main = async (progName, rawArgs, powers) => {
         if (!messageFilePath)
           throw Error('MESSAGE_FILE_PATH not present in env');
 
+        stageConsole.log(
+          `Starting to wait for message of format "${regex}" from file "${messageFilePath}"`,
+        );
+
         for await (const { eventType } of fs.watch(messageFilePath))
           if (eventType === 'change') {
             const fileContent = (
@@ -557,8 +561,9 @@ const main = async (progName, rawArgs, powers) => {
         return undefined;
       };
 
-      if (!currentStage) await writeMessageToMessageFile(stageConsole, 'ready');
-      else await waitForMessageFromMessageFile(/stop/);
+      if (currentStage === 1)
+        await writeMessageToMessageFile(stageConsole, 'ready');
+      else if (currentStage === 2) await waitForMessageFromMessageFile(/stop/);
 
       await nextStep(Promise.resolve());
     };
