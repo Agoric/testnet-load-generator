@@ -38,7 +38,6 @@
     "@endo/init": "^1.1.8",
     "@endo/promise-kit": "^1.1.9",
     "@iarna/toml": "^2.2.3",
-    "agoric": "0.22.0-u17.1",
     "anylogger": "^0.21.0",
     "chalk": "^2.4.2",
     "deterministic-json": "^1.0.5",
