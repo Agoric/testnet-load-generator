@@ -1288,6 +1288,7 @@ const main = async (progName, rawArgs, powers) => {
       outputStream.end();
 
       const { console } = makeConsole('summary');
+      if (error) console.error('Error: ', error);
 
       await aggregateTryFinally(
         async () => {
