@@ -1005,6 +1005,11 @@ const main = async (progName, rawArgs, powers) => {
       },
     );
   };
+  const integrateAcceptance = coerceBooleanOption(
+    argv.integrateAcceptance,
+    false,
+    true,
+  );
 
   // Main
 
@@ -1019,11 +1024,6 @@ const main = async (progName, rawArgs, powers) => {
       });
 
       const withMonitor = coerceBooleanOption(argv.monitor, true);
-      const integrateAcceptance = coerceBooleanOption(
-        argv.integrateAcceptance,
-        false,
-        true,
-      );
       const globalChainOnly = coerceBooleanOption(argv.chainOnly, undefined);
       /** @type {string | void} */
       let chainStorageLocation;
@@ -1235,9 +1235,6 @@ const main = async (progName, rawArgs, powers) => {
               /** @type {NodeJS.ErrnoException} */ (stageError[0]).code !==
                 'ERR_SCRIPT_EXECUTION_INTERRUPTED';
 
-            if (integrateAcceptance)
-              writeMessageToMessageFile(`exit code ${Number(hasError)}`);
-
             if (!saveStorage && !hasError) {
               return;
             }
@@ -1276,8 +1273,10 @@ const main = async (progName, rawArgs, powers) => {
 
       runStats.recordEnd(timeSource.getTime());
     },
-    async () => {
+    async (error) => {
       logPerfEvent('finish', { stats: runStats });
+      if (integrateAcceptance)
+        writeMessageToMessageFile(`exit code ${Number(!!error)}`);
 
       outputStream.end();
 
