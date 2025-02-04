@@ -35,8 +35,8 @@
     "typescript": "~4.7.4"
   },
   "dependencies": {
-    "@endo/init": "^0.5.53",
-    "@endo/promise-kit": "^0.2.53",
+    "@endo/init": "^1.1.8",
+    "@endo/promise-kit": "^1.1.9",
     "@iarna/toml": "^2.2.3",
     "agoric": "0.22.0-u17.1",
     "anylogger": "^0.21.0",
@@ -44,7 +44,7 @@
     "deterministic-json": "^1.0.5",
     "inquirer": "^6.3.1",
     "readline-transform": "^1.0.0",
-    "ses": "^0.15.1",
+    "ses": "^1.11.0",
     "yargs-parser": "^20.2.2"
   },
   "keywords": [],
