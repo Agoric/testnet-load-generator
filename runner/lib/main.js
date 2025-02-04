@@ -555,7 +555,7 @@ const main = async (progName, rawArgs, powers) => {
         return undefined;
       };
 
-      if (currentStage === 1) writeMessageToMessageFile('ready');
+      if (!currentStage) writeMessageToMessageFile('ready');
       else waitForMessageFromMessageFile(/stop/);
 
       await nextStep(Promise.resolve());
