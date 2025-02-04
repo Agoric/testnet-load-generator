@@ -560,7 +560,6 @@ ${chainName} chain does not yet know of address ${soloAddr}
           retries = 0;
 
           if (result.status.SyncInfo.catching_up === false) {
-            console.log('Node info: ', JSON.stringify(result));
             return;
           }
 
