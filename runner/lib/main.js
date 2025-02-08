@@ -39,6 +39,8 @@ import { makeTimeSource } from './helpers/time.js';
 
 /** @typedef {import('./helpers/async.js').Task} Task */
 
+const FILE_ENCODING = 'utf-8';
+
 const pipeline = promisify(pipelineCallback);
 const finished = promisify(finishedCallback);
 
@@ -218,8 +220,10 @@ const main = async (progName, rawArgs, powers) => {
       'duplicate-arguments-array': false,
       'flatten-duplicate-arrays': false,
       'greedy-arrays': true,
+      'strip-dashed': true,
     },
   });
+  const messageFilePath = process.env.MESSAGE_FILE_PATH;
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
@@ -266,6 +270,19 @@ const main = async (progName, rawArgs, powers) => {
         await childProcessDone(spawn('tar', ['-cSJf', destination, tmp]));
       }, cleanup),
     };
+  };
+
+  /**
+   * @param {ReturnType<typeof makeConsole>['console']} console
+   * @param {string} message
+   */
+  const writeMessageToMessageFile = (console, message) => {
+    if (!messageFilePath) throw Error('MESSAGE_FILE_PATH not present in env');
+
+    console.log(`Writing message "${message}" to file "${messageFilePath}"`);
+    return fs.writeFile(messageFilePath, message, {
+      encoding: FILE_ENCODING,
+    });
   };
 
   const { console: topConsole } = makeConsole();
@@ -472,6 +489,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
    * @param {string | void} config.chainStorageLocation
+   * @param {boolean} config.integrateAcceptance
    */
   const runStage = async (config) => {
     const {
@@ -482,6 +500,7 @@ const main = async (progName, rawArgs, powers) => {
       loadgenWindDown,
       withMonitor,
       chainStorageLocation,
+      integrateAcceptance,
     } = config;
     currentStageTimeSource = timeSource.shift();
 
@@ -500,6 +519,57 @@ const main = async (progName, rawArgs, powers) => {
       stageIndex: currentStage,
       stageConfig: config,
     });
+
+    /**
+     * @type {Task}
+     *
+     * This task will always run in three stages
+     *
+     * The first stage will wait for the state sync restore
+     *
+     * The second stage will wait for this follower to catch
+     * up and then signal to the tests runner that the
+     * follower has caught up to the chain (this catching up will
+     * be covered by the `spawnChain` task) and exit
+     *
+     * The third stage will keep running the follower and wait
+     * for a stop signal from the test runner at which point it
+     * will stop the chain process and exit
+     */
+    const spwanAcceptance = async (nextStep) => {
+      /**
+       * @param {RegExp} [regex]
+       */
+      const waitForMessageFromMessageFile = async (regex) => {
+        if (!messageFilePath)
+          throw Error('MESSAGE_FILE_PATH not present in env');
+
+        stageConsole.log(
+          `Starting to wait for message of format "${regex}" from file "${messageFilePath}"`,
+        );
+
+        for await (const { eventType } of fs.watch(messageFilePath))
+          if (eventType === 'change') {
+            const fileContent = (
+              await fs.readFile(messageFilePath, FILE_ENCODING)
+            ).trim();
+            if (regex && !regex.test(fileContent))
+              stageConsole.warn(
+                'Ignoring unsupported file content: ',
+                fileContent,
+              );
+            else return fileContent;
+          }
+
+        return undefined;
+      };
+
+      if (currentStage === 1)
+        await writeMessageToMessageFile(stageConsole, 'ready');
+      else if (currentStage === 2) await waitForMessageFromMessageFile(/stop/);
+
+      await nextStep(Promise.resolve());
+    };
 
     /** @type {Task} */
     const spawnChain = async (nextStep) => {
@@ -914,9 +984,8 @@ const main = async (progName, rawArgs, powers) => {
           tasks.push(spawnChain);
         }
 
-        if (!chainOnly) {
-          tasks.push(spawnClient, spawnLoadgen);
-        }
+        if (!chainOnly) tasks.push(spawnClient, spawnLoadgen);
+        else if (integrateAcceptance) tasks.push(spwanAcceptance);
 
         if (tasks.length === 1) {
           throw new Error('Nothing to do');
@@ -946,6 +1015,11 @@ const main = async (progName, rawArgs, powers) => {
       },
     );
   };
+  const integrateAcceptance = coerceBooleanOption(
+    argv.integrateAcceptance,
+    false,
+    true,
+  );
 
   // Main
 
@@ -1162,6 +1236,7 @@ const main = async (progName, rawArgs, powers) => {
               loadgenWindDown,
               withMonitor,
               chainStorageLocation,
+              integrateAcceptance,
             }),
           async (...stageError) => {
             const suffix = `-stage-${currentStage}`;
@@ -1208,8 +1283,10 @@ const main = async (progName, rawArgs, powers) => {
 
       runStats.recordEnd(timeSource.getTime());
     },
-    async () => {
+    async (error) => {
       logPerfEvent('finish', { stats: runStats });
+      if (integrateAcceptance)
+        writeMessageToMessageFile(topConsole, `exit code ${Number(!!error)}`);
 
       outputStream.end();
 
