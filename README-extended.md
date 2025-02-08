@@ -42,6 +42,7 @@ Currently the following options are available:
 - `--stage.n.chain-only`: boolean flag specifying if the stage should only run the chain node and not start a client or loadgen. Defaults to `true` for first and last stage. Defaults to `false` for other stages, or if `--stage.n.loadgen.*` is specified.
 - `--stage.n.save-storage`: boolean indicating if the storage of the chain node should be saved at the end of the stage. Defaults to `true` for non stage-only stages (where the loadgen runs), as well as for stage 0 (to capture local bootstrap).
 - `--stage.n.duration`: the time in minutes for the stage duration. Defaults to the shared duration above for non chain-only stages, or 0 (immediate stop after start) otherwise. Use a negative value to run until interrupted.
+- `--integrate-acceptance`: start the chain in follower mode. In this mode, the chain will first use the state sync restoration, then it will catch up to the chain and write a message `ready` to the file pointed by `MESSAGE_FILE_PATH` (this env var should exist or the flow will fail) and finally waits for the `stop` message from the the file pointed by `MESSAGE_FILE_PATH` at which point it exits.
 
 ### `start.sh` script
 
