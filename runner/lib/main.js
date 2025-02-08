@@ -525,11 +525,14 @@ const main = async (progName, rawArgs, powers) => {
      *
      * This task will always run in three stages
      *
-     * The first stage will signal to the tests runner that the
+     * The first stage will wait for the state sync restore
+     *
+     * The second stage will wait for this follower to catch
+     * up and then signal to the tests runner that the
      * follower has caught up to the chain (this catching up will
      * be covered by the `spawnChain` task) and exit
      *
-     * The second stage will keep running the follower and wait
+     * The third stage will keep running the follower and wait
      * for a stop signal from the test runner at which point it
      * will stop the chain process and exit
      */
