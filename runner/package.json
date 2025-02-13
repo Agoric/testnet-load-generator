@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Runner for the load generator",
+  "packageManager": "yarn@4.6.0",
   "parsers": {
     "js": "mjs"
   },
