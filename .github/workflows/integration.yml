@@ -54,6 +54,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-go-
 
+      # Before setup-node because that action runs `yarn cache dir`. See https://github.com/actions/setup-node/issues/480#issuecomment-1915448139
+      - run: corepack enable
+        shell: bash
+
       - uses: actions/setup-node@v3
         with:
           node-version: 18.18
