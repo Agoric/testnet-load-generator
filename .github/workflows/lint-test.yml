@@ -48,7 +48,9 @@ jobs:
           submodules: 'true'
           path: agoric-sdk
           ref: ${{steps.get-sdk-branch.outputs.result}}
-
+      # Before setup-node because that action runs `yarn cache dir`. See https://github.com/actions/setup-node/issues/480#issuecomment-1915448139
+      - run: corepack enable
+        shell: bash
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v1
         with:
@@ -95,6 +97,9 @@ jobs:
         uses: actions/checkout@v2
         with:
           path: 'testnet-load-generator'
+      # Before setup-node because that action runs `yarn cache dir`. See https://github.com/actions/setup-node/issues/480#issuecomment-1915448139
+      - run: corepack enable
+        shell: bash
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v1
         with:
