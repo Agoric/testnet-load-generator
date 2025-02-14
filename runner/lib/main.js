@@ -180,6 +180,7 @@ const getSDKBinaries = async () => {
       );
     return cliHelpers.getSDKBinaries();
   } catch (err) {
+    console.log('err: ', err);
     // Older SDKs were only at lib
     const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
     // Prefer CJS as some versions have both and must use .cjs for RESM
