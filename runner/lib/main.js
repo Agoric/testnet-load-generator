@@ -167,7 +167,6 @@ const getSDKBinaries = async () => {
   const helpersSource = 'src/helpers.js';
   const srcHelpers = `agoric/${helpersSource}`;
   const libHelpers = 'agoric/lib/helpers.js';
-  console.log('process.env.SDK_SRC: ', process.env.SDK_SRC);
   try {
     const cliHelpers = await import(srcHelpers)
       .catch(() => import(libHelpers))
@@ -180,7 +179,6 @@ const getSDKBinaries = async () => {
       );
     return cliHelpers.getSDKBinaries();
   } catch (err) {
-    console.log('err: ', err);
     // Older SDKs were only at lib
     const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
     // Prefer CJS as some versions have both and must use .cjs for RESM
@@ -434,6 +432,9 @@ const main = async (progName, rawArgs, powers) => {
           }
         }),
   ]);
+
+  console.log('sdkBinaries: ', sdkBinaries);
+  console.log('argv.acceptanceIntegrationMessageFile: ', argv.acceptanceIntegrationMessageFile);
 
   const { getEnvInfo, setupTasks, runChain, runClient, runLoadgen } = makeTasks(
     {
