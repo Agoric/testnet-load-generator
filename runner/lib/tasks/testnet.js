@@ -234,7 +234,7 @@ export const makeTasks = ({
         const configPath = joinPath(chainStateDir, 'config', 'config.toml');
 
         console.log('Patching config');
-        const config = /** @type {import("./types.d.ts").CometBFTConfig} */ (
+        const config = /** @type {import("./types.js").CometBFTConfig} */ (
           await TOML.parse.async(await fs.readFile(configPath, 'utf-8'))
         );
         config.p2p.persistent_peers = peers.join(',');

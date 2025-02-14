@@ -233,6 +233,10 @@ const main = async (progName, rawArgs, powers) => {
     },
   });
 
+  /** @type {string | undefined} */
+  const acceptanceIntegrationMessageFile =
+    argv.acceptanceIntegrationMessageFile;
+
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
     fs,
@@ -279,6 +283,7 @@ const main = async (progName, rawArgs, powers) => {
       }, cleanup),
     };
   };
+
   /**
    * @param {ReturnType<typeof makeConsole>['console']} console
    * @param {RegExp} [regex]
@@ -545,7 +550,7 @@ const main = async (progName, rawArgs, powers) => {
       loadgenWindDown,
       withMonitor,
       chainStorageLocation,
-      acceptanceIntegrationMessageFile,
+      acceptanceIntegrationMessageFile: messageFilePath,
     } = config;
     currentStageTimeSource = timeSource.shift();
 
@@ -1010,7 +1015,7 @@ const main = async (progName, rawArgs, powers) => {
         }
 
         if (!chainOnly) tasks.push(spawnClient, spawnLoadgen);
-        else if (acceptanceIntegrationMessageFile) tasks.push(spwanAcceptance);
+        else if (messageFilePath) tasks.push(spwanAcceptance);
 
         if (tasks.length === 1) {
           throw new Error('Nothing to do');
@@ -1040,9 +1045,6 @@ const main = async (progName, rawArgs, powers) => {
       },
     );
   };
-  /** @type {string | undefined} */
-  const acceptanceIntegrationMessageFile =
-    argv.acceptanceIntegrationMessageFile;
 
   // Main
 
@@ -1306,7 +1308,7 @@ const main = async (progName, rawArgs, powers) => {
 
       runStats.recordEnd(timeSource.getTime());
     },
-    async (error) => {
+    async () => {
       logPerfEvent('finish', { stats: runStats });
 
       outputStream.end();

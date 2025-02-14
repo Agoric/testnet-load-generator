@@ -84,6 +84,7 @@ export interface OrchestratorTasks {
   runLoadgen(options: TaskBaseOptions): Promise<RunLoadgenResult>;
 }
 
+/* eslint-disable camelcase */
 export type CometBFTConfig = {
   proxy_app: string;
   moniker: string;
@@ -201,3 +202,4 @@ export type CometBFTConfig = {
     namespace: string;
   };
 };
+/* eslint-enable camelcase */
