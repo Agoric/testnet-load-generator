@@ -167,6 +167,7 @@ const getSDKBinaries = async () => {
   const helpersSource = 'src/helpers.js';
   const srcHelpers = `agoric/${helpersSource}`;
   const libHelpers = 'agoric/lib/helpers.js';
+  console.log('process.env.SDK_SRC: ', process.env.SDK_SRC);
   try {
     const cliHelpers = await import(srcHelpers)
       .catch(() => import(libHelpers))
