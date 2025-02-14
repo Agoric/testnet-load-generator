@@ -234,16 +234,12 @@ export const makeTasks = ({
         const configPath = joinPath(chainStateDir, 'config', 'config.toml');
 
         console.log('Patching config');
-        const config = await TOML.parse.async(
-          await fs.readFile(configPath, 'utf-8'),
+        const config = /** @type {import("./types.d.ts").CometBFTConfig} */ (
+          await TOML.parse.async(await fs.readFile(configPath, 'utf-8'))
         );
-        const configP2p = /** @type {import('@iarna/toml').JsonMap} */ (
-          config.p2p
-        );
-        configP2p.persistent_peers = peers.join(',');
-        configP2p.seeds = seeds.join(',');
-        configP2p.addr_book_strict = false;
-        delete config.log_level;
+        config.p2p.persistent_peers = peers.join(',');
+        config.p2p.seeds = seeds.join(',');
+        config.p2p.addr_book_strict = false;
 
         if (!useStateSync) {
           console.log('Fetching genesis');
@@ -286,15 +282,13 @@ export const makeTasks = ({
           const stateSyncRpc =
             rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
 
-          const configStatesync = /** @type {import('@iarna/toml').JsonMap} */ (
-            config.statesync
-          );
-          configStatesync.enable = true;
-          configStatesync.rpc_servers = stateSyncRpc
+          config.statesync.enable = true;
+          config.statesync.rpc_servers = stateSyncRpc
             .map((rpcAddr) => rpcAddrWithScheme(rpcAddr))
             .join(',');
-          configStatesync.trust_height = trustHeight;
-          configStatesync.trust_hash = trustHash;
+          config.statesync.trust_height = trustHeight;
+          config.statesync.trust_hash = trustHash;
+          config.statesync.trust_period = '17280h0m0s'; // 2 years
         }
 
         await fs.writeFile(configPath, TOML.stringify(config));

@@ -164,10 +164,19 @@ const makeInterrupterKit = ({ console }) => {
  * @returns {Promise<import('./tasks/types.js').SDKBinaries>}
  */
 const getSDKBinaries = async () => {
-  const srcHelpers = 'agoric/src/helpers.js';
+  const helpersSource = 'src/helpers.js';
+  const srcHelpers = `agoric/${helpersSource}`;
   const libHelpers = 'agoric/lib/helpers.js';
   try {
-    const cliHelpers = await import(srcHelpers).catch(() => import(libHelpers));
+    const cliHelpers = await import(srcHelpers)
+      .catch(() => import(libHelpers))
+      .catch((e) =>
+        process.env.SDK_SRC
+          ? import(
+              `${process.env.SDK_SRC}/packages/agoric-cli/${helpersSource}`
+            )
+          : Promise.reject(e),
+      );
     return cliHelpers.getSDKBinaries();
   } catch (err) {
     // Older SDKs were only at lib
@@ -223,7 +232,6 @@ const main = async (progName, rawArgs, powers) => {
       'strip-dashed': true,
     },
   });
-  const messageFilePath = process.env.MESSAGE_FILE_PATH;
 
   const { getProcessInfo, getCPUTimeOffset } = makeProcfsHelper({ fs, spawn });
   const { dirDiskUsage, makeFIFO } = makeFsHelper({
@@ -271,16 +279,45 @@ const main = async (progName, rawArgs, powers) => {
       }, cleanup),
     };
   };
+  /**
+   * @param {ReturnType<typeof makeConsole>['console']} console
+   * @param {RegExp} [regex]
+   */
+  const waitForMessageFromMessageFile = async (console, regex) => {
+    if (!acceptanceIntegrationMessageFile)
+      throw Error("acceptance-integration-message-file flag wasn't set");
+
+    console.log(
+      `Starting to wait for message of format "${regex}" from file "${acceptanceIntegrationMessageFile}"`,
+    );
+
+    for await (const { eventType } of fs.watch(
+      acceptanceIntegrationMessageFile,
+    ))
+      if (eventType === 'change') {
+        const fileContent = (
+          await fs.readFile(acceptanceIntegrationMessageFile, FILE_ENCODING)
+        ).trim();
+        if (regex && !regex.test(fileContent))
+          console.warn('Ignoring unsupported file content: ', fileContent);
+        else return fileContent;
+      }
+
+    return undefined;
+  };
 
   /**
    * @param {ReturnType<typeof makeConsole>['console']} console
    * @param {string} message
    */
   const writeMessageToMessageFile = (console, message) => {
-    if (!messageFilePath) throw Error('MESSAGE_FILE_PATH not present in env');
+    if (!acceptanceIntegrationMessageFile)
+      throw Error("acceptance-integration-message-file flag wasn't set");
 
-    console.log(`Writing message "${message}" to file "${messageFilePath}"`);
-    return fs.writeFile(messageFilePath, message, {
+    console.log(
+      `Writing message "${message}" to file "${acceptanceIntegrationMessageFile}"`,
+    );
+    return fs.writeFile(acceptanceIntegrationMessageFile, message, {
       encoding: FILE_ENCODING,
     });
   };
@@ -360,6 +397,14 @@ const main = async (progName, rawArgs, powers) => {
                     `@agoric/vats/${identifier}`,
                     import.meta.url,
                   ),
+                )
+                .catch((e) =>
+                  process.env.SDK_SRC
+                    ? importMetaResolve(
+                        `${process.env.SDK_SRC}/packages/vm-config/${identifier}`,
+                        import.meta.url,
+                      )
+                    : Promise.reject(e),
                 )
                 .catch(() => importMetaResolve(identifier, import.meta.url))
                 .catch(() => {})),
@@ -489,7 +534,7 @@ const main = async (progName, rawArgs, powers) => {
    * @param {boolean | undefined} [config.loadgenWindDown]
    * @param {boolean} config.withMonitor
    * @param {string | void} config.chainStorageLocation
-   * @param {boolean} config.integrateAcceptance
+   * @param {string} [config.acceptanceIntegrationMessageFile]
    */
   const runStage = async (config) => {
     const {
@@ -500,7 +545,7 @@ const main = async (progName, rawArgs, powers) => {
       loadgenWindDown,
       withMonitor,
       chainStorageLocation,
-      integrateAcceptance,
+      acceptanceIntegrationMessageFile,
     } = config;
     currentStageTimeSource = timeSource.shift();
 
@@ -523,7 +568,7 @@ const main = async (progName, rawArgs, powers) => {
     /**
      * @type {Task}
      *
-     * This task will always run in three stages
+     * This task should always run in three stages
      *
      * The first stage will wait for the state sync restore
      *
@@ -537,36 +582,16 @@ const main = async (progName, rawArgs, powers) => {
      * will stop the chain process and exit
      */
     const spwanAcceptance = async (nextStep) => {
-      /**
-       * @param {RegExp} [regex]
-       */
-      const waitForMessageFromMessageFile = async (regex) => {
-        if (!messageFilePath)
-          throw Error('MESSAGE_FILE_PATH not present in env');
-
-        stageConsole.log(
-          `Starting to wait for message of format "${regex}" from file "${messageFilePath}"`,
-        );
-
-        for await (const { eventType } of fs.watch(messageFilePath))
-          if (eventType === 'change') {
-            const fileContent = (
-              await fs.readFile(messageFilePath, FILE_ENCODING)
-            ).trim();
-            if (regex && !regex.test(fileContent))
-              stageConsole.warn(
-                'Ignoring unsupported file content: ',
-                fileContent,
-              );
-            else return fileContent;
-          }
-
-        return undefined;
-      };
+      const { console: acceptanceConsole } = makeConsole(
+        'acceptance',
+        out,
+        err,
+      );
 
       if (currentStage === 1)
-        await writeMessageToMessageFile(stageConsole, 'ready');
-      else if (currentStage === 2) await waitForMessageFromMessageFile(/stop/);
+        await writeMessageToMessageFile(acceptanceConsole, 'ready');
+      else if (currentStage === 2)
+        await waitForMessageFromMessageFile(acceptanceConsole, /stop/);
 
       await nextStep(Promise.resolve());
     };
@@ -985,7 +1010,7 @@ const main = async (progName, rawArgs, powers) => {
         }
 
         if (!chainOnly) tasks.push(spawnClient, spawnLoadgen);
-        else if (integrateAcceptance) tasks.push(spwanAcceptance);
+        else if (acceptanceIntegrationMessageFile) tasks.push(spwanAcceptance);
 
         if (tasks.length === 1) {
           throw new Error('Nothing to do');
@@ -1015,11 +1040,9 @@ const main = async (progName, rawArgs, powers) => {
       },
     );
   };
-  const integrateAcceptance = coerceBooleanOption(
-    argv.integrateAcceptance,
-    false,
-    true,
-  );
+  /** @type {string | undefined} */
+  const acceptanceIntegrationMessageFile =
+    argv.acceptanceIntegrationMessageFile;
 
   // Main
 
@@ -1236,7 +1259,7 @@ const main = async (progName, rawArgs, powers) => {
               loadgenWindDown,
               withMonitor,
               chainStorageLocation,
-              integrateAcceptance,
+              acceptanceIntegrationMessageFile,
             }),
           async (...stageError) => {
             const suffix = `-stage-${currentStage}`;
@@ -1285,8 +1308,6 @@ const main = async (progName, rawArgs, powers) => {
     },
     async (error) => {
       logPerfEvent('finish', { stats: runStats });
-      if (integrateAcceptance)
-        writeMessageToMessageFile(topConsole, `exit code ${Number(!!error)}`);
 
       outputStream.end();
 
