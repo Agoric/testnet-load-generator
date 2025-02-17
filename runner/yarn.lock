@@ -653,15 +653,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"deterministic-json@npm:^1.0.5":
-  version: 1.0.5
-  resolution: "deterministic-json@npm:1.0.5"
-  dependencies:
-    json-stable-stringify: "npm:^1.0.1"
-  checksum: 10c0/e29679601cd3b05c73665529dcd0132b48797fd7dfbac6793238a479e82b5f3905114316fbb316332da58b4497e35df9aea77b41ff92fd74fe298a6f31b93d40
-  languageName: node
-  linkType: hard
-
 "dir-glob@npm:^3.0.1":
   version: 3.0.1
   resolution: "dir-glob@npm:3.0.1"
@@ -1590,15 +1581,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"json-stable-stringify@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "json-stable-stringify@npm:1.0.1"
-  dependencies:
-    jsonify: "npm:~0.0.0"
-  checksum: 10c0/3127db54f6507096645411ad9e15abd6091b8a94d675321d5c28ecefe3ddabd07a255d12f27e140dd8af3eb07198c81e4d9a29a14f1f9342546a3e94881bb4f6
-  languageName: node
-  linkType: hard
-
 "json5@npm:^1.0.1":
   version: 1.0.1
   resolution: "json5@npm:1.0.1"
@@ -1607,13 +1589,6 @@ __metadata:
   bin:
     json5: lib/cli.js
   checksum: 10c0/7f75dd797151680a4e14c4224c1343b32a43272aa6e6333ddec2b0822df4ea116971689b251879a1248592da24f7929902c13f83d7390c3f3d44f18e8e9719f5
-  languageName: node
-  linkType: hard
-
-"jsonify@npm:~0.0.0":
-  version: 0.0.0
-  resolution: "jsonify@npm:0.0.0"
-  checksum: 10c0/acb05782ee86a842d098e086fe07fde89c3f3b4f6c18b563b7e24ddc1e323d5c3cce10a3ed947b3b080109ad787cd370b912ba58ecca22fdb7a97d9094f95614
   languageName: node
   linkType: hard
 
@@ -1641,7 +1616,6 @@ __metadata:
     "@typescript-eslint/parser": "npm:^5.30.7"
     anylogger: "npm:^0.21.0"
     chalk: "npm:^2.4.2"
-    deterministic-json: "npm:^1.0.5"
     eslint: "npm:^7.32.0"
     eslint-config-airbnb-base: "npm:^14.0.0"
     eslint-config-jessie: "npm:^0.0.6"
