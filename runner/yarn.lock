@@ -389,13 +389,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"anylogger@npm:^0.21.0":
-  version: 0.21.0
-  resolution: "anylogger@npm:0.21.0"
-  checksum: 10c0/1ca7fcf5bc2b78d1e1d9b8c8cc7ce50b5c6cc67a8da5a28c9c975b7b46fff255a04abab02de38a5139190c9d8b34b3d6c59af6724521b077f7d7dfbad9b47a9c
-  languageName: node
-  linkType: hard
-
 "argparse@npm:^1.0.7":
   version: 1.0.10
   resolution: "argparse@npm:1.0.10"
@@ -1614,7 +1607,6 @@ __metadata:
     "@types/readline-transform": "npm:^1.0.0"
     "@types/yargs-parser": "npm:^20.2.1"
     "@typescript-eslint/parser": "npm:^5.30.7"
-    anylogger: "npm:^0.21.0"
     chalk: "npm:^2.4.2"
     eslint: "npm:^7.32.0"
     eslint-config-airbnb-base: "npm:^14.0.0"
