@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Runner for the load generator",
+  "packageManager": "yarn@4.6.0",
   "parsers": {
     "js": "mjs"
   },
@@ -23,7 +24,6 @@
     "@types/readline-transform": "^1.0.0",
     "@types/yargs-parser": "^20.2.1",
     "@typescript-eslint/parser": "^5.30.7",
-    "ava": "^3.13.0",
     "eslint": "^7.32.0",
     "eslint-config-airbnb-base": "^14.0.0",
     "eslint-config-jessie": "^0.0.6",
@@ -38,9 +38,7 @@
     "@endo/init": "^1.1.8",
     "@endo/promise-kit": "^1.1.9",
     "@iarna/toml": "^2.2.3",
-    "anylogger": "^0.21.0",
     "chalk": "^2.4.2",
-    "deterministic-json": "^1.0.5",
     "inquirer": "^6.3.1",
     "readline-transform": "^1.0.0",
     "ses": "^1.11.0",
