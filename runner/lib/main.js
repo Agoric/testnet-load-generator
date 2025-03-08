@@ -115,6 +115,29 @@ const coerceBooleanOption = (
 };
 
 /**
+ * @returns {Promise<{
+ *  getSDKBinaries: (prefixes?: {jsPfx?: string | undefined; goPfx?: string | undefined;}) => {
+ *    agSolo: string;
+ *    agSoloBuild: string[];
+ *    cosmosChain: string;
+ *    cosmosChainBuild: string[];
+ *    cosmosClientBuild: string[];
+ *    cosmosHelper: string;
+ *  }
+ * }>}
+ */
+const getCliHelpers = () => {
+  const helpersSource = 'src/helpers.js';
+
+  const srcHelpers = `agoric/${helpersSource}`;
+  const libHelpers = 'agoric/lib/helpers.js';
+
+  return process.env.SDK_SRC
+    ? import(`${process.env.SDK_SRC}/packages/agoric-cli/${helpersSource}`)
+    : import(srcHelpers).catch(() => import(libHelpers));
+};
+
+/**
  * @param {object} param0
  * @param {Console} param0.console
  */
@@ -164,20 +187,9 @@ const makeInterrupterKit = ({ console }) => {
  * @returns {Promise<import('./tasks/types.js').SDKBinaries>}
  */
 const getSDKBinaries = async () => {
-  const helpersSource = 'src/helpers.js';
-  const srcHelpers = `agoric/${helpersSource}`;
   const libHelpers = 'agoric/lib/helpers.js';
   try {
-    const cliHelpers = await import(srcHelpers)
-      .catch(() => import(libHelpers))
-      .catch((e) =>
-        process.env.SDK_SRC
-          ? import(
-              `${process.env.SDK_SRC}/packages/agoric-cli/${helpersSource}`
-            )
-          : Promise.reject(e),
-      );
-    return cliHelpers.getSDKBinaries();
+    return (await getCliHelpers()).getSDKBinaries();
   } catch (err) {
     // Older SDKs were only at lib
     const cliHelpersUrl = await importMetaResolve(libHelpers, import.meta.url);
@@ -596,7 +608,12 @@ const main = async (progName, rawArgs, powers) => {
       if (currentStage === 1)
         await writeMessageToMessageFile(acceptanceConsole, 'ready');
       else if (currentStage === 2)
-        await waitForMessageFromMessageFile(acceptanceConsole, /stop/);
+        acceptanceConsole.log(
+          `Found message "${await waitForMessageFromMessageFile(
+            acceptanceConsole,
+            /stop/,
+          )}" in message file`,
+        );
 
       await nextStep(Promise.resolve());
     };

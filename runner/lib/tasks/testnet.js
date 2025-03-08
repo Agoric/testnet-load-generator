@@ -240,6 +240,8 @@ export const makeTasks = ({
         config.p2p.persistent_peers = peers.join(',');
         config.p2p.seeds = seeds.join(',');
         config.p2p.addr_book_strict = false;
+        // @ts-ignore
+        delete config.log_level;
 
         if (!useStateSync) {
           console.log('Fetching genesis');
