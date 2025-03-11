@@ -3,7 +3,7 @@
 
 /// <reference types="ses" />
 
-import '@endo/init';
+import '@endo/init/debug.js';
 
 import path from 'path';
 import { spawn } from 'child_process';
