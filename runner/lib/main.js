@@ -126,15 +126,17 @@ const coerceBooleanOption = (
  *  }
  * }>}
  */
-const getCliHelpers = () => {
+const getCliHelpers = async () => {
   const helpersSource = 'src/helpers.js';
 
   const srcHelpers = `agoric/${helpersSource}`;
   const libHelpers = 'agoric/lib/helpers.js';
 
-  return process.env.SDK_SRC
+  const cliHelpers = await (process.env.SDK_SRC
     ? import(`${process.env.SDK_SRC}/packages/agoric-cli/${helpersSource}`)
-    : import(srcHelpers).catch(() => import(libHelpers));
+    : import(srcHelpers).catch(() => import(libHelpers)));
+
+  return cliHelpers;
 };
 
 /**
@@ -607,13 +609,13 @@ const main = async (progName, rawArgs, powers) => {
 
       if (currentStage === 1)
         await writeMessageToMessageFile(acceptanceConsole, 'ready');
-      else if (currentStage === 2)
-        acceptanceConsole.log(
-          `Found message "${await waitForMessageFromMessageFile(
-            acceptanceConsole,
-            /stop/,
-          )}" in message file`,
+      else if (currentStage === 2) {
+        const message = await waitForMessageFromMessageFile(
+          acceptanceConsole,
+          /stop/,
         );
+        acceptanceConsole.log(`Found message "${message}" in message file`);
+      }
 
       await nextStep(Promise.resolve());
     };
