@@ -188,8 +188,9 @@ export const makeTasks = ({
      * @property {string[]} rpcAddrs
      * @property {string[]} seeds
      * @property {string} gci
+     * @property {{height: string, hash: string}} [trustedBlockInfo]
      */
-    const { chainName, peers, rpcAddrs, seeds, gci } =
+    const { chainName, peers, rpcAddrs, seeds, gci, trustedBlockInfo } =
       /** @type {NetworkConfigRequired & Record<string, unknown>} */ (
         await fetchAsJSON(`${testnetOrigin}/network-config`)
       );
@@ -253,33 +254,6 @@ export const makeTasks = ({
           );
         } else {
           console.log('Fetching state-sync info');
-          /** @type {any} */
-          const currentBlockInfo = await fetchAsJSON(
-            `${rpcAddrWithScheme(rpcAddrs[0], { forceScheme: true })}/block`,
-          );
-
-          // `trustHeight` is the block height considered as the "root of trust"
-          // for state-sync. The node will attempt to find a snapshot offered for
-          // a block at or after this height, and will validate that block's hash
-          // using a light client with the configured RPC servers.
-          // We want to use a block height recent enough, but for which a snapshot
-          // exists since then.
-          const stateSyncInterval =
-            Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
-          const trustHeight = Math.max(
-            1,
-            Number(currentBlockInfo.result.block.header.height) -
-              stateSyncInterval,
-          );
-
-          /** @type {any} */
-          const trustedBlockInfo = await fetchAsJSON(
-            `${rpcAddrWithScheme(rpcAddrs[0], {
-              forceScheme: true,
-            })}/block?height=${trustHeight}`,
-          );
-          const trustHash = trustedBlockInfo.result.block_id.hash;
-
           const stateSyncRpc =
             rpcAddrs.length < 2 ? [rpcAddrs[0], rpcAddrs[0]] : rpcAddrs;
 
@@ -287,9 +261,44 @@ export const makeTasks = ({
           config.statesync.rpc_servers = stateSyncRpc
             .map((rpcAddr) => rpcAddrWithScheme(rpcAddr))
             .join(',');
-          config.statesync.trust_height = trustHeight;
-          config.statesync.trust_hash = trustHash;
+
           config.statesync.trust_period = '17280h0m0s'; // 2 years
+
+          if (trustedBlockInfo) {
+            config.statesync.trust_height = Number(trustedBlockInfo.height);
+            config.statesync.trust_hash = trustedBlockInfo.hash;
+          } else {
+            /** @type {any} */
+            const currentBlockInfo = await fetchAsJSON(
+              `${rpcAddrWithScheme(rpcAddrs[0], { forceScheme: true })}/block`,
+            );
+
+            // `trustHeight` is the block height considered as the "root of trust"
+            // for state-sync. The node will attempt to find a snapshot offered for
+            // a block at or after this height, and will validate that block's hash
+            // using a light client with the configured RPC servers.
+            // We want to use a block height recent enough, but for which a snapshot
+            // exists since then.
+            const stateSyncInterval =
+              Number(process.env.AG_SETUP_COSMOS_STATE_SYNC_INTERVAL) || 2000;
+            const trustHeight = Math.max(
+              1,
+              Number(currentBlockInfo.result.block.header.height) -
+                stateSyncInterval,
+            );
+
+            /** @type {any} */
+            const trustedBlock = await fetchAsJSON(
+              `${rpcAddrWithScheme(rpcAddrs[0], {
+                forceScheme: true,
+              })}/block?height=${trustHeight}`,
+            );
+            const trustHash = trustedBlock.result.block_id.hash;
+
+            config.statesync.trust_height = trustHeight;
+            config.statesync.trust_hash = trustHash;
+          }
+          console.log('state-sync config', config.statesync);
         }
 
         await fs.writeFile(configPath, TOML.stringify(config));
