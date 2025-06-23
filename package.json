@@ -12,7 +12,7 @@
   ],
   "packageManager": "yarn@1.22.22",
   "dependencies": {
-    "agoric": "*"
+    "agoric": "0.21.2-dev-bf2d699.0"
   },
   "devDependencies": {
     "@endo/eslint-config": "^0.5.1",
