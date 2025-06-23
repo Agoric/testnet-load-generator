@@ -91,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.18]
+        node-version: [20]
     steps:
       - name: Checkout runner
         uses: actions/checkout@v4
@@ -116,7 +116,7 @@ jobs:
             ${{ runner.os }}-node-${{ matrix.node-version }}-yarn-runner-
 
       - name: yarn install
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
         working-directory: testnet-load-generator/runner
       - name: yarn lint
         run: yarn lint
