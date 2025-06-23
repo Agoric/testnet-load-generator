@@ -30,7 +30,8 @@
   },
   "resolutions": {
     "@protobufjs/inquire": "./protobufjs-inquire",
-    "esm": "agoric-labs/esm#Agoric-built"
+    "esm": "agoric-labs/esm#Agoric-built",
+    "re2": "1.17.0"
   },
   "scripts": {
     "preinstall": "node -e \"process.env.AGORIC_INSTALL && process.exit(0); console.warn('please use: agoric install . For details, see https://agoric.com/documentation/'); process.exit(1)\"",

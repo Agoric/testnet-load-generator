@@ -78,6 +78,7 @@ yarn link-cli "${AGORIC_BIN_DIR}/agoric"
 ln -sf "$SDK_SRC/packages/cosmic-swingset/bin/ag-chain-cosmos" "${AGORIC_BIN_DIR}/ag-chain-cosmos"
 
 cd "$LOADGEN_DIR"
+export CXXFLAGS="-std=c++17"
 agoric install
 (cd runner && yarn install)
 exec ./runner/bin/loadgen-runner --output-dir="${OUTPUT_DIR}" --test-data.sdk-revision=${SDK_REVISION} --test-data.sdk-commit-time=${SDK_COMMIT_TIME} "$@" 2>&1 
