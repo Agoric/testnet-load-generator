@@ -12,7 +12,7 @@
   ],
   "packageManager": "yarn@1.22.22",
   "dependencies": {
-    "agoric": "*"
+    "agoric": "0.21.2-dev-bf2d699.0"
   },
   "devDependencies": {
     "@endo/eslint-config": "^0.5.1",
@@ -22,7 +22,7 @@
     "eslint-config-jessie": "^0.0.6",
     "eslint-config-prettier": "^6.15.0",
     "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-jsdoc": "^39.3.3",
+    "eslint-plugin-jsdoc": "^43.0.8",
     "eslint-plugin-prettier": "^3.4.1",
     "npm-run-all": "^4.1.5",
     "prettier": "^2.5.1",
@@ -30,7 +30,8 @@
   },
   "resolutions": {
     "@protobufjs/inquire": "./protobufjs-inquire",
-    "esm": "agoric-labs/esm#Agoric-built"
+    "esm": "agoric-labs/esm#Agoric-built",
+    "re2": "1.17.0"
   },
   "scripts": {
     "preinstall": "node -e \"process.env.AGORIC_INSTALL && process.exit(0); console.warn('please use: agoric install . For details, see https://agoric.com/documentation/'); process.exit(1)\"",

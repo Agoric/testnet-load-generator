@@ -91,6 +91,7 @@ export type CometBFTConfig = {
   fast_sync: boolean;
   db_backend: string;
   db_dir: string;
+  log_level?: string;
   log_format: string;
   genesis_file: string;
   priv_validator_key_file: string;
