@@ -75,7 +75,9 @@ jobs:
         working-directory: agoric-sdk
 
       - name: agoric install
-        run: agoric install
+        run: |
+          export CXXFLAGS="-std=c++17"
+          agoric install
         working-directory: testnet-load-generator
       - name: yarn build
         run: yarn build
