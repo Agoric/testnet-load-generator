@@ -369,7 +369,7 @@ export const makeTasks = ({
 
         if (
           result.type === 'success' &&
-          result.status.SyncInfo.catching_up === false
+          result.status.sync_info.catching_up === false
         ) {
           rpcAddr = rpcAddrCandidate;
         }
@@ -563,7 +563,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
         } else {
           retries = 0;
 
-          if (result.status.SyncInfo.catching_up === false) {
+          if (result.status.sync_info.catching_up === false) {
             return;
           }
 
