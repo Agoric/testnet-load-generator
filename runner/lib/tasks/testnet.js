@@ -367,11 +367,12 @@ export const makeTasks = ({
 
         const result = await queryNodeStatus(rpcAddrCandidate);
 
-        if (
-          result.type === 'success' &&
-          result.status.SyncInfo.catching_up === false
-        ) {
-          rpcAddr = rpcAddrCandidate;
+        if (result.type === 'success' && result.status?.SyncInfo) {
+          if (result.status.SyncInfo.catching_up === false) {
+            rpcAddr = rpcAddrCandidate;
+          }
+        } else {
+          console.warn('unexpected status response', result);
         }
       }
 
@@ -546,16 +547,21 @@ ${chainName} chain does not yet know of address ${soloAddr}
       while (!stopped) {
         const result = await queryNodeStatus();
 
-        if (result.type === 'error') {
+        if (result.type === 'error' || !result.status?.SyncInfo) {
           if (retries >= 10) {
             console.error(
               'Failed to query chain status.\n',
               result.output,
               result.error,
+              result.status,
             );
             throw new Error(
               `Process exited with non-zero code: ${result.code}`,
             );
+          }
+
+          if (result.type === 'success') {
+            console.warn('unexpected status response', result);
           }
 
           retries += 1;
