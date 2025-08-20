@@ -384,7 +384,6 @@ export const makeTasks = ({
 
     const keysSharedArgs = [
       `--home=${keysDir}`,
-      `--chain-id=${chainId}`,
       `--node=tcp://${rpcAddr}`,
     ];
 

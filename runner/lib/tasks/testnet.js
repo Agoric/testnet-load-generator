@@ -366,7 +366,6 @@ export const makeTasks = ({
 
       const keysSharedArgs = [
         '--log_level=info',
-        `--chain-id=${chainName}`,
         `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
       ];
 
