@@ -17,11 +17,7 @@ import {
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import {
-  asBuffer,
-  combineAndPipe,
-  whenStreamSteps,
-} from '../helpers/stream.js';
+import { combineAndPipe, whenStreamSteps } from '../helpers/stream.js';
 import {
   getConsoleAndStdio,
   fetchAsJSON,
@@ -109,23 +105,20 @@ export const makeTasks = ({
 
   /** @param {string} [rpcAddr] */
   const queryNodeStatus = async (rpcAddr = 'http://localhost:26657') => {
-    let result;
-
     try {
-      result = await fetchAsJSON(`${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}/status`);
-      //@ts-ignore
-      return { type: 'success', status: result.result }
-
-    } catch (e) {
-      //@ts-ignore
-      console.error(`Error fetching node status: ${e.toString()}`);
+      const response = /** @type {import("./types.js").NodeStatusResponse} */ (
+        await fetchAsJSON(
+          `${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}/status`,
+        )
+      );
+      return { code: 0, error: '', status: response.result, type: 'success' };
+    } catch (/** @type {*} */ e) {
       return {
-          type: 'error',
-          code: 1,
-          output: '',
-          //@ts-ignore
-          error: e.toString(),
-        };
+        code: 1,
+        error: e.toString(),
+        status: /** @type {import("./types.js").NodeStatusResult} */ ({}),
+        type: 'error',
+      };
     }
   };
 
@@ -540,11 +533,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
 
         if (result.type === 'error') {
           if (retries >= 10) {
-            console.error(
-              'Failed to query chain status.\n',
-              result.output,
-              result.error,
-            );
+            console.error('Failed to query chain status.\n', result.error);
             throw new Error(
               `Process exited with non-zero code: ${result.code}`,
             );

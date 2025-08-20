@@ -203,4 +203,68 @@ export type CometBFTConfig = {
     namespace: string;
   };
 };
+
+type RPCError = {
+  code: number;
+  data: string;
+  message: string;
+};
+
+type ProtocolVersion = {
+  p2p: string;
+  block: string;
+  app: string;
+};
+
+type OtherInfo = {
+  tx_index: string;
+  rpc_address: string;
+};
+
+type NodeInfo = {
+  protocol_version: ProtocolVersion;
+  id: string;
+  listen_addr: string;
+  network: string;
+  version: string;
+  channels: string;
+  moniker: string;
+  other: OtherInfo;
+};
+
+type SyncInfo = {
+  latest_block_hash: string;
+  latest_app_hash: string;
+  latest_block_height: string;
+  latest_block_time: string;
+  earliest_block_hash: string;
+  earliest_app_hash: string;
+  earliest_block_height: string;
+  earliest_block_time: string;
+  catching_up: boolean;
+};
+
+type PubKey = {
+  type: string;
+  value: string;
+};
+
+type ValidatorInfo = {
+  address: string;
+  pub_key: PubKey;
+  voting_power: string;
+};
+
+export type NodeStatusResult = {
+  node_info: NodeInfo;
+  sync_info: SyncInfo;
+  validator_info: ValidatorInfo;
+};
+
+export type NodeStatusResponse = {
+  error?: RPCError;
+  id: number;
+  jsonrpc: string;
+  result: NodeStatusResult;
+};
 /* eslint-enable camelcase */
