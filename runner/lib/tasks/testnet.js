@@ -108,33 +108,25 @@ export const makeTasks = ({
   };
 
   /** @param {string} [rpcAddr] */
-  const queryNodeStatus = async (rpcAddr) => {
-    const args = ['status'];
+  const queryNodeStatus = async (rpcAddr = 'http://localhost:26657') => {
+    let result;
 
-    if (rpcAddr) {
-      args.push(`--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`);
-    }
+    try {
+      result = await fetchAsJSON(`${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}/status`);
+      //@ts-ignore
+      return { type: 'success', status: result.result }
 
-    // Don't pipe output to console, it's too noisy
-    const statusCp = spawn(sdkBinaries.cosmosHelper, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    const pres = asBuffer(statusCp.stdout);
-    const retCode = await childProcessDone(statusCp, {
-      ignoreExitCode: true,
-    });
-
-    const output = (await pres).toString('utf-8');
-
-    return retCode === 0
-      ? { type: 'success', status: JSON.parse(output) }
-      : {
+    } catch (e) {
+      //@ts-ignore
+      console.error(`Error fetching node status: ${e.toString()}`);
+      return {
           type: 'error',
-          code: retCode,
-          output,
-          error: (await asBuffer(statusCp.stderr)).toString('utf-8'),
+          code: 1,
+          output: '',
+          //@ts-ignore
+          error: e.toString(),
         };
+    }
   };
 
   const chainStateDir = String(
