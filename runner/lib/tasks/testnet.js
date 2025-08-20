@@ -27,10 +27,6 @@ import {
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
-/**
- * @import {NodeStatusResponse} from './types.js';
- */
-
 const pipeline = promisify(pipelineCallback);
 
 const stateDir = '_agstate/agoric-servers';
@@ -115,7 +111,7 @@ export const makeTasks = ({
 
   /**
    * @param {string} [rpcAddr]
-   * @returns {Promise<Omit<NodeStatusResponse, 'id' | 'jsonrpc'>>}
+   * @returns {Promise<Omit<import("./types.js").NodeStatusResponse, 'id' | 'jsonrpc'>>}
    */
   const queryNodeStatus = async (rpcAddr = 'http://localhost:26657') => {
     try {
