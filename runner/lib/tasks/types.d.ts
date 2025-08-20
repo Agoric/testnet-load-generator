@@ -204,12 +204,6 @@ export type CometBFTConfig = {
   };
 };
 
-type RPCError = {
-  code: number;
-  data: string;
-  message: string;
-};
-
 type ProtocolVersion = {
   p2p: string;
   block: string;
@@ -261,10 +255,34 @@ export type NodeStatusResult = {
   validator_info: ValidatorInfo;
 };
 
-export type NodeStatusResponse = {
-  error?: RPCError;
-  id: number;
-  jsonrpc: string;
-  result: NodeStatusResult;
-};
+export type JSONRPC = '2.0';
+
+export type JSONRPCID = string | number | null;
+
+export interface JSONRPCError {
+  code: number;
+  message: string;
+  data?: any;
+}
+
+export interface JSONRPCSuccessResponse<T> {
+  jsonrpc: JSONRPC;
+  id: JSONRPCID;
+  result: T;
+  error?: undefined;
+}
+
+export interface JSONRPCErrorResponse {
+  jsonrpc: JSONRPC;
+  id: JSONRPCID;
+  result?: undefined;
+  error: JSONRPCError;
+}
+
+export type JSONRPCResponse<T> =
+  | JSONRPCSuccessResponse<T>
+  | JSONRPCErrorResponse;
+
+export type NodeStatusResponse = JSONRPCResponse<NodeStatusResult>;
+
 /* eslint-enable camelcase */

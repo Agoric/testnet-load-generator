@@ -27,6 +27,10 @@ import {
 import { makeGetEnvInfo } from './shared-env-info.js';
 import { makeLoadgenTask } from './shared-loadgen.js';
 
+/**
+ * @import {NodeStatusResponse} from './types.js';
+ */
+
 const pipeline = promisify(pipelineCallback);
 
 const stateDir = '_agstate/agoric-servers';
@@ -46,6 +50,12 @@ const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
 const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
 
 /**
+ * Add a scheme to a potentially bare `rpcAddr` specifier
+ *
+ * If the provided `rpcAddr` already has a scheme, it will only be replaced if
+ * `forceScheme` is `true` AND the existing scheme does not start with the
+ * requested scheme (e.g. keeping "https" if the requested scheme is "http")
+ *
  * @param {string} rpcAddr
  * @param {object} [options]
  * @param {string} [options.withScheme]
@@ -103,21 +113,25 @@ export const makeTasks = ({
     }
   };
 
-  /** @param {string} [rpcAddr] */
+  /**
+   * @param {string} [rpcAddr]
+   * @returns {Promise<Omit<NodeStatusResponse, 'id' | 'jsonrpc'>>}
+   */
   const queryNodeStatus = async (rpcAddr = 'http://localhost:26657') => {
     try {
-      const response = /** @type {import("./types.js").NodeStatusResponse} */ (
+      return /** @type {import("./types.js").NodeStatusResponse} */ (
         await fetchAsJSON(
-          `${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}/status`,
+          `${rpcAddrWithScheme(rpcAddr, { forceScheme: true })}/status`,
         )
       );
-      return { code: 0, error: '', status: response.result, type: 'success' };
     } catch (/** @type {*} */ e) {
       return {
-        code: 1,
-        error: e.toString(),
-        status: /** @type {import("./types.js").NodeStatusResult} */ ({}),
-        type: 'error',
+        error: {
+          // using some approximate HTTP code here
+          code: e.code === 'ECONNREFUSED' ? 503 : 500,
+          message: String(e),
+          data: e,
+        },
       };
     }
   };
@@ -350,12 +364,9 @@ export const makeTasks = ({
           rpcAddrCandidates.length;
         const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
 
-        const result = await queryNodeStatus(rpcAddrCandidate);
+        const response = await queryNodeStatus(rpcAddrCandidate);
 
-        if (
-          result.type === 'success' &&
-          result.status.sync_info.catching_up === false
-        ) {
+        if (response.result?.sync_info.catching_up === false) {
           rpcAddr = rpcAddrCandidate;
         }
       }
@@ -528,13 +539,13 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        const result = await queryNodeStatus();
+        const response = await queryNodeStatus();
 
-        if (result.type === 'error') {
+        if (response.error) {
           if (retries >= 10) {
-            console.error('Failed to query chain status.\n', result.error);
+            console.error('Failed to query chain status.\n', response.error);
             throw new Error(
-              `Process exited with non-zero code: ${result.code}`,
+              `Failed to query chain status: ${response.error.message}`,
             );
           }
 
@@ -543,7 +554,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
         } else {
           retries = 0;
 
-          if (result.status.sync_info.catching_up === false) {
+          if (response.result?.sync_info.catching_up === false) {
             return;
           }
 
