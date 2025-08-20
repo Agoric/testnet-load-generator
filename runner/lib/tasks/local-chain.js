@@ -382,10 +382,7 @@ export const makeTasks = ({
       await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
     ).trimEnd();
 
-    const keysSharedArgs = [
-      `--home=${keysDir}`,
-      `--node=tcp://${rpcAddr}`,
-    ];
+    const keysSharedArgs = [`--home=${keysDir}`, `--node=tcp://${rpcAddr}`];
 
     const outputArgs = ['--output=json'];
 
