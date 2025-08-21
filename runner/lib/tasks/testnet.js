@@ -17,11 +17,7 @@ import {
 import BufferLineTransform from '../helpers/buffer-line-transform.js';
 import { PromiseAllOrErrors, tryTimeout, sleep } from '../helpers/async.js';
 import { fsStreamReady } from '../helpers/fs.js';
-import {
-  asBuffer,
-  combineAndPipe,
-  whenStreamSteps,
-} from '../helpers/stream.js';
+import { combineAndPipe, whenStreamSteps } from '../helpers/stream.js';
 import {
   getConsoleAndStdio,
   fetchAsJSON,
@@ -50,6 +46,12 @@ const chainConsensusFailureBuffer = Buffer.from('CONSENSUS FAILURE');
 const rpcAddrRegex = /^(?:(http|https|tcp):(?:\/\/)?)?(.*)$/;
 
 /**
+ * Add a scheme to a potentially bare `rpcAddr` specifier
+ *
+ * If the provided `rpcAddr` already has a scheme, it will only be replaced if
+ * `forceScheme` is `true` AND the existing scheme does not start with the
+ * requested scheme (e.g. keeping "https" if the requested scheme is "http")
+ *
  * @param {string} rpcAddr
  * @param {object} [options]
  * @param {string} [options.withScheme]
@@ -107,34 +109,27 @@ export const makeTasks = ({
     }
   };
 
-  /** @param {string} [rpcAddr] */
-  const queryNodeStatus = async (rpcAddr) => {
-    const args = ['status'];
-
-    if (rpcAddr) {
-      args.push(`--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`);
+  /**
+   * @param {string} [rpcAddr]
+   * @returns {Promise<Omit<import("./types.js").NodeStatusResponse, 'id' | 'jsonrpc'>>}
+   */
+  const queryNodeStatus = async (rpcAddr = 'http://localhost:26657') => {
+    try {
+      return /** @type {import("./types.js").NodeStatusResponse} */ (
+        await fetchAsJSON(
+          `${rpcAddrWithScheme(rpcAddr, { forceScheme: true })}/status`,
+        )
+      );
+    } catch (/** @type {*} */ e) {
+      return {
+        error: {
+          // using some approximate HTTP code here
+          code: e.code === 'ECONNREFUSED' ? 503 : 500,
+          message: String(e),
+          data: e,
+        },
+      };
     }
-
-    // Don't pipe output to console, it's too noisy
-    const statusCp = spawn(sdkBinaries.cosmosHelper, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    const pres = asBuffer(statusCp.stdout);
-    const retCode = await childProcessDone(statusCp, {
-      ignoreExitCode: true,
-    });
-
-    const output = (await pres).toString('utf-8');
-
-    return retCode === 0
-      ? { type: 'success', status: JSON.parse(output) }
-      : {
-          type: 'error',
-          code: retCode,
-          output,
-          error: (await asBuffer(statusCp.stderr)).toString('utf-8'),
-        };
   };
 
   const chainStateDir = String(
@@ -365,13 +360,14 @@ export const makeTasks = ({
           rpcAddrCandidates.length;
         const rpcAddrCandidate = rpcAddrCandidates.splice(pseudoRandom, 1)[0];
 
-        const result = await queryNodeStatus(rpcAddrCandidate);
+        const response = await queryNodeStatus(rpcAddrCandidate);
 
-        if (
-          result.type === 'success' &&
-          result.status.SyncInfo.catching_up === false
-        ) {
-          rpcAddr = rpcAddrCandidate;
+        if (response.result?.sync_info) {
+          if (response.result.sync_info.catching_up === false) {
+            rpcAddr = rpcAddrCandidate;
+          }
+        } else {
+          console.warn('unexpected status response', response);
         }
       }
 
@@ -381,7 +377,6 @@ export const makeTasks = ({
 
       const keysSharedArgs = [
         '--log_level=info',
-        `--chain-id=${chainName}`,
         `--node=${rpcAddrWithScheme(rpcAddr, { withScheme: 'tcp' })}`,
       ];
 
@@ -544,18 +539,18 @@ ${chainName} chain does not yet know of address ${soloAddr}
     const ready = PromiseAllOrErrors([firstBlock, slogReady]).then(async () => {
       let retries = 0;
       while (!stopped) {
-        const result = await queryNodeStatus();
+        const response = await queryNodeStatus();
 
-        if (result.type === 'error') {
+        if (response.error || !response.result?.sync_info) {
           if (retries >= 10) {
-            console.error(
-              'Failed to query chain status.\n',
-              result.output,
-              result.error,
-            );
+            console.error('Failed to query chain status.\n', response.error);
             throw new Error(
-              `Process exited with non-zero code: ${result.code}`,
+              `Failed to query chain status: ${response.error?.message}`,
             );
+          }
+
+          if (response.result) {
+            console.warn('unexpected status response', response);
           }
 
           retries += 1;
@@ -563,7 +558,7 @@ ${chainName} chain does not yet know of address ${soloAddr}
         } else {
           retries = 0;
 
-          if (result.status.SyncInfo.catching_up === false) {
+          if (response.result.sync_info.catching_up === false) {
             return;
           }
 

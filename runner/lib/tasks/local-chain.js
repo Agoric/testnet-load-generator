@@ -382,11 +382,7 @@ export const makeTasks = ({
       await fs.readFile(`${clientStateDir}/ag-cosmos-helper-address`, 'utf-8')
     ).trimEnd();
 
-    const keysSharedArgs = [
-      `--home=${keysDir}`,
-      `--chain-id=${chainId}`,
-      `--node=tcp://${rpcAddr}`,
-    ];
+    const keysSharedArgs = [`--home=${keysDir}`, `--node=tcp://${rpcAddr}`];
 
     const outputArgs = ['--output=json'];
 
@@ -406,6 +402,7 @@ export const makeTasks = ({
         'bank',
         'send',
         ...keysSharedArgs,
+        `--chain-id=${chainId}`,
         '--keyring-backend=test',
         '--gas=auto',
         `--gas-adjustment=${GAS_ADJUSTMENT}`,
@@ -427,6 +424,7 @@ export const makeTasks = ({
             'swingset',
             'provision-one',
             ...keysSharedArgs,
+            `--chain-id=${chainId}`,
             '--keyring-backend=test',
             '--from=provision',
             '--gas=auto',
